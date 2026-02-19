@@ -363,7 +363,7 @@ func (dm *domainManager) querySmartContracts(ctx context.Context, jq *query.Quer
 						dm.populateContractConfig(result, dc.config)
 					}
 				}
-				return result, nil
+				return result, err
 
 			},
 		}
