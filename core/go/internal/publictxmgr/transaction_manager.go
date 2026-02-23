@@ -377,7 +377,6 @@ func (ptm *pubTxManager) WriteReceivedPublicTransactionSubmissions(ctx context.C
 	}
 
 	persistedTransactions := make([]*DBPublicTxn, 0, len(txns))
-	persistedSubmissions := make([]*DBPubTxnSubmission, 0, len(txns))
 	for _, tx := range txns {
 		dbTransaction := &DBPublicTxn{
 			From:            tx.From,
@@ -390,7 +389,57 @@ func (ptm *pubTxManager) WriteReceivedPublicTransactionSubmissions(ctx context.C
 			Created:         tx.Created,
 			FixedGasPricing: pldtypes.JSONString(tx.PublicTxGasPricing),
 		}
+
+		err = dbTX.DB().
+			WithContext(ctx).
+			Table("public_txns").
+			Clauses(clause.OnConflict{
+				// Message delivery is at-least-once, so we need to be able writing the same transaction and its binding
+				// more than once. We don't expect any of the columns to change, but allowing the no op
+				// update means we get the ID we need for the following calls back.
+				Columns: []clause.Column{
+					{Name: "from"},
+					{Name: "nonce"},
+				},
+				DoUpdates: clause.AssignmentColumns([]string{
+					"to",
+					"gas",
+					"fixed_gas_pricing",
+					"value",
+					"data",
+					"suspended",
+					"dispatcher",
+					"created",
+				}),
+			}).
+			Create(dbTransaction).
+			Error
+		if err != nil {
+			return err
+		}
+
+		dbBinding := &DBPublicTxnBinding{
+			PublicTxnID:     dbTransaction.PublicTxnID,
+			Transaction:     tx.Transaction,
+			TransactionType: pldtypes.Enum[pldapi.TransactionType](tx.TransactionType),
+			Sender:          tx.TransactionSender,
+			ContractAddress: tx.TransactionContractAddress,
+		}
+		err = dbTX.DB().
+			WithContext(ctx).
+			Table("public_txn_bindings").
+			Clauses(clause.OnConflict{
+				Columns:   []clause.Column{{Name: "pub_txn_id"}},
+				DoUpdates: clause.AssignmentColumns([]string{"transaction", "tx_type", "sender", "contract_address"}),
+			}).
+			Create(dbBinding).
+			Error
+		if err != nil {
+			return err
+		}
+
 		dbSubmission := &DBPubTxnSubmission{
+			PublicTxnID:     dbTransaction.PublicTxnID,
 			TransactionHash: *tx.TransactionHash,
 			Created:         tx.PublicTx.Submissions[0].Time, // We should never get here without exactly one submission
 			GasPricing:      pldtypes.JSONString(tx.PublicTx.Submissions[0].PublicTxGasPricing),
@@ -398,27 +447,20 @@ func (ptm *pubTxManager) WriteReceivedPublicTransactionSubmissions(ctx context.C
 				PrivateTXID: tx.Transaction,
 			},
 		}
-		persistedSubmissions = append(persistedSubmissions, dbSubmission)
-		dbBinding := &DBPublicTxnBinding{
-			Transaction:     tx.Transaction,
-			TransactionType: pldtypes.Enum[pldapi.TransactionType](tx.TransactionType),
+		err = dbTX.DB().
+			WithContext(ctx).
+			Table("public_submissions").
+			Clauses(clause.OnConflict{
+				Columns:   []clause.Column{{Name: "tx_hash"}},
+				DoUpdates: clause.AssignmentColumns([]string{"pub_txn_id"}),
+			}).
+			Create(dbSubmission).
+			Error
+		if err != nil {
+			return err
 		}
-		dbTransaction.Submissions = persistedSubmissions
-		dbTransaction.Binding = dbBinding
-		persistedTransactions = append(persistedTransactions, dbTransaction)
-	}
 
-	err = dbTX.DB().
-		WithContext(ctx).
-		Table("public_txns").
-		Clauses(clause.OnConflict{
-			// Coordinator delivery is at-least-once, so duplicates must be idempotent.
-			DoNothing: true,
-		}).
-		Create(persistedTransactions).
-		Error
-	if err != nil {
-		return err
+		persistedTransactions = append(persistedTransactions, dbTransaction)
 	}
 
 	return err
