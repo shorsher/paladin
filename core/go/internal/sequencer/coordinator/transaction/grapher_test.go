@@ -20,8 +20,11 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/LFDT-Paladin/paladin/core/internal/components"
 	"github.com/LFDT-Paladin/paladin/core/internal/msgs"
+	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldapi"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldtypes"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -231,6 +234,134 @@ func Test_grapher_Forget_RemovesTransaction(t *testing.T) {
 
 	lookup := grapher.TransactionByID(ctx, txn.pt.ID)
 	assert.Nil(t, lookup)
+}
+
+func Test_grapher_Forget_PrunesPeerDependencyLinks(t *testing.T) {
+	ctx := context.Background()
+	grapher := NewGrapher(ctx)
+
+	prerequisite, _ := newTransactionForUnitTesting(t, grapher)
+	forgotten, _ := newTransactionForUnitTesting(t, grapher)
+	dependent, _ := newTransactionForUnitTesting(t, grapher)
+	otherID := uuid.New()
+
+	if prerequisite.pt.PreAssembly == nil {
+		prerequisite.pt.PreAssembly = &components.TransactionPreAssembly{}
+	}
+	if dependent.pt.PreAssembly == nil {
+		dependent.pt.PreAssembly = &components.TransactionPreAssembly{}
+	}
+	if forgotten.pt.PreAssembly == nil {
+		forgotten.pt.PreAssembly = &components.TransactionPreAssembly{}
+	}
+
+	prerequisite.dependencies = &pldapi.TransactionDependencies{
+		PrereqOf: []uuid.UUID{forgotten.pt.ID, forgotten.pt.ID, otherID},
+	}
+	prerequisite.pt.PreAssembly.Dependencies = &pldapi.TransactionDependencies{
+		PrereqOf: []uuid.UUID{forgotten.pt.ID, forgotten.pt.ID, otherID},
+	}
+
+	dependent.dependencies = &pldapi.TransactionDependencies{
+		DependsOn: []uuid.UUID{forgotten.pt.ID, forgotten.pt.ID, otherID},
+	}
+	dependent.pt.PreAssembly.Dependencies = &pldapi.TransactionDependencies{
+		DependsOn: []uuid.UUID{forgotten.pt.ID, forgotten.pt.ID, otherID},
+	}
+
+	forgotten.dependencies = &pldapi.TransactionDependencies{
+		DependsOn: []uuid.UUID{prerequisite.pt.ID, prerequisite.pt.ID},
+		PrereqOf:  []uuid.UUID{dependent.pt.ID, dependent.pt.ID},
+	}
+	forgotten.pt.PreAssembly.Dependencies = &pldapi.TransactionDependencies{
+		DependsOn: []uuid.UUID{prerequisite.pt.ID, prerequisite.pt.ID},
+		PrereqOf:  []uuid.UUID{dependent.pt.ID, dependent.pt.ID},
+	}
+
+	err := grapher.Forget(forgotten.pt.ID)
+	require.NoError(t, err)
+
+	assert.Nil(t, grapher.TransactionByID(ctx, forgotten.pt.ID))
+	assert.NotContains(t, prerequisite.dependencies.PrereqOf, forgotten.pt.ID)
+	assert.NotContains(t, prerequisite.pt.PreAssembly.Dependencies.PrereqOf, forgotten.pt.ID)
+	assert.Contains(t, prerequisite.dependencies.PrereqOf, otherID)
+	assert.Contains(t, prerequisite.pt.PreAssembly.Dependencies.PrereqOf, otherID)
+	assert.NotContains(t, dependent.dependencies.DependsOn, forgotten.pt.ID)
+	assert.NotContains(t, dependent.pt.PreAssembly.Dependencies.DependsOn, forgotten.pt.ID)
+	assert.Contains(t, dependent.dependencies.DependsOn, otherID)
+	assert.Contains(t, dependent.pt.PreAssembly.Dependencies.DependsOn, otherID)
+}
+
+func Test_grapher_Forget_PruneMissingNeighborsNoError(t *testing.T) {
+	ctx := context.Background()
+	grapher := NewGrapher(ctx)
+
+	forgotten, _ := newTransactionForUnitTesting(t, grapher)
+	if forgotten.pt.PreAssembly == nil {
+		forgotten.pt.PreAssembly = &components.TransactionPreAssembly{}
+	}
+	forgotten.dependencies = &pldapi.TransactionDependencies{
+		DependsOn: []uuid.UUID{uuid.New()},
+		PrereqOf:  []uuid.UUID{uuid.New()},
+	}
+	forgotten.pt.PreAssembly.Dependencies = &pldapi.TransactionDependencies{
+		DependsOn: []uuid.UUID{uuid.New()},
+		PrereqOf:  []uuid.UUID{uuid.New()},
+	}
+
+	err := grapher.Forget(forgotten.pt.ID)
+	require.NoError(t, err)
+	assert.Nil(t, grapher.TransactionByID(ctx, forgotten.pt.ID))
+}
+
+func Test_grapher_Forget_UnknownTransactionNoError(t *testing.T) {
+	ctx := context.Background()
+	grapher := NewGrapher(ctx)
+
+	err := grapher.Forget(uuid.New())
+	require.NoError(t, err)
+}
+
+func Test_grapher_Forget_PrunesWithNilNeighborDependencyStructs(t *testing.T) {
+	ctx := context.Background()
+	grapher := NewGrapher(ctx)
+
+	prerequisite, _ := newTransactionForUnitTesting(t, grapher)
+	forgotten, _ := newTransactionForUnitTesting(t, grapher)
+	dependent, _ := newTransactionForUnitTesting(t, grapher)
+
+	// Exercise branches where neighbor dependency structs are nil.
+	prerequisite.dependencies = nil
+	prerequisite.pt.PreAssembly = nil
+	dependent.dependencies = nil
+	dependent.pt.PreAssembly = nil
+
+	if forgotten.pt.PreAssembly == nil {
+		forgotten.pt.PreAssembly = &components.TransactionPreAssembly{}
+	}
+	forgotten.dependencies = &pldapi.TransactionDependencies{
+		DependsOn: []uuid.UUID{prerequisite.pt.ID},
+		PrereqOf:  []uuid.UUID{dependent.pt.ID},
+	}
+	forgotten.pt.PreAssembly.Dependencies = &pldapi.TransactionDependencies{
+		DependsOn: []uuid.UUID{prerequisite.pt.ID},
+		PrereqOf:  []uuid.UUID{dependent.pt.ID},
+	}
+
+	err := grapher.Forget(forgotten.pt.ID)
+	require.NoError(t, err)
+	assert.Nil(t, grapher.TransactionByID(ctx, forgotten.pt.ID))
+}
+
+func Test_removeUUID_RemovesAllMatchesAndKeepsOrder(t *testing.T) {
+	target := uuid.New()
+	keep1 := uuid.New()
+	keep2 := uuid.New()
+
+	ids := []uuid.UUID{target, keep1, target, keep2, target}
+	filtered := removeUUID(ids, target)
+
+	assert.Equal(t, []uuid.UUID{keep1, keep2}, filtered)
 }
 
 func Test_grapher_ForgetMints_RemovesMinterLookup(t *testing.T) {

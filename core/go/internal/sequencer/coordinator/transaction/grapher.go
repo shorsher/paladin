@@ -81,9 +81,75 @@ func (s *grapher) AddMinter(ctx context.Context, stateID pldtypes.HexBytes, tran
 }
 
 func (s *grapher) Forget(transactionID uuid.UUID) error {
+	txn := s.transactionByID[transactionID]
+	if txn != nil {
+		s.pruneDependencyLinks(txn)
+	}
 	s.ForgetMints(transactionID)
 	delete(s.transactionByID, transactionID)
 	return nil
+}
+
+func (s *grapher) pruneDependencyLinks(txn *CoordinatorTransaction) {
+	// Remove this TX from all prerequisite reverse links.
+	prereqIDs := make(map[uuid.UUID]struct{})
+	if txn.dependencies != nil {
+		for _, dependencyID := range txn.dependencies.DependsOn {
+			prereqIDs[dependencyID] = struct{}{}
+		}
+	}
+	if txn.pt.PreAssembly != nil && txn.pt.PreAssembly.Dependencies != nil {
+		for _, dependencyID := range txn.pt.PreAssembly.Dependencies.DependsOn {
+			prereqIDs[dependencyID] = struct{}{}
+		}
+	}
+	for prerequisiteID := range prereqIDs {
+		prerequisite := s.transactionByID[prerequisiteID]
+		if prerequisite == nil {
+			continue
+		}
+		if prerequisite.dependencies != nil {
+			prerequisite.dependencies.PrereqOf = removeUUID(prerequisite.dependencies.PrereqOf, txn.pt.ID)
+		}
+		if prerequisite.pt.PreAssembly != nil && prerequisite.pt.PreAssembly.Dependencies != nil {
+			prerequisite.pt.PreAssembly.Dependencies.PrereqOf = removeUUID(prerequisite.pt.PreAssembly.Dependencies.PrereqOf, txn.pt.ID)
+		}
+	}
+
+	// Remove this TX from all dependent forward links.
+	dependentIDs := make(map[uuid.UUID]struct{})
+	if txn.dependencies != nil {
+		for _, dependentID := range txn.dependencies.PrereqOf {
+			dependentIDs[dependentID] = struct{}{}
+		}
+	}
+	if txn.pt.PreAssembly != nil && txn.pt.PreAssembly.Dependencies != nil {
+		for _, dependentID := range txn.pt.PreAssembly.Dependencies.PrereqOf {
+			dependentIDs[dependentID] = struct{}{}
+		}
+	}
+	for dependentID := range dependentIDs {
+		dependent := s.transactionByID[dependentID]
+		if dependent == nil {
+			continue
+		}
+		if dependent.dependencies != nil {
+			dependent.dependencies.DependsOn = removeUUID(dependent.dependencies.DependsOn, txn.pt.ID)
+		}
+		if dependent.pt.PreAssembly != nil && dependent.pt.PreAssembly.Dependencies != nil {
+			dependent.pt.PreAssembly.Dependencies.DependsOn = removeUUID(dependent.pt.PreAssembly.Dependencies.DependsOn, txn.pt.ID)
+		}
+	}
+}
+
+func removeUUID(ids []uuid.UUID, target uuid.UUID) []uuid.UUID {
+	filtered := ids[:0]
+	for _, id := range ids {
+		if id != target {
+			filtered = append(filtered, id)
+		}
+	}
+	return filtered
 }
 
 func (s *grapher) ForgetMints(transactionID uuid.UUID) {
