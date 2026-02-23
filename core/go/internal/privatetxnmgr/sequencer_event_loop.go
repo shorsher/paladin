@@ -118,7 +118,9 @@ func (s *Sequencer) handleTransactionEvent(ctx context.Context, event ptmgrtypes
 		transactionProcessor.Action(ctx)
 	}
 
-	if transactionProcessor.CoordinatingLocally(ctx) && transactionProcessor.ReadyForSequencing(ctx) && !transactionProcessor.Dispatched(ctx) {
+	if transactionProcessor.CoordinatingLocally(ctx) &&
+		transactionProcessor.ReadyForSequencing(ctx) &&
+		!transactionProcessor.DispatchInitiated(ctx) {
 		// we are responsible for coordinating the endorsement flow for this transaction, ensure that it has been added it to the graph
 		// NOTE: AddTransaction is idempotent so we don't need to check whether we have already added it
 		s.graph.AddTransaction(ctx, transactionProcessor)
@@ -139,7 +141,7 @@ func (s *Sequencer) handleTransactionEvent(ctx context.Context, event ptmgrtypes
 		// graph of transactions that can successfully be dispatched so only option here is to abandon everything we have in-memory for this contract
 		// and start again
 		log.L(ctx).Errorf("Error getting dispatchable transactions: %s", err)
-		s.abort(err)
+		s.Stop(err)
 		return
 	}
 	if len(dispatchableTransactions) == 0 {
