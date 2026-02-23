@@ -288,12 +288,12 @@ func (h *lockHandler) baseLedgerInvoke(ctx context.Context, tx *types.ParsedTran
 	case types.NotoVariantDefault:
 		var notoLockOpEncoded []byte
 		lockStates := h.noto.filterSchema(req.OutputStates, []string{h.noto.lockInfoSchemaV1.Id})
-		notoLockOpEncoded, err = h.noto.encodeNotoLockOperation(ctx, &types.NotoLockOperation{
-			TxId:          req.Transaction.TransactionId,
-			Inputs:        endorsableStateIDs(inputs),
-			Outputs:       append(endorsableStateIDs(lockStates), endorsableStateIDs(outputs)...),
-			LockedOutputs: endorsableStateIDs(lockedOutputs),
-			Proof:         lockSignature.Payload,
+		notoLockOpEncoded, err = h.noto.encodeNotoCreateLockOperation(ctx, &types.NotoCreateLockOperation{
+			TxId:     req.Transaction.TransactionId,
+			Inputs:   endorsableStateIDs(inputs),
+			Outputs:  append(endorsableStateIDs(lockStates), endorsableStateIDs(outputs)...),
+			Contents: endorsableStateIDs(lockedOutputs),
+			Proof:    lockSignature.Payload,
 		})
 		if err == nil {
 			interfaceABI = h.noto.getInterfaceABI(types.NotoVariantDefault)

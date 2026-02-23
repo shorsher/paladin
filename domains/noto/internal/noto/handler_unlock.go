@@ -564,12 +564,11 @@ func (h *unlockCommon) buildPrepareUnlockParams(ctx context.Context, tx *types.P
 	}
 	if err == nil {
 		// The noto lock operation here is empty, as we are just modifying the lock
-		notoLockOpEncoded, err = h.noto.encodeNotoLockOperation(ctx, &types.NotoLockOperation{
-			TxId:          tx.Transaction.TransactionId,
-			Inputs:        []string{lockTransition.prevLockState.Id},
-			Outputs:       []string{lockTransition.newLockState.Id},
-			LockedOutputs: []string{}, // must be empty for updateLock
-			Proof:         proof,
+		notoLockOpEncoded, err = h.noto.encodeNotoUpdateLockOperation(ctx, &types.NotoUpdateLockOperation{
+			TxId:    tx.Transaction.TransactionId,
+			Inputs:  []string{lockTransition.prevLockState.Id},
+			Outputs: []string{lockTransition.newLockState.Id},
+			Proof:   proof,
 		})
 	}
 	if err != nil {
@@ -609,12 +608,12 @@ func (h *unlockCommon) buildCreateLockParams(ctx context.Context, tx *types.Pars
 	}
 	if err == nil {
 		// The noto lock operation here is empty, as we are just modifying the lock
-		notoLockOpEncoded, err = h.noto.encodeNotoLockOperation(ctx, &types.NotoLockOperation{
-			TxId:          tx.Transaction.TransactionId,
-			Inputs:        endorsableStateIDs(inputs),
-			Outputs:       append([]string{lockTransition.newLockState.Id}, endorsableStateIDs(additionalOutputs)...),
-			LockedOutputs: endorsableStateIDs(lockedOutputs),
-			Proof:         proof,
+		notoLockOpEncoded, err = h.noto.encodeNotoCreateLockOperation(ctx, &types.NotoCreateLockOperation{
+			TxId:     tx.Transaction.TransactionId,
+			Inputs:   endorsableStateIDs(inputs),
+			Outputs:  append([]string{lockTransition.newLockState.Id}, endorsableStateIDs(additionalOutputs)...),
+			Contents: endorsableStateIDs(lockedOutputs),
+			Proof:    proof,
 		})
 	}
 	if err != nil {

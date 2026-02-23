@@ -170,14 +170,14 @@ func TestHandleEventBatch_NotoLock(t *testing.T) {
 	lockedOutput := pldtypes.RandBytes32()
 	owner := (*pldtypes.EthAddress)(pldtypes.RandAddress())
 	event := &NotoLockCreated_Event{
-		TxId:          txId,
-		LockID:        lockId,
-		Owner:         owner,
-		Inputs:        []pldtypes.Bytes32{input},
-		Outputs:       []pldtypes.Bytes32{output},
-		LockedOutputs: []pldtypes.Bytes32{lockedOutput},
-		Proof:         pldtypes.MustParseHexBytes("0x1234"),
-		Data:          sampleV1Data(t, n),
+		TxId:     txId,
+		LockID:   lockId,
+		Owner:    owner,
+		Inputs:   []pldtypes.Bytes32{input},
+		Outputs:  []pldtypes.Bytes32{output},
+		Contents: []pldtypes.Bytes32{lockedOutput},
+		Proof:    pldtypes.MustParseHexBytes("0x1234"),
+		Data:     sampleV1Data(t, n),
 	}
 	notoEventJson, err := json.Marshal(event)
 	require.NoError(t, err)
@@ -252,14 +252,14 @@ func TestHandleEventBatch_NotoLockBadTransactionData(t *testing.T) {
 	lockId := pldtypes.RandBytes32()
 	owner := (*pldtypes.EthAddress)(pldtypes.RandAddress())
 	event := &NotoLockCreated_Event{
-		TxId:          txId,
-		LockID:        lockId,
-		Owner:         owner,
-		Inputs:        []pldtypes.Bytes32{},
-		Outputs:       []pldtypes.Bytes32{},
-		LockedOutputs: []pldtypes.Bytes32{},
-		Proof:         pldtypes.MustParseHexBytes("0x1234"),
-		Data:          pldtypes.MustParseHexBytes("0x00020000"), // Bad transaction data
+		TxId:     txId,
+		LockID:   lockId,
+		Owner:    owner,
+		Inputs:   []pldtypes.Bytes32{},
+		Outputs:  []pldtypes.Bytes32{},
+		Contents: []pldtypes.Bytes32{},
+		Proof:    pldtypes.MustParseHexBytes("0x1234"),
+		Data:     pldtypes.MustParseHexBytes("0x00020000"), // Bad transaction data
 	}
 	notoEventJson, err := json.Marshal(event)
 	require.NoError(t, err)

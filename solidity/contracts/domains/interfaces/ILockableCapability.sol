@@ -129,8 +129,8 @@ interface ILockableCapability {
     ) external returns (bytes32 lockId);
 
     /**
-     * @dev Update the current options for a lock (non-normative method aligned with ILockableCapability recommendations).
-     *      Should only be allowed if the lock has not been delegated.
+     * @dev Updates an existing lock. The spendHash and cancelHash can be updated until delegation (owner != spender),
+     *      and the options can be updated by the current spender at any time. The lock contents cannot be updated.
      *
      * Requirements:
      *  - MUST revert with LockSpenderNotOwner(lockId, spender, owner) if the lock is currently
@@ -138,7 +138,7 @@ interface ILockableCapability {
      *
      * @param lockId Unique identifier for the lock.
      * @param updateInputs Implementation-specific information needed to perform the update operation
-     * @param params The parameters that will all be replaced on the lock as a result of the update (see UpdateLockParams struct).
+     * @param params The parameters that will all be replaced on the lock as a result of the update (see LockParams struct).
      * @param data Any additional transaction data (opaque to the blockchain).
      *
      * Emits a {LockUpdated} event.
@@ -171,6 +171,8 @@ interface ILockableCapability {
      *    is not the current spender for lockId.
      *  - MUST revert with LockNotActive(lockId) if the lock does not exist or
      *    is no longer active.
+     * 
+     * Emits a {LockDelegated} event.
      *
      * @param lockId     The identifier of the lock.
      * @param delegateInputs  Implementation-specific information needed to perform the update operation

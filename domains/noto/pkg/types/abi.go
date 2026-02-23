@@ -175,13 +175,21 @@ type BalanceOfResult struct {
 	Overflow     bool                 `json:"overflow"`
 }
 
-// Encoded params for Noto implementation of ILockableCapability.createLock() / ILockableCapability.updateLock()
-type NotoLockOperation struct {
-	TxId          string            `json:"txId"`
-	Inputs        []string          `json:"inputs"`
-	Outputs       []string          `json:"outputs"`
-	LockedOutputs []string          `json:"lockedOutputs"`
-	Proof         pldtypes.HexBytes `json:"proof"`
+// Encoded params for Noto implementation of ILockableCapability.createLock()
+type NotoCreateLockOperation struct {
+	TxId     string            `json:"txId"`
+	Inputs   []string          `json:"inputs"`
+	Outputs  []string          `json:"outputs"`
+	Contents []string          `json:"contents"`
+	Proof    pldtypes.HexBytes `json:"proof"`
+}
+
+// Encoded params for Noto implementation of ILockableCapability.updateLock()
+type NotoUpdateLockOperation struct {
+	TxId    string            `json:"txId"`
+	Inputs  []string          `json:"inputs"`
+	Outputs []string          `json:"outputs"`
+	Proof   pldtypes.HexBytes `json:"proof"`
 }
 
 // Encoded params for Noto implementation of ILockableCapability.spendLock() / ILockableCapability.cancelLock()
@@ -201,15 +209,28 @@ type NotoDelegateOperation struct {
 	Proof   pldtypes.HexBytes `json:"proof"`
 }
 
-var NotoLockOperationABI = abi.ParameterArray{
+var NotoCreateLockOperationABI = abi.ParameterArray{
 	{
 		Type:         "tuple",
-		InternalType: "struct NotoLockOperation",
+		InternalType: "struct NotoCreateLockOperation",
 		Components: abi.ParameterArray{
 			{Name: "txId", Type: "bytes32"},
 			{Name: "inputs", Type: "bytes32[]"},
 			{Name: "outputs", Type: "bytes32[]"},
-			{Name: "lockedOutputs", Type: "bytes32[]"},
+			{Name: "contents", Type: "bytes32[]"},
+			{Name: "proof", Type: "bytes"},
+		},
+	},
+}
+
+var NotoUpdateLockOperationABI = abi.ParameterArray{
+	{
+		Type:         "tuple",
+		InternalType: "struct NotoUpdateLockOperation",
+		Components: abi.ParameterArray{
+			{Name: "txId", Type: "bytes32"},
+			{Name: "inputs", Type: "bytes32[]"},
+			{Name: "outputs", Type: "bytes32[]"},
 			{Name: "proof", Type: "bytes"},
 		},
 	},

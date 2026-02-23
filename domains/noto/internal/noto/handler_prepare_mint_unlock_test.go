@@ -274,13 +274,12 @@ func TestPrepareMintUnlock(t *testing.T) {
 	require.Equal(t, expectedCancelHash, fnParams.Params.CancelHash)
 
 	// Validate the encoded noto parameters passed in
-	notoParams := decodeSingleABITuple[types.NotoLockOperation](t, types.NotoLockOperationABI, fnParams.UpdateInputs)
-	require.Equal(t, &types.NotoLockOperation{
-		TxId:          "0x015e1881f2ba769c22d05c841f06949ec6e1bd573f5e1e0328885494212f077d",
-		Inputs:        []string{inputLockInfo.Id},
-		Outputs:       []string{*newLockInfoState.Id},
-		LockedOutputs: []string{},
-		Proof:         signatureBytes,
+	notoParams := decodeSingleABITuple[types.NotoUpdateLockOperation](t, types.NotoUpdateLockOperationABI, fnParams.UpdateInputs)
+	require.Equal(t, &types.NotoUpdateLockOperation{
+		TxId:    "0x015e1881f2ba769c22d05c841f06949ec6e1bd573f5e1e0328885494212f077d",
+		Inputs:  []string{inputLockInfo.Id},
+		Outputs: []string{*newLockInfoState.Id},
+		Proof:   signatureBytes,
 	}, notoParams)
 
 	// Prepare again to test hook invoke
