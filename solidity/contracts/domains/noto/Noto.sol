@@ -580,7 +580,7 @@ contract Noto is EIP712Upgradeable, UUPSUpgradeable, INoto, INotoErrors {
         if (options.spendTxId != 0 && options.spendTxId != unlockOp.txId) {
             revert NotoInvalidTransaction(unlockOp.txId);
         }
-        _txIds[unlockOp.txId] = true;
+        useTxId(unlockOp.txId);
 
         // If a specific unlock operation is expected, verify the hash matches
         if (expectedHash != 0) {

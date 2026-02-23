@@ -37,19 +37,19 @@ func (e *BaseCoordinatorEvent) GetTransactionID() uuid.UUID {
 	return e.TransactionID
 }
 
-// TransactionReceivedEvent is "emitted" when the coordinator receives a transaction.
+// TransactionDelegatedEvent is "emitted" when the coordinator receives a transaction.
 // Feels slightly artificial to model this as an event because it happens every time we create a transaction object
 // but rather than bury the logic in NewTransaction func, modeling this event allows us to define the initial state transition rules in the same declarative stateDefinitions structure as all other state transitions
-type ReceivedEvent struct {
+type DelegatedEvent struct {
 	BaseCoordinatorEvent
 }
 
-func (*ReceivedEvent) Type() EventType {
-	return Event_Received
+func (*DelegatedEvent) Type() EventType {
+	return Event_Delegated
 }
 
-func (*ReceivedEvent) TypeString() string {
-	return "Event_Received"
+func (*DelegatedEvent) TypeString() string {
+	return "Event_Delegated"
 }
 
 // TransactionSelectedEvent
@@ -228,7 +228,7 @@ func (*SubmittedEvent) TypeString() string {
 // ConfirmedEvent
 type ConfirmedEvent struct {
 	BaseCoordinatorEvent
-	Nonce        uint64
+	Nonce        *pldtypes.HexUint64 // nil when nonce is not available (e.g. chained confirmation)
 	Hash         pldtypes.Bytes32
 	RevertReason pldtypes.HexBytes
 }
@@ -243,7 +243,6 @@ func (*ConfirmedEvent) TypeString() string {
 
 type DependencyAssembledEvent struct {
 	BaseCoordinatorEvent
-	DependencyID uuid.UUID
 }
 
 func (*DependencyAssembledEvent) Type() EventType {
@@ -256,7 +255,6 @@ func (*DependencyAssembledEvent) TypeString() string {
 
 type DependencyRevertedEvent struct {
 	BaseCoordinatorEvent
-	DependencyID uuid.UUID
 }
 
 func (*DependencyRevertedEvent) Type() EventType {
@@ -269,7 +267,6 @@ func (*DependencyRevertedEvent) TypeString() string {
 
 type DependencyReadyEvent struct {
 	BaseCoordinatorEvent
-	DependencyID uuid.UUID
 }
 
 func (*DependencyReadyEvent) Type() EventType {
@@ -307,15 +304,18 @@ func (*StateTransitionEvent) TypeString() string {
 	return "Event_StateTransition"
 }
 
-// events emitted by the transaction state machine whenever a state transition occurs
-type HeartbeatIntervalEvent struct {
+// TransactionUnknownByOriginatorEvent is sent by an originator when it receives a message
+// for a transaction it doesn't recognize. The most likely cause is that the transaction reached
+// a terminal state (e.g. reverted during assembly) but the response was lost, and the transaction
+// has since been removed from memory on the originator after cleanup.
+type TransactionUnknownByOriginatorEvent struct {
 	BaseCoordinatorEvent
 }
 
-func (*HeartbeatIntervalEvent) Type() EventType {
-	return Event_HeartbeatInterval
+func (*TransactionUnknownByOriginatorEvent) Type() EventType {
+	return Event_TransactionUnknownByOriginator
 }
 
-func (*HeartbeatIntervalEvent) TypeString() string {
-	return "Event_HeartbeatInterval"
+func (*TransactionUnknownByOriginatorEvent) TypeString() string {
+	return "Event_TransactionUnknownByOriginator"
 }

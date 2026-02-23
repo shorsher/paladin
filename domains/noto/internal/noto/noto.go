@@ -1187,8 +1187,8 @@ func (n *Noto) CheckStateCompletion(ctx context.Context, req *prototk.CheckState
 	// If we don't (Noto V0, or just not available yet) then we return the pre-calculated FirstUnavailableId
 	// provided by us by Paladin.
 	if manifestState == nil {
-		res.PrimaryMissingStateId = req.UnavailableStates.FirstUnavailableId
-		log.L(ctx).Debugf("No manifest available. Returning pre-calculated first unavailable state for transaction %s: %s", req.TransactionId, *res.PrimaryMissingStateId)
+		res.NextMissingStateId = req.UnavailableStates.FirstUnavailableId
+		log.L(ctx).Debugf("No manifest available. Returning pre-calculated first unavailable state for transaction %s: %s", req.TransactionId, *res.NextMissingStateId)
 		return res, nil
 	}
 	// Decode the manifest
@@ -1201,10 +1201,7 @@ func (n *Noto) CheckStateCompletion(ctx context.Context, req *prototk.CheckState
 	// Note we only get to this point if we're involved in the transaction in some way, and
 	// don't have the whole state set (Notary always has full set before submit).
 	// So a bit of efficient in-memory processing overhead is perfectly acceptable.
-	lookupReq := &prototk.LookupKeyIdentifiersRequest{
-		Algorithm:    algorithms.ECDSA_SECP256K1,
-		VerifierType: verifiers.ETH_ADDRESS,
-	}
+	lookupReq := &prototk.ReverseKeyLookupRequest{}
 	uniqueAddresses := make(map[string]struct{})
 	for _, state := range manifest.States {
 		for _, target := range state.Participants {
@@ -1212,9 +1209,13 @@ func (n *Noto) CheckStateCompletion(ctx context.Context, req *prototk.CheckState
 		}
 	}
 	for addr := range uniqueAddresses {
-		lookupReq.Verifiers = append(lookupReq.Verifiers, addr)
+		lookupReq.Lookups = append(lookupReq.Lookups, &prototk.ReverseKeyLookup{
+			Algorithm:    algorithms.ECDSA_SECP256K1,
+			VerifierType: verifiers.ETH_ADDRESS,
+			Verifier:     addr,
+		})
 	}
-	lookupRes, err := n.Callbacks.LookupKeyIdentifiers(ctx, lookupReq)
+	lookupRes, err := n.Callbacks.ReverseKeyLookup(ctx, lookupReq)
 	if err != nil {
 		return nil, err
 	}
@@ -1235,25 +1236,25 @@ func (n *Noto) CheckStateCompletion(ctx context.Context, req *prototk.CheckState
 		for _, unavailableID := range req.UnavailableStates.InfoStateIds {
 			if unavailableID == requiredStateID {
 				log.L(ctx).Warnf("Required info state %s unavailable for transaction %s", unavailableID, req.TransactionId)
-				return &prototk.CheckStateCompletionResponse{PrimaryMissingStateId: &requiredStateID}, nil
+				return &prototk.CheckStateCompletionResponse{NextMissingStateId: &requiredStateID}, nil
 			}
 		}
 		for _, unavailableID := range req.UnavailableStates.InputStateIds {
 			if unavailableID == requiredStateID {
 				log.L(ctx).Warnf("Required input state %s unavailable for transaction %s", unavailableID, req.TransactionId)
-				return &prototk.CheckStateCompletionResponse{PrimaryMissingStateId: &requiredStateID}, nil
+				return &prototk.CheckStateCompletionResponse{NextMissingStateId: &requiredStateID}, nil
 			}
 		}
 		for _, unavailableID := range req.UnavailableStates.OutputStateIds {
 			if unavailableID == requiredStateID {
 				log.L(ctx).Warnf("Required output state %s unavailable for transaction %s", unavailableID, req.TransactionId)
-				return &prototk.CheckStateCompletionResponse{PrimaryMissingStateId: &requiredStateID}, nil
+				return &prototk.CheckStateCompletionResponse{NextMissingStateId: &requiredStateID}, nil
 			}
 		}
 		for _, unavailableID := range req.UnavailableStates.ReadStateIds {
 			if unavailableID == requiredStateID {
 				log.L(ctx).Warnf("Required read state %s unavailable for transaction %s", unavailableID, req.TransactionId)
-				return &prototk.CheckStateCompletionResponse{PrimaryMissingStateId: &requiredStateID}, nil
+				return &prototk.CheckStateCompletionResponse{NextMissingStateId: &requiredStateID}, nil
 			}
 		}
 	}

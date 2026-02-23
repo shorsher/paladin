@@ -24,6 +24,7 @@ import (
 	"github.com/LFDT-Paladin/paladin/core/internal/components"
 	"github.com/LFDT-Paladin/paladin/core/internal/filters"
 	"github.com/LFDT-Paladin/paladin/core/internal/msgs"
+	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/syncpoints"
 	"github.com/LFDT-Paladin/paladin/core/pkg/persistence"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldapi"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldtypes"
@@ -104,7 +105,8 @@ func (tm *txManager) FinalizeTransactions(ctx context.Context, dbTX persistence.
 		return nil
 	}
 
-	possibleChainingRecordIDs := make([]uuid.UUID, 0, len(info))
+	transactionIDResults := make(map[uuid.UUID]bool)
+	transactionIDs := make([]uuid.UUID, 0, len(info))
 	receiptsToInsert := make([]*transactionReceipt, 0, len(info))
 	for _, ri := range info {
 		receipt := &transactionReceipt{
@@ -151,9 +153,14 @@ func (tm *txManager) FinalizeTransactions(ctx context.Context, dbTX persistence.
 		default:
 			return i18n.NewError(ctx, msgs.MsgTxMgrInvalidReceiptNotification, pldtypes.JSONString(ri))
 		}
+		if transactionIDResults[receipt.TransactionID] {
+			log.L(ctx).Warnf("Skipping receipt that would override previous success in this batch txId=%s success=%t failure=%s txHash=%v", receipt.TransactionID, receipt.Success, failureMsg, receipt.TransactionHash)
+			continue
+		}
+		transactionIDResults[receipt.TransactionID] = receipt.Success
 		log.L(ctx).Infof("Inserting receipt txId=%s success=%t failure=%s txHash=%v", receipt.TransactionID, receipt.Success, failureMsg, receipt.TransactionHash)
 		receiptsToInsert = append(receiptsToInsert, receipt)
-		possibleChainingRecordIDs = append(possibleChainingRecordIDs, receipt.TransactionID)
+		transactionIDs = append(transactionIDs, receipt.TransactionID)
 	}
 
 	if len(receiptsToInsert) > 0 {
@@ -163,25 +170,29 @@ func (tm *txManager) FinalizeTransactions(ctx context.Context, dbTX persistence.
 		// This means if transaction A commits before transaction B, it is guaranteed that the sequence number(s) allocated
 		// in transaction A will be lower than transaction B (not guaranteed otherwise).
 		err := tm.p.TakeNamedLock(ctx, dbTX, "transaction_receipts")
-		if err == nil {
-			err = dbTX.DB().Table("transaction_receipts").
+		if err == nil && len(receiptsToInsert) > 0 {
+			tx := dbTX.DB().Table("transaction_receipts").
 				WithContext(ctx).
 				Clauses(clause.OnConflict{
 					Columns:   []clause.Column{{Name: "transaction"}},
 					DoNothing: true, // once inserted, the receipt is immutable
 				}).
-				Create(receiptsToInsert).
-				Error
+				Create(receiptsToInsert)
+			err = tx.Error
+			if err == nil && tx.RowsAffected != int64(len(receiptsToInsert)) {
+				log.L(ctx).Warnf("Potential duplicate receipt receipts=%d inserted=%d", len(receiptsToInsert), tx.RowsAffected)
+				err = tm.ensureSuccessOverridesFailure(ctx, dbTX, transactionIDs, receiptsToInsert)
+			}
 		}
 		if err != nil {
 			return err
 		}
 	}
 
-	if len(possibleChainingRecordIDs) > 0 {
+	if len(transactionIDs) > 0 {
 		var chainingRecords []*persistedChainedPrivateTxn
 		err := dbTX.DB().
-			Where(`"chained_transaction" IN ?`, possibleChainingRecordIDs).
+			Where(`"chained_transaction" IN ?`, transactionIDs).
 			Find(&chainingRecords).
 			Error
 		// Recurse into the sequencer manager, who will call us back, or send via the transport mgr
@@ -211,12 +222,69 @@ func (tm *txManager) FinalizeTransactions(ctx context.Context, dbTX persistence.
 		}
 	}
 
+	dbTX.AddPreCommit(func(ctx context.Context, dbTX persistence.DBTX) error {
+		// Update any transactions that had one of these transactions as a dependency. Success will result
+		// in the dependent tranasaction(s) being progressed, failure will mark them as failed (the latter
+		// requiring a safe DB update within this TX hence handled within a pre-commit).
+		return tm.notifyDependentTransactions(ctx, dbTX, receiptsToInsert)
+	})
+
 	dbTX.AddPostCommit(func(ctx context.Context) {
 		if len(receiptsToInsert) > 0 {
 			tm.notifyNewReceipts(receiptsToInsert)
 		}
 	})
 	return nil
+}
+
+// Failures must not override success, but success can override failure.
+// In the success-over-failure case, we delete the old receipt, and insert a new successful one.
+//
+// Note we cannot just edit the receipt, as it might already have been dispatched to a listener.
+//
+// Function is only called after a rowsAffected check on the simple ON CONFLICT inserts.
+func (tm *txManager) ensureSuccessOverridesFailure(ctx context.Context, dbTX persistence.DBTX, transactionIDs []uuid.UUID, newReceipts []*transactionReceipt) error {
+	var replacementIDsToDelete []uuid.UUID
+	var replacementInserts []*transactionReceipt
+	var existingReceipts []*transactionReceipt
+	err := dbTX.DB().Table("transaction_receipts").
+		WithContext(ctx).
+		Where(`"transaction" IN ?`, transactionIDs).
+		Find(&existingReceipts).
+		Error
+	if err == nil {
+		for _, receipt := range newReceipts {
+			var existing *transactionReceipt
+			for _, candidate := range existingReceipts {
+				if candidate.TransactionID == receipt.TransactionID {
+					existing = candidate
+					break
+				}
+			}
+			if existing != nil {
+				if !existing.Success /* do not override success */ && receipt.Success /* do not replace the first failure */ {
+					log.L(ctx).Warnf("Duplicate receipt for transaction %s replaces existing failure receipt. Previous error: %s", receipt.TransactionID, stringOrEmpty(existing.FailureMessage))
+					replacementIDsToDelete = append(replacementIDsToDelete, existing.TransactionID)
+					replacementInserts = append(replacementInserts, receipt)
+				} else {
+					log.L(ctx).Warnf("Duplicate receipt for transaction %s discarded (success=%t) Error: %s", receipt.TransactionID, receipt.Success, stringOrEmpty(receipt.FailureMessage))
+				}
+			}
+		}
+	}
+	if err == nil && len(replacementIDsToDelete) > 0 {
+		err = dbTX.DB().Table("transaction_receipts").
+			WithContext(ctx).
+			Delete(&transactionReceipt{}, `"transaction" IN ?`, replacementIDsToDelete).
+			Error
+	}
+	if err == nil && len(replacementInserts) > 0 {
+		err = dbTX.DB().Table("transaction_receipts").
+			WithContext(ctx).
+			Create(replacementInserts). // note no OnConflict, as we just deleted all the conflicts
+			Error
+	}
+	return err
 }
 
 func (tm *txManager) CalculateRevertError(ctx context.Context, dbTX persistence.DBTX, revertData pldtypes.HexBytes) error {
@@ -409,6 +477,7 @@ func (tm *txManager) addDomainReceipt(ctx context.Context, d components.Domain, 
 
 func (tm *txManager) buildFullReceipt(ctx context.Context, receipt *pldapi.TransactionReceipt, domainReceipt bool) (fullReceipt *pldapi.TransactionReceiptFull, err error) {
 	log.L(ctx).Debugf("Building full transaction receipt by ID: %s", receipt.ID)
+	dbtx := tm.p.NOTX() // For now we don't use a TX for queries but we'll define and re-use this so in the future we can swap out for a DBTX
 	fullReceipt = &pldapi.TransactionReceiptFull{TransactionReceipt: receipt}
 	if receipt.Domain != "" {
 		if err = tm.addStateReceipt(ctx, fullReceipt); err != nil {
@@ -423,7 +492,81 @@ func (tm *txManager) buildFullReceipt(ctx context.Context, receipt *pldapi.Trans
 			}
 		}
 	}
-	return fullReceipt, nil
+
+	fullReceipt, err = tm.mergeDispatches(ctx, dbtx, []uuid.UUID{fullReceipt.ID}, []*pldapi.TransactionReceiptFull{fullReceipt})
+	if err != nil {
+		return nil, err
+	}
+
+	fullReceipt, err = tm.mergeChainedTranasctions(ctx, dbtx, []uuid.UUID{fullReceipt.ID}, []*pldapi.TransactionReceiptFull{fullReceipt})
+	if err != nil {
+		return nil, err
+	}
+
+	return tm.mergeReceiptPublicTransactions(ctx, dbtx, []uuid.UUID{fullReceipt.ID}, []*pldapi.TransactionReceiptFull{fullReceipt})
+}
+
+func (tm *txManager) mergeReceiptPublicTransactions(ctx context.Context, dbTX persistence.DBTX, txIDs []uuid.UUID, txs []*pldapi.TransactionReceiptFull) (*pldapi.TransactionReceiptFull, error) {
+	pubTxByTX, err := tm.publicTxMgr.QueryPublicTxForTransactions(ctx, dbTX, txIDs, nil)
+	if err != nil {
+		return nil, err
+	}
+	for _, tx := range txs {
+		tx.Public = pubTxByTX[tx.ID]
+	}
+	return txs[0], nil
+}
+
+func (tm *txManager) mergeDispatches(ctx context.Context, dbTX persistence.DBTX, txIDs []uuid.UUID, txs []*pldapi.TransactionReceiptFull) (*pldapi.TransactionReceiptFull, error) {
+	txdps := []*syncpoints.DispatchPersisted{}
+	err := dbTX.DB().Table("dispatches").
+		WithContext(ctx).
+		Where(`"private_transaction_id" IN (?)`, txIDs).
+		Find(&txdps).
+		Error
+	if err != nil {
+		return nil, err
+	}
+	// group by txID
+	txdpMap := make(map[string][]*syncpoints.DispatchPersisted, len(txdps))
+	for _, txdp := range txdps {
+		txdpMap[txdp.PrivateTransactionID] = append(txdpMap[txdp.PrivateTransactionID], txdp)
+	}
+	for _, tx := range txs {
+		if txdps, ok := txdpMap[tx.ID.String()]; ok {
+			tx.Dispatches = make([]*pldapi.Dispatch, len(txdps))
+			for i, txdp := range txdps {
+				tx.Dispatches[i] = tm.mapPersistedTXDispatch(txdp)
+			}
+		}
+	}
+	return txs[0], nil
+}
+
+func (tm *txManager) mergeChainedTranasctions(ctx context.Context, dbTX persistence.DBTX, txIDs []uuid.UUID, txs []*pldapi.TransactionReceiptFull) (*pldapi.TransactionReceiptFull, error) {
+	txdps := []*persistedChainedPrivateTxn{}
+	err := dbTX.DB().Table("chained_private_txns").
+		WithContext(ctx).
+		Where(`"transaction" IN (?)`, txIDs).
+		Find(&txdps).
+		Error
+	if err != nil {
+		return nil, err
+	}
+	// group by txID
+	txdpMap := make(map[string][]*persistedChainedPrivateTxn, len(txdps))
+	for _, txdp := range txdps {
+		txdpMap[string(txdp.Transaction.String())] = append(txdpMap[string(txdp.Transaction.String())], txdp)
+	}
+	for _, tx := range txs {
+		if txdps, ok := txdpMap[tx.ID.String()]; ok {
+			tx.ChainedPrivateTransactions = make([]*pldapi.ChainedTransaction, len(txdps))
+			for i, txdp := range txdps {
+				tx.ChainedPrivateTransactions[i] = tm.mapPersistedChainedTransaction(txdp)
+			}
+		}
+	}
+	return txs[0], nil
 }
 
 func (tm *txManager) GetTransactionReceiptByIDFull(ctx context.Context, id uuid.UUID) (*pldapi.TransactionReceiptFull, error) {
