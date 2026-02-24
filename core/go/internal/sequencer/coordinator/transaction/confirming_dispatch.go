@@ -50,7 +50,6 @@ func (t *CoordinatorTransaction) sendPreDispatchRequest(ctx context.Context) err
 			)
 		})
 		t.scheduleRequestTimeout(ctx)
-		t.scheduleStateTimeout(ctx)
 	}
 
 	sendErr := t.pendingPreDispatchRequest.Nudge(ctx)
@@ -113,6 +112,11 @@ func action_DispatchRequestRejected(ctx context.Context, t *CoordinatorTransacti
 
 func action_SendPreDispatchRequest(ctx context.Context, txn *CoordinatorTransaction, _ common.Event) error {
 	return txn.sendPreDispatchRequest(ctx)
+}
+
+func action_OnTransitionToConfirmingDispatchable(ctx context.Context, txn *CoordinatorTransaction, event common.Event) error {
+	txn.scheduleStateTimeout(ctx)
+	return action_SendPreDispatchRequest(ctx, txn, event)
 }
 
 func action_NudgePreDispatchRequest(ctx context.Context, txn *CoordinatorTransaction, _ common.Event) error {

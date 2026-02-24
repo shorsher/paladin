@@ -66,6 +66,7 @@ const (
 	Event_Submitted                                                                            // submission made to the blockchain.  Each time this event is received, the submission hash is updated
 	Event_Confirmed                                                                            // confirmation received from the blockchain of either a successful or reverted transaction
 	Event_RequestTimeoutInterval                                                               // event emitted by the state machine on a regular period while we have pending requests
+	Event_StateTimeoutInterval                                                                 // event emitted when a state has exceeded its maximum allowed duration
 	Event_StateTransition                                                                      // event emitted by the state machine when a state transition occurs.  TODO should this be a separate enum?
 	Event_AssembleTimeout                                                                      // the assemble timeout period has passed since we sent the first assemble request
 	Event_TransactionUnknownByOriginator                                                       // originator has reported that it doesn't recognize this transaction
@@ -145,7 +146,7 @@ var stateDefinitionsMap = StateDefinitions{
 		},
 	},
 	State_Assembling: {
-		OnTransitionTo: action_SendAssembleRequest,
+		OnTransitionTo: action_OnTransitionToAssembling,
 		Events: map[EventType]EventHandler{
 			Event_Assemble_Success: {
 				Validator: validator_MatchesPendingAssembleRequest,
@@ -174,10 +175,11 @@ var stateDefinitionsMap = StateDefinitions{
 					Action: action_NudgeAssembleRequest,
 					If:     statemachine.Not(guard_AssembleStateTimeoutExceeded),
 				}},
+			},
+			Event_StateTimeoutInterval: {
 				Transitions: []Transition{{
 					To:     State_Pooled,
-					If:     guard_AssembleStateTimeoutExceeded,
-					Action: action_IncrementAssembleErrors,
+					Action: action_IncrementErrors,
 				}},
 			},
 			Event_Assemble_Revert_Response: {
@@ -200,7 +202,7 @@ var stateDefinitionsMap = StateDefinitions{
 		},
 	},
 	State_Endorsement_Gathering: {
-		OnTransitionTo: action_SendEndorsementRequests,
+		OnTransitionTo: action_OnTransitionToEndorsementGathering,
 		Events: map[EventType]EventHandler{
 			Event_Endorsed: {
 				Actions: []ActionRule{
@@ -231,7 +233,7 @@ var stateDefinitionsMap = StateDefinitions{
 				Transitions: []Transition{
 					{
 						To:     State_Pooled,
-						Action: action_IncrementAssembleErrors,
+						Action: action_IncrementErrors,
 					},
 				},
 			},
@@ -240,11 +242,12 @@ var stateDefinitionsMap = StateDefinitions{
 					Action: action_NudgeEndorsementRequests,
 					If:     statemachine.Not(guard_EndorsementStateTimeoutExceeded),
 				}},
+			},
+			Event_StateTimeoutInterval: {
 				Transitions: []Transition{
 					{
 						To:     State_Pooled,
-						If:     guard_EndorsementStateTimeoutExceeded,
-						Action: action_IncrementAssembleErrors,
+						Action: action_IncrementErrors,
 					},
 				},
 			},
@@ -276,7 +279,7 @@ var stateDefinitionsMap = StateDefinitions{
 		},
 	},
 	State_Confirming_Dispatchable: {
-		OnTransitionTo: action_SendPreDispatchRequest,
+		OnTransitionTo: action_OnTransitionToConfirmingDispatchable,
 		Events: map[EventType]EventHandler{
 			Event_DispatchRequestApproved: {
 				Validator: validator_MatchesPendingPreDispatchRequest,
@@ -291,7 +294,7 @@ var stateDefinitionsMap = StateDefinitions{
 				Transitions: []Transition{
 					{
 						To:     State_Pooled,
-						Action: action_IncrementAssembleErrors,
+						Action: action_IncrementErrors,
 					},
 				},
 			},
@@ -300,10 +303,11 @@ var stateDefinitionsMap = StateDefinitions{
 					Action: action_NudgePreDispatchRequest,
 					If:     statemachine.Not(guard_DispatchConfirmationStateTimeoutExceeded),
 				}},
+			},
+			Event_StateTimeoutInterval: {
 				Transitions: []Transition{
 					{
 						To:     State_Pooled,
-						If:     guard_DispatchConfirmationStateTimeoutExceeded,
 						Action: action_DispatchRequestRejected,
 					},
 				},

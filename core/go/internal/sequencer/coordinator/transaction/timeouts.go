@@ -35,7 +35,7 @@ func (t *CoordinatorTransaction) scheduleRequestTimeout(ctx context.Context) {
 func (t *CoordinatorTransaction) scheduleStateTimeout(ctx context.Context) {
 	t.clearStateTimeoutSchedule()
 	t.cancelStateTimeoutSchedule = t.clock.ScheduleTimer(ctx, t.stateTimeout, func() {
-		t.queueEventForCoordinator(ctx, &RequestTimeoutIntervalEvent{
+		t.queueEventForCoordinator(ctx, &StateTimeoutIntervalEvent{
 			BaseCoordinatorEvent: BaseCoordinatorEvent{
 				TransactionID: t.pt.ID,
 			},

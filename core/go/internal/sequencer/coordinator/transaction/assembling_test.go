@@ -266,7 +266,6 @@ func Test_sendAssembleRequest_Success(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotNil(t, txn.pendingAssembleRequest)
 	assert.NotNil(t, txn.cancelRequestTimeoutSchedule)
-	assert.NotNil(t, txn.cancelStateTimeoutSchedule)
 }
 
 func Test_sendAssembleRequest_GetStateLocksError(t *testing.T) {
@@ -680,11 +679,11 @@ func Test_writeLockStates_Error(t *testing.T) {
 	assert.Error(t, err)
 }
 
-func Test_incrementAssembleErrors_IncrementsErrorCount(t *testing.T) {
+func Test_incrementErrors_IncrementsErrorCount(t *testing.T) {
 	txn, _ := newTransactionForUnitTesting(t, nil)
 	initialCount := txn.errorCount
 
-	err := txn.incrementAssembleErrors()
+	err := txn.incrementErrors()
 	assert.NoError(t, err)
 	assert.Equal(t, initialCount+1, txn.errorCount)
 }
@@ -808,7 +807,6 @@ func Test_action_SendAssembleRequest_Success(t *testing.T) {
 	// Assert state: pending request and timer schedules were set
 	assert.NotNil(t, txn.pendingAssembleRequest)
 	assert.NotNil(t, txn.cancelRequestTimeoutSchedule)
-	assert.NotNil(t, txn.cancelStateTimeoutSchedule)
 	mocks.transportWriter.AssertExpectations(t)
 }
 
@@ -872,7 +870,7 @@ func Test_action_IncrementAssembleErrors_Success(t *testing.T) {
 	txn, _ := newTransactionForUnitTesting(t, nil)
 	initialCount := txn.errorCount
 
-	err := action_IncrementAssembleErrors(ctx, txn, nil)
+	err := action_IncrementErrors(ctx, txn, nil)
 	assert.NoError(t, err)
 	assert.Equal(t, initialCount+1, txn.errorCount)
 }
@@ -1097,7 +1095,7 @@ func Test_sendAssembleRequest_RequestTimeoutCallback_Error(t *testing.T) {
 	assert.True(t, errorLogged)
 }
 
-func Test_sendAssembleRequest_AssembleTimeoutCallback(t *testing.T) {
+func Test_onTransitionToAssembling_AssembleTimeoutCallback(t *testing.T) {
 	ctx := context.Background()
 	realClock := common.RealClock()
 	grapher := NewGrapher(ctx)
@@ -1137,14 +1135,14 @@ func Test_sendAssembleRequest_AssembleTimeoutCallback(t *testing.T) {
 	timeoutEventReceived := false
 	var mu sync.Mutex
 	txn.queueEventForCoordinator = func(ctx context.Context, event common.Event) {
-		if _, ok := event.(*RequestTimeoutIntervalEvent); ok {
+		if _, ok := event.(*StateTimeoutIntervalEvent); ok {
 			mu.Lock()
 			timeoutEventReceived = true
 			mu.Unlock()
 		}
 	}
 
-	err = txn.sendAssembleRequest(ctx)
+	err = action_OnTransitionToAssembling(ctx, txn, nil)
 	require.NoError(t, err)
 
 	// Wait for timeout to fire
@@ -1155,7 +1153,7 @@ func Test_sendAssembleRequest_AssembleTimeoutCallback(t *testing.T) {
 	mu.Unlock()
 }
 
-func Test_sendAssembleRequest_AssembleTimeoutCallback_Error(t *testing.T) {
+func Test_onTransitionToAssembling_AssembleTimeoutCallback_Error(t *testing.T) {
 	ctx := context.Background()
 	realClock := common.RealClock()
 	grapher := NewGrapher(ctx)
@@ -1194,12 +1192,12 @@ func Test_sendAssembleRequest_AssembleTimeoutCallback_Error(t *testing.T) {
 
 	errorLogged := false
 	txn.queueEventForCoordinator = func(ctx context.Context, event common.Event) {
-		if _, ok := event.(*RequestTimeoutIntervalEvent); ok {
+		if _, ok := event.(*StateTimeoutIntervalEvent); ok {
 			errorLogged = true
 		}
 	}
 
-	err = txn.sendAssembleRequest(ctx)
+	err = action_OnTransitionToAssembling(ctx, txn, nil)
 	require.NoError(t, err)
 
 	// Wait for timeout to fire

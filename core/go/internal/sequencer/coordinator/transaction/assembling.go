@@ -107,7 +107,6 @@ func (t *CoordinatorTransaction) sendAssembleRequest(ctx context.Context) error 
 	})
 
 	t.scheduleRequestTimeout(ctx)
-	t.scheduleStateTimeout(ctx)
 	return t.pendingAssembleRequest.Nudge(ctx)
 }
 
@@ -205,7 +204,7 @@ func (t *CoordinatorTransaction) writeLockStates(ctx context.Context) error {
 	return t.engineIntegration.WriteLockStatesForTransaction(ctx, t.pt)
 }
 
-func (t *CoordinatorTransaction) incrementAssembleErrors() error {
+func (t *CoordinatorTransaction) incrementErrors() error {
 	t.errorCount++
 	return nil
 }
@@ -239,6 +238,11 @@ func action_SendAssembleRequest(ctx context.Context, txn *CoordinatorTransaction
 	return txn.sendAssembleRequest(ctx)
 }
 
+func action_OnTransitionToAssembling(ctx context.Context, txn *CoordinatorTransaction, event common.Event) error {
+	txn.scheduleStateTimeout(ctx)
+	return action_SendAssembleRequest(ctx, txn, event)
+}
+
 func action_NudgeAssembleRequest(ctx context.Context, txn *CoordinatorTransaction, _ common.Event) error {
 	log.L(ctx).Debugf("Nudging assemble request for transaction %s", txn.pt.ID.String())
 	return txn.nudgeAssembleRequest(ctx)
@@ -248,9 +252,9 @@ func action_NotifyDependentsOfAssembled(ctx context.Context, txn *CoordinatorTra
 	return txn.notifyDependentsOfAssembled(ctx)
 }
 
-func action_IncrementAssembleErrors(ctx context.Context, txn *CoordinatorTransaction, _ common.Event) error {
+func action_IncrementErrors(ctx context.Context, txn *CoordinatorTransaction, _ common.Event) error {
 	txn.resetEndorsementRequests(ctx)
-	return txn.incrementAssembleErrors()
+	return txn.incrementErrors()
 }
 
 func guard_AssembleStateTimeoutExceeded(ctx context.Context, txn *CoordinatorTransaction) bool {

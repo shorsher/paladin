@@ -148,7 +148,7 @@ func Test_ConfirmingDispatch_Timeout_TransitionsToPooled_AndClearsPendingRequest
 	require.NotNil(t, txn.pendingPreDispatchRequest)
 
 	mocks.Clock.Advance(builder.GetStateTimeout() + 1)
-	err := txn.HandleEvent(ctx, &RequestTimeoutIntervalEvent{
+	err := txn.HandleEvent(ctx, &StateTimeoutIntervalEvent{
 		BaseCoordinatorEvent: BaseCoordinatorEvent{
 			TransactionID: txn.pt.ID,
 		},

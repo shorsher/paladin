@@ -301,6 +301,18 @@ func (*RequestTimeoutIntervalEvent) TypeString() string {
 	return "Event_RequestTimeoutInterval"
 }
 
+type StateTimeoutIntervalEvent struct {
+	BaseCoordinatorEvent
+}
+
+func (*StateTimeoutIntervalEvent) Type() EventType {
+	return Event_StateTimeoutInterval
+}
+
+func (*StateTimeoutIntervalEvent) TypeString() string {
+	return "Event_StateTimeoutInterval"
+}
+
 // events emitted by the transaction state machine whenever a state transition occurs
 type StateTransitionEvent struct {
 	BaseCoordinatorEvent

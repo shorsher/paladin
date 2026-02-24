@@ -124,7 +124,6 @@ func (t *CoordinatorTransaction) sendEndorsementRequests(ctx context.Context) er
 		//we are starting a new round of endorsement requests so set an interval to remind us to resend any requests that have not been fulfilled on a periodic basis
 		//this is done by emitting events rather so that this behavior is obvious from the state machine definition
 		t.scheduleRequestTimeout(ctx)
-		t.scheduleStateTimeout(ctx)
 		t.pendingEndorsementRequests = make(map[string]map[string]*common.IdempotentRequest)
 	}
 
@@ -206,6 +205,11 @@ func action_EndorsedRejected(ctx context.Context, t *CoordinatorTransaction, eve
 
 func action_SendEndorsementRequests(ctx context.Context, txn *CoordinatorTransaction, _ common.Event) error {
 	return txn.sendEndorsementRequests(ctx)
+}
+
+func action_OnTransitionToEndorsementGathering(ctx context.Context, txn *CoordinatorTransaction, event common.Event) error {
+	txn.scheduleStateTimeout(ctx)
+	return action_SendEndorsementRequests(ctx, txn, event)
 }
 
 func action_NudgeEndorsementRequests(ctx context.Context, txn *CoordinatorTransaction, _ common.Event) error {

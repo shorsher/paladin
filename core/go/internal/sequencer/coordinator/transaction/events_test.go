@@ -686,6 +686,26 @@ func TestRequestTimeoutIntervalEvent_GetTransactionID(t *testing.T) {
 	assert.Equal(t, txID, event.GetTransactionID())
 }
 
+func TestStateTimeoutIntervalEvent_Type(t *testing.T) {
+	event := &StateTimeoutIntervalEvent{}
+	assert.Equal(t, Event_StateTimeoutInterval, event.Type())
+}
+
+func TestStateTimeoutIntervalEvent_TypeString(t *testing.T) {
+	event := &StateTimeoutIntervalEvent{}
+	assert.Equal(t, "Event_StateTimeoutInterval", event.TypeString())
+}
+
+func TestStateTimeoutIntervalEvent_GetTransactionID(t *testing.T) {
+	txID := uuid.New()
+	event := &StateTimeoutIntervalEvent{
+		BaseCoordinatorEvent: BaseCoordinatorEvent{
+			TransactionID: txID,
+		},
+	}
+	assert.Equal(t, txID, event.GetTransactionID())
+}
+
 func TestStateTransitionEvent_Type(t *testing.T) {
 	event := &StateTransitionEvent{}
 	assert.Equal(t, Event_StateTransition, event.Type())
@@ -817,6 +837,11 @@ func TestEvent_InterfaceCompliance(t *testing.T) {
 			},
 		},
 		&RequestTimeoutIntervalEvent{
+			BaseCoordinatorEvent: BaseCoordinatorEvent{
+				TransactionID: txID,
+			},
+		},
+		&StateTimeoutIntervalEvent{
 			BaseCoordinatorEvent: BaseCoordinatorEvent{
 				TransactionID: txID,
 			},
