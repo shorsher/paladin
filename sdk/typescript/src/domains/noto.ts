@@ -133,7 +133,7 @@ export interface NotoUnlockParams {
   lockId: string;
   from: PaladinVerifier;
   recipients: UnlockRecipient[];
-  unlockData: string;
+  unlockData?: string;
   data: string;
 }
 
