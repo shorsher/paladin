@@ -102,6 +102,12 @@ type LockParams struct {
 	Data   pldtypes.HexBytes    `json:"data"`
 }
 
+type PrepareUnlockParams struct {
+	UnlockParams
+	UnlockData pldtypes.HexBytes `json:"unlockData"`
+	Data       pldtypes.HexBytes `json:"data"`
+}
+
 type UnlockParams struct {
 	LockID     pldtypes.Bytes32   `json:"lockId"`
 	From       string             `json:"from"`
@@ -129,14 +135,16 @@ type CreateBurnLockParams struct {
 type PrepareMintUnlockParams struct {
 	LockID     pldtypes.Bytes32   `json:"lockId"`
 	Recipients []*UnlockRecipient `json:"recipients"`
+	UnlockData pldtypes.HexBytes  `json:"unlockData"`
 	Data       pldtypes.HexBytes  `json:"data"`
 }
 
 type PrepareBurnUnlockParams struct {
-	LockID pldtypes.Bytes32     `json:"lockId"`
-	From   string               `json:"from"`
-	Amount *pldtypes.HexUint256 `json:"amount"`
-	Data   pldtypes.HexBytes    `json:"data"`
+	LockID     pldtypes.Bytes32     `json:"lockId"`
+	From       string               `json:"from"`
+	Amount     *pldtypes.HexUint256 `json:"amount"`
+	UnlockData pldtypes.HexBytes    `json:"unlockData"`
+	Data       pldtypes.HexBytes    `json:"data"`
 }
 
 type DelegateLockParams struct {

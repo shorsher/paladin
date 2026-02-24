@@ -43,21 +43,21 @@ interface ILockableCapability {
         bytes content;
         // When delegation has been performed, this is a different address to the owner - mutable by current spender
         address spender;
-        // A hash of the prepared transaction that will be performed as the spending operation for this lock - mutable until delegation
+        // A hash of the prepared transaction that will be performed as the spending operation for this lock, or a zero hash to allow any operation - mutable until delegation
         bytes32 spendHash;
-        // A hash of the prepared transaction that will be performed as the cancel operation for this lock - mutable until delegation
+        // A hash of the prepared transaction that will be performed as the cancel operation for this lock, or a zero hash to allow any operation - mutable until delegation
         bytes32 cancelHash;
-        // Implementation-specific options that control how the lock may be utilized - mutable by current spender
+        // Implementation-specific options that control how the lock may be utilized - mutability can be determined by the implementation
         bytes options;
     }
 
     // Fields of the lock that can be set on create or update
     struct LockParams {
-        // A hash of the prepared transaction that will be performed as the spending operation for this lock - mutable until delegation
+        // A hash of the prepared transaction that will be performed as the spending operation for this lock, or a zero hash to allow any operation - mutable until delegation
         bytes32 spendHash;
-        // A hash of the prepared transaction that will be performed as the cancel operation for this lock - mutable until delegation
+        // A hash of the prepared transaction that will be performed as the cancel operation for this lock, or a zero hash to allow any operation - mutable until delegation
         bytes32 cancelHash;
-        // Implementation-specific options that control how the lock may be utilized - mutable until delegation
+        // Implementation-specific options that control how the lock may be utilized
         bytes options;        
     }
 

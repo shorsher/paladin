@@ -140,12 +140,18 @@ func (h *prepareBurnUnlockHandler) Assemble(ctx context.Context, tx *types.Parse
 		return nil, i18n.NewError(ctx, msgs.MsgInvalidAmount, "prepareBurnUnlock", params.Amount.Int().Text(10), lockedInputStates.total.Text(10))
 	}
 
-	// Build the data info for the parent transaction
-	infoDistribution := identityList{notaryID, senderID, fromID}
-	infoStates, err := h.noto.prepareDataInfo(params.Data, tx.DomainConfig.Variant, infoDistribution.identities())
+	// Build and encode the unlock data (separate to the data for this TX)
+	encodedUnlockData, infoStates, infoDistribution, err := h.buildUnlockData(ctx, notaryID, senderID, fromID, tx, nil, req.ResolvedVerifiers, req.StateQueryContext, params.UnlockData)
 	if err != nil {
 		return nil, err
 	}
+
+	// Build the data info for this prepare transaction
+	prepareDataInfo, err := h.noto.prepareDataInfo(params.Data, tx.DomainConfig.Variant, infoDistribution.identities())
+	if err != nil {
+		return nil, err
+	}
+	infoStates = append(infoStates, prepareDataInfo...)
 
 	// We build the cancel outputs
 	cancelOutputs, err := h.noto.prepareOutputs(fromID, (*pldtypes.HexUint256)(lockedInputStates.total), identityList{notaryID, fromID})
@@ -157,20 +163,14 @@ func (h *prepareBurnUnlockHandler) Assemble(ctx context.Context, tx *types.Parse
 	}
 	infoStates = append(infoStates, cancelOutputs.states...)
 
-	// Build the data info for the prepared transaction
-	txData, err := h.noto.encodeTransactionDataV1(ctx, []*prototk.EndorsableState{})
-	if err != nil {
-		return nil, err
-	}
-
 	// Build the prepared lock
 	newLockInfo := *existingLock.lockInfo
 	newLockInfo.Replaces = existingLock.id
 	newLockInfo.Salt = pldtypes.RandBytes32()
 	newLockInfo.SpendOutputs = []pldtypes.Bytes32{} // no outputs from burn
-	newLockInfo.SpendData = txData
+	newLockInfo.SpendData = encodedUnlockData
 	newLockInfo.CancelOutputs = newStateAllocatedIDs(cancelOutputs.states)
-	newLockInfo.CancelData = txData
+	newLockInfo.CancelData = encodedUnlockData
 	newLockInfo.SpendTxId = spendTxId
 	lock, err := h.noto.prepareLockInfo_V1(&newLockInfo, identityList{notaryID, senderID, fromID})
 	if err != nil {

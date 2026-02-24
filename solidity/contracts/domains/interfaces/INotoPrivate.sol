@@ -83,9 +83,19 @@ interface INotoPrivate {
         bytes calldata data
     ) external;
 
+    // this overload allows an optional unlockData parameter
+    function prepareUnlock(
+        bytes32 lockId,
+        string calldata from,
+        UnlockRecipient[] calldata recipients,
+        bytes calldata unlockData,
+        bytes calldata data
+    ) external;
+
     function prepareMintUnlock(
         bytes32 lockId,
         uint256 amount,
+        bytes calldata unlockData,
         bytes calldata data
     ) external;
 
@@ -93,6 +103,7 @@ interface INotoPrivate {
         bytes32 lockId,
         string calldata from,
         uint256 amount,
+        bytes calldata unlockData,
         bytes calldata data
     ) external;
 

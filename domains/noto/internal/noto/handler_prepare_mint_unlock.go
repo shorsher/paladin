@@ -121,12 +121,18 @@ func (h *prepareMintUnlockHandler) Assemble(ctx context.Context, tx *types.Parse
 		return nil, err
 	}
 
-	// Build the data info for the parent transaction
-	infoDistribution := identityList{notaryID, senderID}
-	infoStates, err := h.noto.prepareDataInfo(params.Data, tx.DomainConfig.Variant, infoDistribution.identities())
+	// Build and encode the unlock data (separate to the data for this TX)
+	encodedUnlockData, infoStates, infoDistribution, err := h.buildUnlockData(ctx, notaryID, senderID, nil, tx, params.Recipients, req.ResolvedVerifiers, req.StateQueryContext, params.UnlockData)
 	if err != nil {
 		return nil, err
 	}
+
+	// Build the data info for this prepare transaction
+	prepareDataInfo, err := h.noto.prepareDataInfo(params.Data, tx.DomainConfig.Variant, infoDistribution.identities())
+	if err != nil {
+		return nil, err
+	}
+	infoStates = append(infoStates, prepareDataInfo...)
 
 	// Prepare the outputs to mint
 	outputs := &preparedOutputs{}
@@ -145,12 +151,6 @@ func (h *prepareMintUnlockHandler) Assemble(ctx context.Context, tx *types.Parse
 	}
 	infoStates = append(infoStates, outputs.states...)
 
-	// Build the data info for the prepared transaction
-	txData, err := h.noto.encodeTransactionDataV1(ctx, []*prototk.EndorsableState{})
-	if err != nil {
-		return nil, err
-	}
-
 	err = h.noto.allocateStateIDs(ctx, req.StateQueryContext, outputs.states)
 	if err != nil {
 		return nil, err
@@ -161,9 +161,9 @@ func (h *prepareMintUnlockHandler) Assemble(ctx context.Context, tx *types.Parse
 	newLockInfo.Replaces = existingLock.id
 	newLockInfo.Salt = pldtypes.RandBytes32()
 	newLockInfo.SpendOutputs = newStateAllocatedIDs(outputs.states)
-	newLockInfo.SpendData = txData
+	newLockInfo.SpendData = encodedUnlockData
 	newLockInfo.CancelOutputs = []pldtypes.Bytes32{} // no cancel outputs
-	newLockInfo.CancelData = txData
+	newLockInfo.CancelData = encodedUnlockData
 	newLockInfo.SpendTxId = spendTxId
 	lock, err := h.noto.prepareLockInfo_V1(&newLockInfo, identityList{notaryID, senderID})
 	if err != nil {

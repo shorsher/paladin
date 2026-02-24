@@ -41,11 +41,13 @@ type unlockHandler struct {
 }
 
 type unlockStates struct {
-	oldLock         *loadedLockInfo // V1 only
-	lockedInputs    *preparedLockedInputs
-	v0LockedOutputs *preparedLockedOutputs // V0 only
-	outputs         *preparedOutputs
-	info            []*prototk.NewState
+	oldLock           *loadedLockInfo // V1 only
+	lockedInputs      *preparedLockedInputs
+	v0LockedOutputs   *preparedLockedOutputs // V0 only
+	outputs           *preparedOutputs
+	info              []*prototk.NewState // includes the actual unlock data
+	infoDistribution  identityList
+	encodedUnlockData []byte // the on-chain reference to the unlockData pre-encoded
 }
 
 func (h *unlockCommon) validateParams(ctx context.Context, unlockParams *types.UnlockParams) error {
@@ -98,7 +100,30 @@ func (h *unlockCommon) init(ctx context.Context, tx *types.ParsedTransaction, pa
 	}, nil
 }
 
-func (h *unlockCommon) assembleStates(ctx context.Context, tx *types.ParsedTransaction, spendTxId *pldtypes.Bytes32, params *types.UnlockParams, req *prototk.AssembleTransactionRequest) (*prototk.AssembleTransactionResponse, *manifestBuilder, *unlockStates, error) {
+func (h *unlockCommon) buildUnlockData(ctx context.Context, notaryID, senderID, fromID *identityPair, tx *types.ParsedTransaction, recipients []*types.UnlockRecipient, resolvedVerifiers []*prototk.ResolvedVerifier, stateQueryContext string, unlockData []byte) (encodedUnlockData []byte, infoStates []*prototk.NewState, infoDistribution identityList, err error) {
+	infoDistribution, err = h.getAllRecipientsDistribution(ctx, tx, notaryID, senderID, fromID, recipients, resolvedVerifiers)
+	if err == nil {
+		infoStates, err = h.noto.prepareDataInfo(unlockData, tx.DomainConfig.Variant, infoDistribution.identities())
+	}
+	if err == nil {
+		// We need to know the IDs of the states at this point
+		err = h.noto.allocateStateIDs(ctx, stateQueryContext, infoStates)
+	}
+	if err == nil {
+		endorsableInfoStates := make([]*prototk.EndorsableState, len(infoStates))
+		for i, s := range infoStates {
+			endorsableInfoStates[i] = &prototk.EndorsableState{
+				Id:            *s.Id,
+				SchemaId:      s.SchemaId,
+				StateDataJson: s.StateDataJson,
+			}
+		}
+		encodedUnlockData, err = h.noto.encodeTransactionData(ctx, tx.DomainConfig, tx.Transaction, endorsableInfoStates)
+	}
+	return
+}
+
+func (h *unlockCommon) assembleStates(ctx context.Context, tx *types.ParsedTransaction, spendTxId *pldtypes.Bytes32, params *types.UnlockParams, req *prototk.AssembleTransactionRequest, unlockData []byte) (*prototk.AssembleTransactionResponse, *manifestBuilder, *unlockStates, error) {
 	notary := tx.DomainConfig.NotaryLookup
 
 	notaryID, err := h.noto.findEthAddressVerifier(ctx, "notary", notary, req.ResolvedVerifiers)
@@ -153,11 +178,13 @@ func (h *unlockCommon) assembleStates(ctx context.Context, tx *types.ParsedTrans
 		return nil, nil, nil, err
 	}
 
-	infoDistribution := identityList{notaryID, senderID, fromID}
-	infoStates, err := h.noto.prepareDataInfo(params.Data, tx.DomainConfig.Variant, infoDistribution.identities())
+	// Prepare the data for the unlock - noting that when directly unlocking, this is the data from the unlock().
+	// However, when performing prepareUnlock()/prepareMintUnlock()/prepareBurnUnlock() this is the separate unlockData parameter.
+	encodedUnlockData, infoStates, infoDistribution, err := h.buildUnlockData(ctx, notaryID, senderID, fromID, tx, params.Recipients, req.ResolvedVerifiers, req.StateQueryContext, unlockData)
 	if err != nil {
 		return nil, nil, nil, err
 	}
+
 	if tx.DomainConfig.IsV0() {
 		// In V0 unlock repeats the lock state in the info
 		var lock *preparedLockInfo
@@ -179,11 +206,13 @@ func (h *unlockCommon) assembleStates(ctx context.Context, tx *types.ParsedTrans
 		},
 		mb,
 		&unlockStates{
-			oldLock:         existingLock,
-			lockedInputs:    lockedInputStates,
-			v0LockedOutputs: v0LockedOutputs,
-			outputs:         unlockedOutputs,
-			info:            infoStates,
+			oldLock:           existingLock,
+			lockedInputs:      lockedInputStates,
+			v0LockedOutputs:   v0LockedOutputs,
+			outputs:           unlockedOutputs,
+			info:              infoStates,
+			infoDistribution:  infoDistribution,
+			encodedUnlockData: encodedUnlockData,
 		},
 		nil
 }
@@ -227,6 +256,22 @@ func (h *unlockCommon) assembleUnlockOutputs_V0(ctx context.Context, tx *types.P
 	}
 
 	return unlockedOutputs, lockedOutputs, nil
+}
+
+func (h *unlockCommon) getAllRecipientsDistribution(ctx context.Context, tx *types.ParsedTransaction, notaryID, senderID, fromID *identityPair, recipients []*types.UnlockRecipient, resolvedVerifiers []*prototk.ResolvedVerifier) (identityList, error) {
+	distribution := make(identityList, 0, len(recipients)+2)
+	distribution = append(distribution, notaryID, senderID)
+	if fromID != nil {
+		distribution = append(distribution, fromID)
+	}
+	for _, entry := range recipients {
+		toID, err := h.noto.findEthAddressVerifier(ctx, "to", entry.To, resolvedVerifiers)
+		if err != nil {
+			return nil, err
+		}
+		distribution = append(distribution, toID)
+	}
+	return distribution, nil
 }
 
 func (h *unlockCommon) assembleUnlockOutputs_V1(ctx context.Context, tx *types.ParsedTransaction, notaryID, fromID *identityPair, recipients []*types.UnlockRecipient, resolvedVerifiers []*prototk.ResolvedVerifier, remainder *big.Int) (*preparedOutputs, error) {
@@ -331,7 +376,7 @@ func (h *unlockHandler) Assemble(ctx context.Context, tx *types.ParsedTransactio
 	params := tx.Params.(*types.UnlockParams)
 	notary := tx.DomainConfig.NotaryLookup
 
-	res, mb, states, err := h.assembleStates(ctx, tx, nil, params, req)
+	res, mb, states, err := h.assembleStates(ctx, tx, nil, params, req, params.Data /* we're directly unlocking, so the unlock data is just the "data" param */)
 	if err != nil || res.AssemblyResult != prototk.AssembleTransactionResponse_OK {
 		return res, err
 	}

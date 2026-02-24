@@ -471,7 +471,13 @@ contract Noto is EIP712Upgradeable, UUPSUpgradeable, INoto, INotoErrors {
             lock.cancelHash = params.cancelHash;
         }
     
+        // In Noto the options are only updatable until delegation, as the only option
+        // currently defined is the spendTxId that must be fixed after delegation.
+        // This could be made more flexible in the future as additional options are introduced.
         if (params.options.length > 0) {
+            if (lock.owner != lock.spender) {
+                revert NotoAlreadyDelegated(lockId, lock.owner, lock.spender);
+            }
             _setLockOptions(lockId, lock, params.options);
         }
 
