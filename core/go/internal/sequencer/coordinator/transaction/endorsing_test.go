@@ -124,6 +124,7 @@ func Test_sendEndorsementRequests_WhenPendingNil_SchedulesTimerAndQueueEventOnFi
 		realClock.Duration(1),
 		realClock.Duration(5000),
 		5,
+		0,
 		"",
 		prototk.ContractConfig_SUBMITTER_COORDINATOR,
 		grapher,

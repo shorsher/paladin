@@ -1006,6 +1006,7 @@ func Test_sendAssembleRequest_RequestTimeoutCallback(t *testing.T) {
 		realClock.Duration(1), // Very short timeout for testing
 		realClock.Duration(5000),
 		5,
+		0,
 		"",
 		prototk.ContractConfig_SUBMITTER_COORDINATOR,
 		grapher,
@@ -1064,6 +1065,7 @@ func Test_sendAssembleRequest_RequestTimeoutCallback_Error(t *testing.T) {
 		realClock.Duration(1), // Very short timeout for testing
 		realClock.Duration(5000),
 		5,
+		0,
 		"",
 		prototk.ContractConfig_SUBMITTER_COORDINATOR,
 		grapher,
@@ -1117,6 +1119,7 @@ func Test_onTransitionToAssembling_AssembleTimeoutCallback(t *testing.T) {
 		realClock.Duration(1000),
 		realClock.Duration(1), // Very short timeout for testing
 		5,
+		0,
 		"",
 		prototk.ContractConfig_SUBMITTER_COORDINATOR,
 		grapher,
@@ -1175,6 +1178,7 @@ func Test_onTransitionToAssembling_AssembleTimeoutCallback_Error(t *testing.T) {
 		realClock.Duration(1000),
 		realClock.Duration(1), // Very short timeout for testing
 		5,
+		0,
 		"",
 		prototk.ContractConfig_SUBMITTER_COORDINATOR,
 		grapher,

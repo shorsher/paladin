@@ -65,10 +65,12 @@ type CoordinatorTransaction struct {
 	dependencies                       *pldapi.TransactionDependencies
 
 	//Configuration
-	requestTimeout        common.Duration
-	stateTimeout          common.Duration
-	errorCount            int
-	finalizingGracePeriod int // number of heartbeat intervals that the transaction will remain in one of the terminal states ( Reverted or Confirmed) before it is removed from memory and no longer reported in heartbeats
+	requestTimeout                    common.Duration
+	stateTimeout                      common.Duration
+	errorCount                        int
+	finalizingGracePeriod             int // number of heartbeat intervals that the transaction will remain in one of the terminal states ( Reverted or Confirmed) before it is removed from memory and no longer reported in heartbeats
+	confirmedLockRetentionGracePeriod int // number of heartbeat intervals after confirmation before we clear in-memory state locks
+	confirmedLocksReleased            bool
 
 	// Dependencies
 	clock                    common.Clock
@@ -93,6 +95,7 @@ func NewTransaction(
 	requestTimeout,
 	stateTimeout common.Duration,
 	finalizingGracePeriod int,
+	confirmedLockRetentionGracePeriod int,
 	domainSigningIdentity string,
 	submitterSelection prototk.ContractConfig_SubmitterSelection,
 	grapher Grapher,
@@ -108,23 +111,24 @@ func NewTransaction(
 	// fixed signing identity.
 	dynamicSigningIdentity := domainSigningIdentity == ""
 	txn := &CoordinatorTransaction{
-		originator:                 originator,
-		originatorNode:             originatorNode,
-		pt:                         pt,
-		transportWriter:            transportWriter,
-		clock:                      clock,
-		queueEventForCoordinator:   queueEventForCoordinator,
-		engineIntegration:          engineIntegration,
-		syncPoints:                 syncPoints,
-		domainSigningIdentity:      domainSigningIdentity,
-		dynamicSigningIdentity:     dynamicSigningIdentity,
-		requestTimeout:             requestTimeout,
-		stateTimeout:               stateTimeout,
-		finalizingGracePeriod:      finalizingGracePeriod,
-		dependencies:               &pldapi.TransactionDependencies{},
-		grapher:                    grapher,
-		metrics:                    metrics,
-		chainedTxAlreadyDispatched: hasChainedTransaction,
+		originator:                        originator,
+		originatorNode:                    originatorNode,
+		pt:                                pt,
+		transportWriter:                   transportWriter,
+		clock:                             clock,
+		queueEventForCoordinator:          queueEventForCoordinator,
+		engineIntegration:                 engineIntegration,
+		syncPoints:                        syncPoints,
+		domainSigningIdentity:             domainSigningIdentity,
+		dynamicSigningIdentity:            dynamicSigningIdentity,
+		requestTimeout:                    requestTimeout,
+		stateTimeout:                      stateTimeout,
+		finalizingGracePeriod:             finalizingGracePeriod,
+		confirmedLockRetentionGracePeriod: confirmedLockRetentionGracePeriod,
+		dependencies:                      &pldapi.TransactionDependencies{},
+		grapher:                           grapher,
+		metrics:                           metrics,
+		chainedTxAlreadyDispatched:        hasChainedTransaction,
 	}
 	txn.initializeStateMachine(State_Initial)
 	grapher.Add(context.Background(), txn)

@@ -30,6 +30,7 @@ type SequencerConfig struct {
 	OriginatorEventQueueSize          *int              `json:"originatorEventQueueSize"`
 	OriginatorPriorityEventQueueSize  *int              `json:"originatorPriorityEventQueueSize"`
 	ClosingGracePeriod                *int              `json:"closingGracePeriod"`
+	ConfirmedLockRetentionGracePeriod *int              `json:"confirmedLockRetentionGracePeriod"`
 	DelegateTimeout                   *string           `json:"delegateTimeout"`
 	HeartbeatInterval                 *string           `json:"heartbeatInterval"`
 	HeartbeatThreshold                *int              `json:"heartbeatThreshold"`
@@ -51,6 +52,7 @@ type SequencerMinimumConfig struct {
 	OriginatorEventQueueSize          int
 	OriginatorPriorityEventQueueSize  int
 	ClosingGracePeriod                int
+	ConfirmedLockRetentionGracePeriod int
 	DelegateTimeout                   time.Duration
 	HeartbeatInterval                 time.Duration
 	MaxInflightTransactions           int
@@ -75,6 +77,7 @@ var SequencerDefaults = SequencerConfig{
 	OriginatorEventQueueSize:          confutil.P(50),
 	OriginatorPriorityEventQueueSize:  confutil.P(500),
 	ClosingGracePeriod:                confutil.P(4),
+	ConfirmedLockRetentionGracePeriod: confutil.P(1),
 	DelegateTimeout:                   confutil.P("5s"),
 	HeartbeatInterval:                 confutil.P("10s"),
 	MaxInflightTransactions:           confutil.P(500),
@@ -94,6 +97,7 @@ var SequencerMinimum = SequencerMinimumConfig{
 	OriginatorEventQueueSize:          1,
 	OriginatorPriorityEventQueueSize:  1,
 	ClosingGracePeriod:                1,
+	ConfirmedLockRetentionGracePeriod: 0,
 	DelegateTimeout:                   100 * time.Millisecond,
 	HeartbeatInterval:                 1 * time.Second,
 	MaxInflightTransactions:           1,

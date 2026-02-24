@@ -225,6 +225,7 @@ func Test_sendPreDispatchRequest_RequestTimeoutSchedulesTimer_QueueEventCalled(t
 		realClock.Duration(1), // Very short request timeout so timer fires quickly
 		realClock.Duration(5000),
 		5,
+		0,
 		"",
 		prototk.ContractConfig_SUBMITTER_COORDINATOR,
 		grapher,
