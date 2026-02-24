@@ -68,6 +68,7 @@ message PrepareDeployResponse {
 message InitContractRequest {
   string contract_address = 1; // The address of the smart contract on-chain
   bytes contract_config = 2; // Binary config emitted by the constructor event of the contract that is persisted by Paladin and provided back each time the smart contract is loaded into memory
+  optional PrivacyGroup privacy_group = 3; // Optional privacy group context for domains that derive runtime config from group membership
 }
 
 message InitContractResponse {    
@@ -82,7 +83,6 @@ message InitTransactionRequest {
 
 message InitTransactionResponse {
   repeated ResolveVerifierRequest required_verifiers = 1; // the list of verifiers that need to be resolved in order to prepare the transaction (such as issuers/notaries that have privledge in the smart contract)
-  repeated string endorsement_set = 2; // required when COORDINATOR_ENDORSER is was returned in the ContractConfig
 }
 
 // **ASSEMBLE** step happens after plan, once any verifiers specified as needing pre-emptive resolution by the owning Paladin nodes have been resolved successfully. At this step the state store should be queried to determine if sufficient states exist to execute
@@ -280,6 +280,7 @@ message ContractConfig {
   }
   CoordinatorSelection coordinator_selection = 20;
   optional string static_coordinator = 21; // only applicable with coordinator_mode=STATIC
+  repeated string coordinator_endorser_candidates = 22; // fully qualified identity locators eligible as coordinators in COORDINATOR_ENDORSER mode
   
   enum SubmitterSelection {
       SUBMITTER_COORDINATOR = 0; // The coordinator submits the transaction

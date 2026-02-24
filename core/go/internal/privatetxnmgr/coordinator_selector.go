@@ -80,26 +80,28 @@ func NewCoordinatorSelector(ctx context.Context, nodeName string, contractConfig
 	if contractConfig.GetCoordinatorSelection() == prototk.ContractConfig_COORDINATOR_ENDORSER {
 		if EndorsementCoordinatorSelectionMode == BlockHeightRoundRobin {
 			return &roundRobinCoordinatorSelectorPolicy{
-				localNode: nodeName,
-				rangeSize: confutil.Int(sequencerConfig.RoundRobinCoordinatorBlockRangeSize, *pldconf.PrivateTxManagerDefaults.Sequencer.RoundRobinCoordinatorBlockRangeSize),
+				localNode:          nodeName,
+				rangeSize:          confutil.Int(sequencerConfig.RoundRobinCoordinatorBlockRangeSize, *pldconf.PrivateTxManagerDefaults.Sequencer.RoundRobinCoordinatorBlockRangeSize),
+				endorserCandidates: contractConfig.GetCoordinatorEndorserCandidates(),
 			}, nil
 		}
 		// TODO: More work is required to perform leader election of an endorser, so right now a simple hash algorithm is used.
 		return &endorsementSetHashSelection{
-			localNode: nodeName,
+			localNode:          nodeName,
+			endorserCandidates: contractConfig.GetCoordinatorEndorserCandidates(),
 		}, nil
 	}
 	return nil, i18n.NewError(ctx, msgs.MsgDomainInvalidCoordinatorSelection, contractConfig.GetCoordinatorSelection())
 }
 
-func getEndorsementSet(ctx context.Context, localNode string, transaction *components.PrivateTransaction) (identities, uniqueNodes []string, err error) {
+func getEndorsementSet(ctx context.Context, localNode string, endorserCandidates []string, transaction *components.PrivateTransaction) (identities, uniqueNodes []string, err error) {
 	var candidateParties []string
-	if len(transaction.PreAssembly.EndorsementSet) > 0 {
-		// During InitTransaction() the domain should return an endorsement set, as otherwise we wouldn't know
+	if len(endorserCandidates) > 0 {
+		// During InitContract() the domain should return the set of endorsers, as otherwise we wouldn't know
 		// the right coordinator to use without speculative assembly of the transaction
-		candidateParties = append(candidateParties, transaction.PreAssembly.EndorsementSet...)
+		candidateParties = append(candidateParties, endorserCandidates...)
 	} else if transaction.PostAssembly != nil {
-		// This code path is left in from before we added the endorsement_set to the InitTransaction() return.
+		// This code path is left in from before we added the endorsers to the InitContract() return.
 		// The V1 stream will clean this up as we fully implement and test the move away from hash-based election,
 		// to fully dynamic election of the coordinator.
 		// For now this code path in V0 is left as a safety net.
@@ -135,8 +137,9 @@ type staticCoordinatorSelectorPolicy struct {
 }
 
 type endorsementSetHashSelection struct {
-	localNode  string
-	chosenNode string
+	localNode          string
+	chosenNode         string
+	endorserCandidates []string
 }
 
 func (s *staticCoordinatorSelectorPolicy) SelectCoordinatorNode(ctx context.Context, transaction *components.PrivateTransaction, environment ptmgrtypes.SequencerEnvironment) (int64, string, error) {
@@ -147,7 +150,7 @@ func (s *staticCoordinatorSelectorPolicy) SelectCoordinatorNode(ctx context.Cont
 func (s *endorsementSetHashSelection) SelectCoordinatorNode(ctx context.Context, transaction *components.PrivateTransaction, environment ptmgrtypes.SequencerEnvironment) (int64, string, error) {
 	blockHeight := environment.GetBlockHeight()
 	if s.chosenNode == "" {
-		identities, uniqueNodes, err := getEndorsementSet(ctx, s.localNode, transaction)
+		identities, uniqueNodes, err := getEndorsementSet(ctx, s.localNode, s.endorserCandidates, transaction)
 		if err != nil {
 			return -1, "", err
 		}
@@ -170,13 +173,14 @@ func (s *endorsementSetHashSelection) SelectCoordinatorNode(ctx context.Context,
 }
 
 type roundRobinCoordinatorSelectorPolicy struct {
-	localNode string
-	rangeSize int
+	localNode          string
+	rangeSize          int
+	endorserCandidates []string
 }
 
 func (s *roundRobinCoordinatorSelectorPolicy) SelectCoordinatorNode(ctx context.Context, transaction *components.PrivateTransaction, environment ptmgrtypes.SequencerEnvironment) (int64, string, error) {
 	blockHeight := environment.GetBlockHeight()
-	_, uniqueNodes, err := getEndorsementSet(ctx, s.localNode, transaction)
+	_, uniqueNodes, err := getEndorsementSet(ctx, s.localNode, s.endorserCandidates, transaction)
 	if err != nil {
 		return -1, "", err
 	}
