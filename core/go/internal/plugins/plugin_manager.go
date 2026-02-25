@@ -17,6 +17,7 @@ package plugins
 import (
 	"context"
 	"fmt"
+	iofs "io/fs"
 	"net"
 	"os"
 	"strings"
@@ -49,6 +50,7 @@ type pluginManager struct {
 	mux      sync.Mutex
 	listener net.Listener
 	server   *grpc.Server
+	fs       pluginManagerFileSystem
 
 	loaderID        uuid.UUID
 	grpcTarget      string
@@ -78,6 +80,22 @@ type pluginManager struct {
 	serverDone           chan error
 }
 
+// Wrapper around os.Lstat and os.Remove to allow for testing error cases
+type pluginManagerFileSystem interface {
+	Lstat(name string) (iofs.FileInfo, error)
+	Remove(name string) error
+}
+
+type osPluginManagerFileSystem struct{}
+
+func (osPluginManagerFileSystem) Lstat(name string) (iofs.FileInfo, error) {
+	return os.Lstat(name)
+}
+
+func (osPluginManagerFileSystem) Remove(name string) error {
+	return os.Remove(name)
+}
+
 func NewPluginManager(bgCtx context.Context,
 	grpcTarget string, // default is a UDS path, can use tcp:127.0.0.1:12345 strings too (or tcp4:/tcp6:)
 	loaderID uuid.UUID,
@@ -85,6 +103,7 @@ func NewPluginManager(bgCtx context.Context,
 
 	pc := &pluginManager{
 		bgCtx: log.WithComponent(bgCtx, log.Component("pluginmanager")),
+		fs:    osPluginManagerFileSystem{},
 
 		grpcTarget:      grpcTarget,
 		loaderID:        loaderID,
@@ -163,9 +182,10 @@ func (pm *pluginManager) PostInit(c components.AllComponents) error {
 func (pm *pluginManager) Start() (err error) {
 	ctx := pm.bgCtx
 	log.L(ctx).Infof("server starting on %s:%s", pm.network, pm.address)
-	if stat, statErr := os.Lstat(pm.address); statErr == nil {
+
+	if stat, statErr := pm.fs.Lstat(pm.address); statErr == nil {
 		if !stat.IsDir() {
-			if err := os.Remove(pm.address); err != nil && !os.IsNotExist(err) {
+			if err := pm.fs.Remove(pm.address); err != nil && !os.IsNotExist(err) {
 				log.L(ctx).Error("failed to remove stale listener path: ", err)
 				return err
 			}
