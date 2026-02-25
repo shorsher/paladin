@@ -106,7 +106,7 @@ func (sMgr *sequencerManager) LoadSequencer(ctx context.Context, dbTX persistenc
 			// Locally we store mappings of contract address to originator/coordinator pair
 
 			// Do we have space for another sequencer?
-			if sMgr.targetActiveSequencersLimit > 0 && len(sMgr.sequencers) > sMgr.targetActiveSequencersLimit {
+			if sMgr.targetActiveSequencersLimit > 0 && len(sMgr.sequencers) >= sMgr.targetActiveSequencersLimit {
 				log.L(ctx).Debugf("max concurrent sequencers reached, stopping lowest priority sequencer")
 				sMgr.stopLowestPrioritySequencer(ctx)
 			}
@@ -428,13 +428,6 @@ func (sMgr *sequencerManager) dispatch(ctx context.Context, t *coordTransaction.
 
 // Must be called within the sequencer's write lock
 func (sMgr *sequencerManager) stopLowestPrioritySequencer(ctx context.Context) {
-	readlock := true
-	sMgr.sequencersLock.RLock()
-	defer func() {
-		if readlock {
-			sMgr.sequencersLock.RUnlock()
-		}
-	}()
 	log.L(log.WithLogField(ctx, common.SEQUENCER_LOG_CATEGORY_FIELD, common.CATEGORY_LIFECYCLE)).Debugf("max concurrent sequencers reached, finding lowest priority sequencer to stop")
 	if len(sMgr.sequencers) != 0 {
 		// If any sequencers are already closing we can wait for them to close instead of stopping a different one
@@ -450,14 +443,8 @@ func (sMgr *sequencerManager) stopLowestPrioritySequencer(ctx context.Context) {
 				return
 			} else if sequencer.coordinator.GetCurrentState() == coordinator.State_Idle ||
 				sequencer.coordinator.GetCurrentState() == coordinator.State_Observing {
-				// This sequencer is already idle or observing so we can page it out immediately
-
-				// swap the read lock for a write lock
-				sMgr.sequencersLock.RUnlock()
-				readlock = false
-				sMgr.sequencersLock.Lock()
-				defer sMgr.sequencersLock.Unlock()
-
+				// This sequencer is already idle or observing so we can page it out immediately.
+				// Caller holds the sequencers write lock.
 				log.L(log.WithLogField(ctx, common.SEQUENCER_LOG_CATEGORY_FIELD, common.CATEGORY_LIFECYCLE)).Debugf("stopping coordinator %s", sequencer.contractAddress)
 				sequencer.coordinator.Stop()
 				sequencer.originator.Stop()
@@ -474,12 +461,6 @@ func (sMgr *sequencerManager) stopLowestPrioritySequencer(ctx context.Context) {
 		sort.Slice(sequencers, func(i, j int) bool {
 			return sequencers[i].lastTXTime.Before(sequencers[j].lastTXTime)
 		})
-
-		// swap the read lock for a write lock
-		sMgr.sequencersLock.RUnlock()
-		readlock = false
-		sMgr.sequencersLock.Lock()
-		defer sMgr.sequencersLock.Unlock()
 
 		// Stop the lowest priority sequencer by emitting an event and waiting for it to move to closed
 		log.L(log.WithLogField(ctx, common.SEQUENCER_LOG_CATEGORY_FIELD, common.CATEGORY_LIFECYCLE)).Debugf("stopping coordinator %s", sequencers[0].contractAddress)

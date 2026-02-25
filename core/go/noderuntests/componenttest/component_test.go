@@ -27,6 +27,7 @@ import (
 	"time"
 
 	"github.com/LFDT-Paladin/paladin/config/pkg/confutil"
+	"github.com/LFDT-Paladin/paladin/config/pkg/pldconf"
 	testutils "github.com/LFDT-Paladin/paladin/core/noderuntests/pkg"
 	"github.com/LFDT-Paladin/paladin/core/noderuntests/pkg/domains"
 	"github.com/google/uuid"
@@ -64,6 +65,14 @@ func newInstanceForComponentTestingWithDomainRegistry(t *testing.T) testutils.Co
 
 func startNode(t *testing.T, party testutils.Party, domainConfig interface{}) {
 	party.Start(t, domainConfig, CONFIG_PATHS[party.GetNodeName()], false)
+}
+
+func newSingleNodePartyForComponentTestingWithSequencerConfig(t *testing.T, nodeName string, sequencerConfig *pldconf.SequencerConfig) testutils.Party {
+	domainRegistryAddress := deployDomainRegistry(t, nodeName)
+	party := testutils.NewPartyForTestingWithNodeName(t, nodeName, nodeName, domainRegistryAddress)
+	party.OverrideSequencerConfig(sequencerConfig)
+	startNode(t, party, nil)
+	return party
 }
 
 func TestRunSimpleStorageEthTransaction(t *testing.T) {
@@ -500,6 +509,57 @@ func TestPrivateTransactionsDeployAndExecute(t *testing.T) {
 
 	require.NotNil(t, txFull.Receipt)
 	assert.True(t, txFull.Receipt.Success)
+}
+
+func TestPrivateTransactionsSequencerLimitSequentialContracts(t *testing.T) {
+	ctx := t.Context()
+
+	sequencerConfig := pldconf.SequencerDefaults
+	sequencerConfig.TargetActiveSequencers = confutil.P(10)
+
+	alice := newSingleNodePartyForComponentTestingWithSequencerConfig(t, "node1", &sequencerConfig)
+	client := alice.GetClient()
+
+	sendDeploy := func(flowNum int) pldclient.SentTransaction {
+		deploy := client.ForABI(ctx, *domains.SimpleTokenConstructorABI(domains.SelfEndorsement)).
+			Private().
+			Domain("domain1").
+			IdempotencyKey(fmt.Sprintf("deploy-seq-limit-%d", flowNum)).
+			From(alice.GetIdentity()).
+			Inputs(pldtypes.RawJSON(fmt.Sprintf(`{
+                    "from": "wallets.org1.node1",
+                    "name": "SequencerLimitToken%d",
+                    "symbol": "SLT%d",
+					"endorsementMode": "%s",
+					"hookAddress": "",
+					"amountVisible": false
+                }`, flowNum, flowNum, domains.SelfEndorsement))).
+			Send()
+		require.NoError(t, deploy.Error(), "deploy flow %d should submit", flowNum)
+		return deploy
+	}
+
+	waitForDeploy := func(flowNum int, tx pldclient.SentTransaction) pldclient.TransactionResult {
+		result := tx.Wait(transactionLatencyThreshold(t))
+		require.NoError(t, result.Error(), "deploy number %d should complete", flowNum)
+		require.NotNil(t, result.Receipt(), "deploy number %d should produce a receipt", flowNum)
+		return result
+	}
+
+	// Kick off 10 deploys first, then wait for all receipts.
+	deployTxs := make([]pldclient.SentTransaction, 0, 10)
+	for i := 1; i <= 10; i++ {
+		deployTxs = append(deployTxs, sendDeploy(i))
+	}
+
+	for i := 1; i <= 10; i++ {
+		waitForDeploy(i, deployTxs[i-1])
+	}
+
+	// Deploy 11 will cause a sequencer to be stopped and replaced by the new one
+	deploy11 := sendDeploy(11).Wait(transactionLatencyThreshold(t))
+	require.NoError(t, deploy11.Error(), "deploy number 11 should complete; failure indicates sequencer limit regression")
+	require.NotNil(t, deploy11.Receipt(), "deploy number 11 should produce a receipt")
 }
 
 func TestPrivateTransactionsMintThenTransfer(t *testing.T) {
