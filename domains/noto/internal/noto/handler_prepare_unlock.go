@@ -192,13 +192,13 @@ func (h *prepareUnlockHandler) Endorse(ctx context.Context, tx *types.ParsedTran
 	params := tx.Params.(*types.PrepareUnlockParams)
 	lockedInputs := req.Reads
 
-	fromID, err := h.noto.findEthAddressVerifier(ctx, "from", params.From, req.ResolvedVerifiers)
+	senderID, err := h.noto.findEthAddressVerifier(ctx, "sender", tx.Transaction.From, req.ResolvedVerifiers)
 	if err != nil {
 		return nil, err
 	}
 
 	// We should have a valid lock transition, from which we can obtain the spend and cancel outputs
-	_, spendOutputs, cancelOutputs, err := h.noto.decodeV1LockTransitionWithOutputs(ctx, LOCK_UPDATE, fromID, &params.LockID, req.Inputs, req.Outputs, req.Info)
+	_, spendOutputs, cancelOutputs, err := h.noto.decodeV1LockTransitionWithOutputs(ctx, LOCK_UPDATE, senderID, &params.LockID, req.Inputs, req.Outputs, req.Info)
 	if err != nil {
 		return nil, err
 	}
@@ -227,13 +227,13 @@ func (h *prepareUnlockHandler) baseLedgerInvoke(ctx context.Context, tx *types.P
 	var lockTransition *lockTransition           // v1 only
 	var cancelOutputs []*prototk.EndorsableState // v1 only
 	if !tx.DomainConfig.IsV0() {
-		fromID, err := h.noto.findEthAddressVerifier(ctx, "from", inParams.From, req.ResolvedVerifiers)
+		senderID, err := h.noto.findEthAddressVerifier(ctx, "sender", tx.Transaction.From, req.ResolvedVerifiers)
 		if err != nil {
 			return nil, err
 		}
 
 		// We should have a valid lock transition, from which we can obtain the spend and cancel outputs
-		lockTransition, spendOutputs, cancelOutputs, err = h.noto.decodeV1LockTransitionWithOutputs(ctx, LOCK_UPDATE, fromID, &inParams.LockID, req.InputStates, req.OutputStates, req.InfoStates)
+		lockTransition, spendOutputs, cancelOutputs, err = h.noto.decodeV1LockTransitionWithOutputs(ctx, LOCK_UPDATE, senderID, &inParams.LockID, req.InputStates, req.OutputStates, req.InfoStates)
 		if err != nil {
 			return nil, err
 		}

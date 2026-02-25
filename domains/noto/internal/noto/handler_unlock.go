@@ -441,13 +441,13 @@ func (h *unlockHandler) Endorse(ctx context.Context, tx *types.ParsedTransaction
 	}
 
 	if !tx.DomainConfig.IsV0() {
-		fromID, err := h.noto.findEthAddressVerifier(ctx, "from", params.From, req.ResolvedVerifiers)
+		senderID, err := h.noto.findEthAddressVerifier(ctx, "sender", tx.Transaction.From, req.ResolvedVerifiers)
 		if err != nil {
 			return nil, err
 		}
 
 		// In V1 onwards the lock itself needs to be checked (it's owned by the from address)
-		_, err = h.noto.validateV1LockTransition(ctx, LOCK_SPEND, fromID, &params.LockID, req.Inputs, req.Outputs)
+		_, err = h.noto.validateV1LockTransition(ctx, LOCK_SPEND, senderID, &params.LockID, req.Inputs, req.Outputs)
 		if err != nil {
 			return nil, err
 		}

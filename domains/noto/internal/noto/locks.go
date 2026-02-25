@@ -82,7 +82,7 @@ func (n *Noto) loadLockInfoV1(ctx context.Context, stateQueryContext string, loc
 
 // takes an assembled V1 lock transition (including a new lock), does basic validation & parsing,
 // then returns the parsed result for further checking/processing.
-func (n *Noto) validateV1LockTransition(ctx context.Context, transitionType lockTransitionType, fromID *identityPair, lockID *pldtypes.Bytes32, inputs []*prototk.EndorsableState, outputs []*prototk.EndorsableState) (*lockTransition, error) {
+func (n *Noto) validateV1LockTransition(ctx context.Context, transitionType lockTransitionType, senderID *identityPair, lockID *pldtypes.Bytes32, inputs []*prototk.EndorsableState, outputs []*prototk.EndorsableState) (*lockTransition, error) {
 	var lt lockTransition
 	lt.noto = n
 
@@ -111,8 +111,8 @@ func (n *Noto) validateV1LockTransition(ctx context.Context, transitionType lock
 		}
 
 		// Check ownership of the input lock is the from address of the transaction
-		if fromID != nil && !lt.prevLockInfo.Owner.Equals(fromID.address) {
-			return nil, i18n.NewError(ctx, msgs.MsgStateWrongOwner, lt.prevLockState.Id, fromID.address)
+		if senderID != nil && !lt.prevLockInfo.Owner.Equals(senderID.address) {
+			return nil, i18n.NewError(ctx, msgs.MsgStateWrongOwner, lt.prevLockState.Id, senderID.address)
 		}
 	}
 

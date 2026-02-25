@@ -76,17 +76,19 @@ func (h *delegateLockHandler) Assemble(ctx context.Context, tx *types.ParsedTran
 
 	// Load the existing lock
 	var existingLock *loadedLockInfo
-	if !tx.DomainConfig.IsV0() {
+	minAmount := big.NewInt(0)
+	if tx.DomainConfig.IsV0() {
+		// In V0 at least one locked input was always present here, to confirm lock ownership - not required in V1 due to lock state check.
+		minAmount = big.NewInt(1)
+	} else {
 		existingLock, err = h.noto.loadLockInfoV1(ctx, req.StateQueryContext, params.LockID)
 		if err != nil {
 			return nil, err
 		}
-		// TODO: Check the submitter is the current spender.
 	}
 
 	// Prepare the locked inputs.
-	// In V0 at least one locked input was always present here, to confirm lock ownership - not required in V1 due to lock state check.
-	lockedInputs, revert, err := h.noto.prepareLockedInputs(ctx, req.StateQueryContext, params.LockID, senderID.address, big.NewInt(1), false)
+	lockedInputs, revert, err := h.noto.prepareLockedInputs(ctx, req.StateQueryContext, params.LockID, senderID.address, minAmount, false)
 	if err != nil {
 		if revert {
 			message := err.Error()
@@ -184,10 +186,24 @@ func (h *delegateLockHandler) Endorse(ctx context.Context, tx *types.ParsedTrans
 		return nil, err
 	}
 
-	// Sender must specify at least one locked state, to show that they own the lock
-	if len(inputs.lockedCoins) == 0 {
-		return nil, i18n.NewError(ctx, msgs.MsgNoStatesSpecified)
+	if tx.DomainConfig.IsV0() {
+		// Sender must specify at least one locked state, to show that they own the lock
+		if len(inputs.lockedCoins) == 0 {
+			return nil, i18n.NewError(ctx, msgs.MsgNoStatesSpecified)
+		}
+	} else {
+		senderID, err := h.noto.findEthAddressVerifier(ctx, "sender", tx.Transaction.From, req.ResolvedVerifiers)
+		if err != nil {
+			return nil, err
+		}
+
+		// In V1 onwards the lock itself needs to be checked (which can be empty for a mint lock)
+		_, err = h.noto.validateV1LockTransition(ctx, LOCK_UPDATE, senderID, &params.LockID, req.Inputs, req.Outputs)
+		if err != nil {
+			return nil, err
+		}
 	}
+
 	if err := h.noto.validateLockOwners(ctx, tx.Transaction.From, req.ResolvedVerifiers, inputs.lockedCoins, inputs.lockedStates); err != nil {
 		return nil, err
 	}

@@ -224,13 +224,13 @@ func (h *createBurnLockHandler) Endorse(ctx context.Context, tx *types.ParsedTra
 		return nil, err
 	}
 
-	fromID, err := h.noto.findEthAddressVerifier(ctx, "from", params.From, req.ResolvedVerifiers)
+	senderID, err := h.noto.findEthAddressVerifier(ctx, "sender", tx.Transaction.From, req.ResolvedVerifiers)
 	if err != nil {
 		return nil, err
 	}
 
 	// We should have a valid lock transition, from which we can obtain the spend and cancel outputs
-	_, spendOutputs, cancelOutputs, err := h.noto.decodeV1LockTransitionWithOutputs(ctx, LOCK_CREATE, fromID, nil, req.Inputs, req.Outputs, req.Info)
+	_, spendOutputs, cancelOutputs, err := h.noto.decodeV1LockTransitionWithOutputs(ctx, LOCK_CREATE, senderID, nil, req.Inputs, req.Outputs, req.Info)
 	if err != nil {
 		return nil, err
 	}
@@ -263,7 +263,7 @@ func (h *createBurnLockHandler) Endorse(ctx context.Context, tx *types.ParsedTra
 	if outputs.lockedTotal.Cmp(parsedCancelOutputs.total) != 0 {
 		return nil, i18n.NewError(ctx, msgs.MsgInvalidAmount, "cancelOutputs", inputs.total, parsedCancelOutputs.total)
 	}
-	if err := h.noto.validateOwners(ctx, fromID.identifier, req.ResolvedVerifiers, inputs.coins, inputs.states); err != nil {
+	if err := h.noto.validateOwners(ctx, senderID.identifier, req.ResolvedVerifiers, inputs.coins, inputs.states); err != nil {
 		return nil, err
 	}
 
@@ -281,18 +281,17 @@ func (h *createBurnLockHandler) Endorse(ctx context.Context, tx *types.ParsedTra
 }
 
 func (h *createBurnLockHandler) baseLedgerInvoke(ctx context.Context, tx *types.ParsedTransaction, req *prototk.PrepareTransactionRequest) (_ *TransactionWrapper, err error) {
-	inParams := tx.Params.(*types.CreateBurnLockParams)
 	inputCoinStates := h.noto.filterSchema(req.InputStates, []string{h.noto.coinSchema.Id})
 	lockedCoinStates := h.noto.filterSchema(req.OutputStates, []string{h.noto.lockedCoinSchema.Id})
 	remainderCoinStates := h.noto.filterSchema(req.OutputStates, []string{h.noto.coinSchema.Id})
 
-	fromID, err := h.noto.findEthAddressVerifier(ctx, "from", inParams.From, req.ResolvedVerifiers)
+	senderID, err := h.noto.findEthAddressVerifier(ctx, "sender", tx.Transaction.From, req.ResolvedVerifiers)
 	if err != nil {
 		return nil, err
 	}
 
 	// We should have a valid lock transition, from which we can obtain the spend and cancel outputs
-	lockTransition, _, cancelOutputs, err := h.noto.decodeV1LockTransitionWithOutputs(ctx, LOCK_CREATE, fromID, nil, req.InputStates, req.OutputStates, req.InfoStates)
+	lockTransition, _, cancelOutputs, err := h.noto.decodeV1LockTransitionWithOutputs(ctx, LOCK_CREATE, senderID, nil, req.InputStates, req.OutputStates, req.InfoStates)
 	if err != nil {
 		return nil, err
 	}
@@ -339,13 +338,13 @@ func (h *createBurnLockHandler) baseLedgerInvoke(ctx context.Context, tx *types.
 func (h *createBurnLockHandler) hookInvoke(ctx context.Context, tx *types.ParsedTransaction, req *prototk.PrepareTransactionRequest, baseTransaction *TransactionWrapper) (*TransactionWrapper, error) {
 	inParams := tx.Params.(*types.CreateBurnLockParams)
 
-	fromID, err := h.noto.findEthAddressVerifier(ctx, "from", tx.Transaction.From, req.ResolvedVerifiers)
+	senderID, err := h.noto.findEthAddressVerifier(ctx, "sender", tx.Transaction.From, req.ResolvedVerifiers)
 	if err != nil {
 		return nil, err
 	}
 
 	// We should have a valid lock transition, from which we can obtain the spend and cancel outputs
-	lockTransition, err := h.noto.validateV1LockTransition(ctx, LOCK_CREATE, fromID, nil, req.InputStates, req.OutputStates)
+	lockTransition, err := h.noto.validateV1LockTransition(ctx, LOCK_CREATE, senderID, nil, req.InputStates, req.OutputStates)
 	if err != nil {
 		return nil, err
 	}
@@ -355,9 +354,9 @@ func (h *createBurnLockHandler) hookInvoke(ctx context.Context, tx *types.Parsed
 		return nil, err
 	}
 	params := &CreateBurnLockHookParams{
-		Sender: fromID.address,
+		Sender: senderID.address,
 		LockID: lockTransition.newLockInfo.LockID,
-		From:   fromID.address,
+		From:   senderID.address,
 		Amount: inParams.Amount,
 		Data:   inParams.Data,
 		Prepared: PreparedTransaction{

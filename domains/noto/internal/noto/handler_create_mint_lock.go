@@ -294,13 +294,13 @@ func (h *createMintLockHandler) baseLedgerInvoke(ctx context.Context, tx *types.
 func (h *createMintLockHandler) hookInvoke(ctx context.Context, tx *types.ParsedTransaction, req *prototk.PrepareTransactionRequest, baseTransaction *TransactionWrapper) (*TransactionWrapper, error) {
 	inParams := tx.Params.(*types.CreateMintLockParams)
 
-	fromID, err := h.noto.findEthAddressVerifier(ctx, "from", tx.Transaction.From, req.ResolvedVerifiers)
+	senderID, err := h.noto.findEthAddressVerifier(ctx, "sender", tx.Transaction.From, req.ResolvedVerifiers)
 	if err != nil {
 		return nil, err
 	}
 
 	// We should have a valid lock transition, from which we can obtain the spend and cancel outputs
-	lockTransition, err := h.noto.validateV1LockTransition(ctx, LOCK_CREATE, fromID, nil, req.InputStates, req.OutputStates)
+	lockTransition, err := h.noto.validateV1LockTransition(ctx, LOCK_CREATE, senderID, nil, req.InputStates, req.OutputStates)
 	if err != nil {
 		return nil, err
 	}
@@ -319,7 +319,7 @@ func (h *createMintLockHandler) hookInvoke(ctx context.Context, tx *types.Parsed
 		return nil, err
 	}
 	params := &CreateMintLockHookParams{
-		Sender:     fromID.address,
+		Sender:     senderID.address,
 		LockID:     lockTransition.newLockInfo.LockID,
 		Recipients: recipients,
 		Data:       inParams.Data,

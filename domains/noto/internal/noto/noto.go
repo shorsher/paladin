@@ -73,6 +73,7 @@ var (
 )
 
 var (
+	// IConfidentialToken standardized events
 	EventTransfer = "Transfer"
 
 	// ILockableCapability standardized events - not used by Noto, as we have events with full details
@@ -94,6 +95,7 @@ var (
 )
 
 var allEvents = []string{
+	EventTransfer,
 	EventNotoLockCreated,
 	EventNotoLockUpdated,
 	EventNotoLockSpent,

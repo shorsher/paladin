@@ -232,7 +232,6 @@ func (h *lockHandler) Endorse(ctx context.Context, tx *types.ParsedTransaction, 
 	if !tx.DomainConfig.IsV0() {
 		lockID, err := h.noto.computeLockIDForLockTX(ctx, tx, notaryID)
 		if err == nil {
-			// TODO: Support preparation of target operation directly during lock (avoiding extra call)
 			_, _, _, err = h.noto.decodeV1LockTransitionWithOutputs(ctx, LOCK_CREATE, senderID, &lockID, req.Inputs, req.Outputs, req.Info)
 		}
 		if err != nil {

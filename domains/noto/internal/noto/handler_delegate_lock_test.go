@@ -61,16 +61,22 @@ func TestDelegateLock(t *testing.T) {
 			Amount: pldtypes.Int64ToInt256(100),
 		},
 	}
-	inputLockState := &prototk.StoredState{
+	inputLockInfoSalt := pldtypes.RandBytes32()
+	inputLockInfo := &prototk.StoredState{
 		Id:       "0xa7c7fa6677f6938bb90f9f0ccb3487707fe6a93c527d899f09af497ece2e603b",
 		SchemaId: hashName("lockInfo_v1"),
-		DataJson: fmt.Sprintf(`{"lockId":"%s"}`, lockID),
+		DataJson: fmt.Sprintf(`{
+			"lockId": "%s",
+			"salt": "%s",
+			"owner": "%s",
+			"spender": "%s"
+		}`, lockID, inputLockInfoSalt, senderKey.Address, senderKey.Address),
 	}
 	mockCallbacks.MockFindAvailableStates = func(ctx context.Context, req *prototk.FindAvailableStatesRequest) (*prototk.FindAvailableStatesResponse, error) {
 		switch req.SchemaId {
 		case hashName("lockInfo_v1"):
 			return &prototk.FindAvailableStatesResponse{
-				States: []*prototk.StoredState{inputLockState},
+				States: []*prototk.StoredState{inputLockInfo},
 			}, nil
 		case hashName("lockedCoin"):
 			return &prototk.FindAvailableStatesResponse{
@@ -139,7 +145,7 @@ func TestDelegateLock(t *testing.T) {
 	require.Len(t, assembleRes.AssembledTransaction.OutputStates, 1) // new info
 	require.Len(t, assembleRes.AssembledTransaction.ReadStates, 1)
 	require.Len(t, assembleRes.AssembledTransaction.InfoStates, 2) // manifest + txData
-	assert.Equal(t, inputLockState.Id, assembleRes.AssembledTransaction.InputStates[0].Id)
+	assert.Equal(t, inputLockInfo.Id, assembleRes.AssembledTransaction.InputStates[0].Id)
 	assert.Equal(t, hashName("lockInfo_v1"), assembleRes.AssembledTransaction.OutputStates[0].SchemaId)
 	assert.Equal(t, inputLockedCoin.ID.String(), assembleRes.AssembledTransaction.ReadStates[0].Id)
 	outputInfo, err := n.unmarshalInfo(assembleRes.AssembledTransaction.InfoStates[1].StateDataJson)
@@ -154,9 +160,9 @@ func TestDelegateLock(t *testing.T) {
 
 	inputStates := []*prototk.EndorsableState{
 		{
-			SchemaId:      hashName("lockInfo_v1"),
-			Id:            inputLockState.Id,
-			StateDataJson: mustParseJSON(inputLockState.DataJson),
+			SchemaId:      inputLockInfo.SchemaId,
+			Id:            inputLockInfo.Id,
+			StateDataJson: inputLockInfo.DataJson,
 		},
 	}
 	readStates := []*prototk.EndorsableState{
