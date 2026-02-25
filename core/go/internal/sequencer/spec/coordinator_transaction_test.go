@@ -160,14 +160,14 @@ func TestCoordinatorTransaction_Assembling_NoTransition_OnRequestTimeout_IfNotSt
 	assert.Equal(t, transaction.State_Assembling, txn.GetCurrentState(), "current state is %s", txn.GetCurrentState().String())
 }
 
-func TestCoordinatorTransaction_Assembling_ToPooled_OnRequestTimeout_IfStateTimeoutExpired(t *testing.T) {
+func TestCoordinatorTransaction_Assembling_ToPooled_OnStateTimeout_IfStateTimeoutExpired(t *testing.T) {
 	ctx := context.Background()
 	txnBuilder := transaction.NewTransactionBuilderForTesting(t, transaction.State_Assembling)
 	txn, mocks := txnBuilder.BuildWithMocks()
 
 	mocks.Clock.Advance(txnBuilder.GetStateTimeout() + 1)
 
-	err := txn.HandleEvent(ctx, &transaction.RequestTimeoutIntervalEvent{
+	err := txn.HandleEvent(ctx, &transaction.StateTimeoutIntervalEvent{
 		BaseCoordinatorEvent: transaction.BaseCoordinatorEvent{
 			TransactionID: txn.GetID(),
 		},
