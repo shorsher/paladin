@@ -160,6 +160,7 @@ func (n *Noto) handleV1Event(ctx context.Context, ev *prototk.OnChainEvent, res 
 // back to the Pente hooks
 // TODO: this method should not be invoked directly on the event loop, but rather via a queue
 func (n *Noto) handleNotaryPrivateUnlock(ctx context.Context, stateQueryContext string, domainConfig *types.NotoParsedConfig, lockedInputs []pldtypes.Bytes32, outputs []pldtypes.Bytes32, spender *pldtypes.EthAddress, data pldtypes.HexBytes, lockID pldtypes.Bytes32) error {
+
 	lockedInputsStr := make([]string, len(lockedInputs))
 	for i, input := range lockedInputs {
 		lockedInputsStr[i] = input.String()
@@ -169,11 +170,15 @@ func (n *Noto) handleNotaryPrivateUnlock(ctx context.Context, stateQueryContext 
 		unlockedOutputsStr[i] = output.String()
 	}
 
+	lockStates, err := n.getStates(ctx, stateQueryContext, n.lockInfoSchemaV1.Id, lockedInputsStr)
+	if err != nil {
+		return err
+	}
 	inputStates, err := n.getStates(ctx, stateQueryContext, n.lockedCoinSchema.Id, lockedInputsStr)
 	if err != nil {
 		return err
 	}
-	if len(inputStates) != len(lockedInputsStr) {
+	if (len(inputStates) + len(lockStates)) != len(lockedInputsStr) {
 		return i18n.NewError(ctx, msgs.MsgMissingStateData, lockedInputs)
 	}
 
