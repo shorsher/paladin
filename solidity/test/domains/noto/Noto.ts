@@ -156,6 +156,7 @@ describe("Noto", function () {
     // Prepare unlock operations (both spend and cancel) before unlocking
     const unlockTxId = randomBytes32();
     const unlockData = randomBytes32();
+    const lockStateId = randomBytes32();
     const spendHash = await newUnlockHash(
       noto,
       unlockTxId,
@@ -170,6 +171,7 @@ describe("Noto", function () {
       noto,
       lockId,
       unlockTxId,
+      lockStateId,
       spendHash,
       cancelHash,
       unlockData,
@@ -192,6 +194,7 @@ describe("Noto", function () {
         delegate,
         noto,
         lockId,
+        lockStateId,
         [locked1, fakeTXO()],
         [txo4],
         unlockData
@@ -205,6 +208,7 @@ describe("Noto", function () {
         delegate,
         noto,
         lockId,
+        lockStateId,
         [locked1],
         [fakeTXO()], // different output than prepared
         unlockData
@@ -218,6 +222,7 @@ describe("Noto", function () {
         other,
         noto,
         lockId,
+        lockStateId,
         [locked1],
         [txo4],
         unlockData
@@ -230,6 +235,7 @@ describe("Noto", function () {
       delegate,
       noto,
       lockId,
+      lockStateId,
       [locked1],
       [txo4],
       unlockData
@@ -242,6 +248,7 @@ describe("Noto", function () {
         notary,
         noto,
         lockId,
+        lockStateId,
         [locked1],
         [],
         randomBytes32()
@@ -319,6 +326,7 @@ describe("Noto", function () {
     // Prepare unlock operations (both spend and cancel) using the same TX ID as the transfer - should fail
     const unlockTxId = txId1; // Use same txId as transfer to test duplicate
     const unlockData = randomBytes32();
+    const lockStateId = randomBytes32();
     const spendHash = await newUnlockHash(
       noto,
       unlockTxId,
@@ -334,6 +342,7 @@ describe("Noto", function () {
         noto,
         lockId,
         unlockTxId,
+        lockStateId,
         spendHash,
         cancelHash,
         unlockData,

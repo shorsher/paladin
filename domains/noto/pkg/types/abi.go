@@ -286,7 +286,8 @@ var NotoUnlockOperationABI = abi.ParameterArray{
 }
 
 type NotoLockOptions struct {
-	SpendTxId pldtypes.Bytes32 `json:"spendTxId"`
+	SpendTxId   pldtypes.Bytes32 `json:"spendTxId"`
+	LockStateId pldtypes.Bytes32 `json:"lockStateId"`
 }
 
 var NotoLockOptionsABI = abi.ParameterArray{

@@ -54,6 +54,8 @@ interface INoto is IConfidentialToken, ILockableCapability {
     struct NotoLockOptions {
         // A unique transaction ID that must be used to spend or cancel the lock.
         bytes32 spendTxId;
+        // A record of the current state that represents the lock
+        bytes32 lockStateId;
     }
     
     // The Noto event for creation of a lock contains the inputs,outputs and contents

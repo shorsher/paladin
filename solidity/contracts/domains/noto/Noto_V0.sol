@@ -156,7 +156,7 @@ contract Noto_V0 is EIP712Upgradeable, UUPSUpgradeable, INoto_V0, INotoErrors_V0
     }
 
     /**
-     * @dev query whether a TXO is currently in the unspent list
+     * @dev query whether a state is currently in the unspent list
      * @param id the UTXO identifier
      * @return unspent true or false depending on whether the identifier is in the unspent map
      */
@@ -165,7 +165,7 @@ contract Noto_V0 is EIP712Upgradeable, UUPSUpgradeable, INoto_V0, INotoErrors_V0
     }
 
     /**
-     * @dev query whether a TXO is currently locked
+     * @dev query whether a state is currently locked
      * @param id the UTXO identifier
      * @return locked true or false depending on whether the identifier is locked
      */

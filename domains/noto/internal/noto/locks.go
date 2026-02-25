@@ -44,11 +44,12 @@ const (
 )
 
 type lockTransition struct {
-	noto          *Noto
-	prevLockState *prototk.EndorsableState
-	prevLockInfo  types.NotoLockInfo_V1
-	newLockState  *prototk.EndorsableState
-	newLockInfo   types.NotoLockInfo_V1
+	noto           *Noto
+	prevLockState  *prototk.EndorsableState
+	prevLockInfo   types.NotoLockInfo_V1
+	newLockState   *prototk.EndorsableState
+	newLockStateID pldtypes.Bytes32
+	newLockInfo    types.NotoLockInfo_V1
 }
 
 func (n *Noto) loadLockInfoV1(ctx context.Context, stateQueryContext string, lockID pldtypes.Bytes32) (*loadedLockInfo, error) {
@@ -82,9 +83,8 @@ func (n *Noto) loadLockInfoV1(ctx context.Context, stateQueryContext string, loc
 
 // takes an assembled V1 lock transition (including a new lock), does basic validation & parsing,
 // then returns the parsed result for further checking/processing.
-func (n *Noto) validateV1LockTransition(ctx context.Context, transitionType lockTransitionType, senderID *identityPair, lockID *pldtypes.Bytes32, inputs []*prototk.EndorsableState, outputs []*prototk.EndorsableState) (*lockTransition, error) {
-	var lt lockTransition
-	lt.noto = n
+func (n *Noto) validateV1LockTransition(ctx context.Context, transitionType lockTransitionType, senderID *identityPair, lockID *pldtypes.Bytes32, inputs []*prototk.EndorsableState, outputs []*prototk.EndorsableState) (lt *lockTransition, err error) {
+	lt = &lockTransition{noto: n}
 
 	inputLockInfoStates := n.filterSchema(inputs, []string{n.lockInfoSchemaV1.Id})
 	outputLockInfoStates := n.filterSchema(outputs, []string{n.lockInfoSchemaV1.Id})
@@ -118,7 +118,11 @@ func (n *Noto) validateV1LockTransition(ctx context.Context, transitionType lock
 
 	if len(outputLockInfoStates) == 1 {
 		lt.newLockState = outputLockInfoStates[0]
-		if err := json.Unmarshal([]byte(lt.newLockState.StateDataJson), &lt.newLockInfo); err != nil {
+		err := json.Unmarshal([]byte(lt.newLockState.StateDataJson), &lt.newLockInfo)
+		if err == nil {
+			lt.newLockStateID, err = pldtypes.ParseBytes32Ctx(ctx, lt.newLockState.Id)
+		}
+		if err != nil {
 			return nil, i18n.WrapError(ctx, err, msgs.MsgInvalidLockState, lt.newLockState.Id)
 		}
 
@@ -144,7 +148,7 @@ func (n *Noto) validateV1LockTransition(ctx context.Context, transitionType lock
 		}
 	}
 
-	return &lt, nil
+	return lt, nil
 }
 
 func (lt *lockTransition) splitOutputs(ctx context.Context, infoStates []*prototk.EndorsableState) (spendOutputs, cancelOutputs []*prototk.EndorsableState, err error) {

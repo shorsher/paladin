@@ -115,7 +115,8 @@ describe("Atom", function () {
     const atomAddr = createAtomEvent?.args.addr;
 
     // Do the delegation/approval transactions
-    const options = createLockOptions(unlockTxId);
+    const lockStateId = randomBytes32();
+    const options = createLockOptions(unlockTxId, lockStateId);
     const txId2 = randomBytes32();
     const lockUpdate = {
       spendHash,
@@ -125,7 +126,7 @@ describe("Atom", function () {
     const updateParams = {
       txId: txId2,
       inputs: [],
-      outputs: [],
+      outputs: [lockStateId],
       contents: [],
       proof: "0x",
       options: "0x",

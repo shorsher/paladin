@@ -67,13 +67,14 @@ export function fakeTXO() {
   return randomBytes32();
 }
 
-export function createLockOptions(spendTxId: string) {
+export function createLockOptions(spendTxId: string, lockStateId: string) {
   const options = {
-    spendTxId: spendTxId,
+    spendTxId,
+    lockStateId,
   };
   return ethers.AbiCoder.defaultAbiCoder().encode(
-    ["tuple(bytes32)"],
-    [[options.spendTxId]]
+    ["tuple(bytes32,bytes32)"],
+    [[options.spendTxId, options.lockStateId]]
   );
 }
 
@@ -261,6 +262,7 @@ export async function doUnlock(
   sender: Signer,
   noto: Noto,
   lockId: string,
+  lockStateId: string,
   lockedInputs: string[],
   outputs: string[],
   data: string
@@ -292,7 +294,7 @@ export async function doUnlock(
   expect(event1?.args.txId).to.equal(txId);
   expect(event1?.args.lockId).to.equal(lockId);
   expect(event1?.args.spender).to.equal(await sender.getAddress());
-  expect(event1?.args.inputs).to.deep.equal(lockedInputs);
+  expect(event1?.args.inputs).to.deep.equal([...lockedInputs, lockStateId]);
   expect(event1?.args.outputs).to.deep.equal(outputs);
   expect(event1?.args.proof).to.equal('0x');
   expect(event1?.args.txData).to.equal(data);
@@ -315,6 +317,7 @@ export async function doPrepareUnlock(
   noto: Noto,
   lockId: string,
   spendTxId: string,
+  lockStateId: string,
   spendHash: string,
   cancelHash: string,
   data: string,
@@ -324,11 +327,11 @@ export async function doPrepareUnlock(
   const encodedParams = encodeUpdateLockParams({
     txId,
     inputs: [],
-    outputs: [],
+    outputs: [lockStateId],
     proof: '0x',
   });
 
-  const options = createLockOptions(spendTxId);
+  const options = createLockOptions(spendTxId, lockStateId);
   const params: ILockableCapability.LockParamsStruct = {
     spendHash: spendHash,
     cancelHash: cancelHash,
@@ -354,7 +357,7 @@ export async function doPrepareUnlock(
   expect(event1).to.exist;
   expect(event1?.name).to.equal("NotoLockUpdated");
   expect(event1?.args.inputs).to.deep.equal([]);
-  expect(event1?.args.outputs).to.deep.equal([]);
+  expect(event1?.args.outputs).to.deep.equal([lockStateId]);
   expect(event1?.args.proof).to.deep.equal("0x");
   expect(event1?.args.data).to.equal(data);
 

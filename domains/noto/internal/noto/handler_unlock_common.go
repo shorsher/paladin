@@ -357,7 +357,8 @@ func (h *unlockCommon) buildPrepareUnlockParams(ctx context.Context, tx *types.P
 	var lockParams LockParams
 	var notoLockOpEncoded []byte
 	lockParams.Options, err = h.noto.encodeNotoLockOptions(ctx, &types.NotoLockOptions{
-		SpendTxId: spendTxId,
+		SpendTxId:   spendTxId,
+		LockStateId: lockTransition.newLockStateID,
 	})
 	if err == nil {
 		lockParams.SpendHash, err = h.noto.unlockHashFromIDs_V1(ctx, tx.ContractAddress, lockID, spendTxId.String(), endorsableStateIDs(lockedInputs), endorsableStateIDs(spendOutputs), spendData)
@@ -401,7 +402,8 @@ func (h *unlockCommon) buildCreateLockParams(ctx context.Context, tx *types.Pars
 	var lockParams LockParams
 	var notoLockOpEncoded []byte
 	lockParams.Options, err = h.noto.encodeNotoLockOptions(ctx, &types.NotoLockOptions{
-		SpendTxId: spendTxId,
+		SpendTxId:   spendTxId,
+		LockStateId: lockTransition.newLockStateID,
 	})
 	if err == nil {
 		lockParams.SpendHash, err = h.noto.unlockHashFromIDs_V1(ctx, tx.ContractAddress, lockID, spendTxId.String(), endorsableStateIDs(lockedOutputs), endorsableStateIDs(spendOutputs), spendData)
