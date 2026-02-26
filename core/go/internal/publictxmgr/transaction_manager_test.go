@@ -810,7 +810,9 @@ func TestGasEstimateFactor(t *testing.T) {
 }
 
 func TestSuspendTransactionNoOrchestrator(t *testing.T) {
-	ctx, ptm, _, done := newTestPublicTxManager(t, true) // Use real DB
+	ctx, ptm, _, done := newTestPublicTxManager(t, true, func(mocks *mocksAndTestControl, conf *pldconf.PublicTxManagerConfig) {
+		mocks.disableManagerStart = true
+	}) // Use real DB
 	defer done()
 
 	// Create a test address and nonce
