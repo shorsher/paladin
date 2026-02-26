@@ -76,15 +76,16 @@ type coordinator struct {
 	originatorNodePool                         []string // The (possibly changing) list of originator nodes
 
 	/* Config */
-	contractAddress                *pldtypes.EthAddress
-	blockHeightTolerance           uint64
-	closingGracePeriod             int // expressed as a multiple of heartbeat intervals
-	requestTimeout                 common.Duration
-	stateTimeout                   common.Duration
-	nodeName                       string
-	coordinatorSelectionBlockRange uint64
-	maxInflightTransactions        int
-	maxDispatchAhead               int
+	contractAddress                   *pldtypes.EthAddress
+	blockHeightTolerance              uint64
+	closingGracePeriod                int // expressed as a multiple of heartbeat intervals
+	confirmedLockRetentionGracePeriod int // expressed as a multiple of heartbeat intervals
+	requestTimeout                    common.Duration
+	stateTimeout                      common.Duration
+	nodeName                          string
+	coordinatorSelectionBlockRange    uint64
+	maxInflightTransactions           int
+	maxDispatchAhead                  int
 
 	/* Dependencies */
 	domainAPI         components.DomainSmartContract
@@ -171,6 +172,7 @@ func NewCoordinator(
 	c.stateTimeout = confutil.DurationMin(configuration.StateTimeout, pldconf.SequencerMinimum.StateTimeout, *pldconf.SequencerDefaults.StateTimeout)
 	c.blockHeightTolerance = confutil.Uint64Min(configuration.BlockHeightTolerance, pldconf.SequencerMinimum.BlockHeightTolerance, *pldconf.SequencerDefaults.BlockHeightTolerance)
 	c.closingGracePeriod = confutil.IntMin(configuration.ClosingGracePeriod, pldconf.SequencerMinimum.ClosingGracePeriod, *pldconf.SequencerDefaults.ClosingGracePeriod)
+	c.confirmedLockRetentionGracePeriod = confutil.IntMin(configuration.ConfirmedLockRetentionGracePeriod, pldconf.SequencerMinimum.ConfirmedLockRetentionGracePeriod, *pldconf.SequencerDefaults.ConfirmedLockRetentionGracePeriod)
 	c.maxInflightTransactions = confutil.IntMin(configuration.MaxInflightTransactions, pldconf.SequencerMinimum.MaxInflightTransactions, *pldconf.SequencerDefaults.MaxInflightTransactions)
 	c.heartbeatInterval = confutil.DurationMin(configuration.HeartbeatInterval, pldconf.SequencerMinimum.HeartbeatInterval, *pldconf.SequencerDefaults.HeartbeatInterval)
 	c.coordinatorSelectionBlockRange = confutil.Uint64Min(configuration.BlockRange, pldconf.SequencerMinimum.BlockRange, *pldconf.SequencerDefaults.BlockRange)

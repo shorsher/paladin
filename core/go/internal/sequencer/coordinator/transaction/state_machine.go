@@ -402,7 +402,7 @@ var stateDefinitionsMap = StateDefinitions{
 				Actions: []ActionRule{{Action: action_IncrementHeartbeatIntervalsSinceStateChange}},
 				Transitions: []Transition{
 					{
-						If: guard_HasGracePeriodPassedSinceStateChange,
+						If: guard_HasFinalizingGracePeriodPassedSinceStateChange,
 						To: State_Final,
 					}},
 			},
@@ -412,10 +412,22 @@ var stateDefinitionsMap = StateDefinitions{
 		OnTransitionTo: action_NotifyDependantsOfConfirmation,
 		Events: map[EventType]EventHandler{
 			common.Event_HeartbeatInterval: {
-				Actions: []ActionRule{{Action: action_IncrementHeartbeatIntervalsSinceStateChange}},
+				Actions: []ActionRule{
+					{
+						Action: action_IncrementHeartbeatIntervalsSinceStateChange,
+					},
+					{
+						// TODO: this could be handled in a more sophisticated way using block height, either
+						// by resetting a number of blocks after confirmation, or by removing this grace period
+						// by only allowing originators to assemble if they are at the same block height as the
+						// coordinator
+						Action: action_ResetConfirmedTransactionLocksOnce,
+						If:     guard_HasConfirmedLockRetentionGracePeriodPassedSinceStateChange,
+					},
+				},
 				Transitions: []Transition{
 					{
-						If: guard_HasGracePeriodPassedSinceStateChange,
+						If: guard_HasFinalizingGracePeriodPassedSinceStateChange,
 						To: State_Final,
 					}},
 			},

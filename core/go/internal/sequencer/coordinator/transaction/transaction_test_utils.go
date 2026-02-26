@@ -408,6 +408,7 @@ func (b *TransactionBuilderForTesting) Build() *CoordinatorTransaction {
 		b.fakeClock.Duration(b.requestTimeout),
 		b.fakeClock.Duration(b.stateTimeout),
 		5,
+		0,
 		b.domainSigningIdentity,
 		prototk.ContractConfig_SUBMITTER_COORDINATOR,
 		b.grapher,
