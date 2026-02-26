@@ -220,7 +220,10 @@ func action_TransactionStateTransition(ctx context.Context, c *coordinator, even
 	if e.To == transaction.State_Ready_For_Dispatch {
 		txn := c.transactionsByID[e.TransactionID]
 		if txn != nil {
-			c.dispatchQueue <- txn
+			select {
+			case c.dispatchQueue <- txn:
+			case <-ctx.Done():
+			}
 		}
 	}
 

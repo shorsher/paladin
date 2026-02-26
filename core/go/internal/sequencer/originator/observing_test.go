@@ -32,8 +32,8 @@ func Test_applyHeartbeatReceived_BasicUpdate(t *testing.T) {
 	originatorLocator := "sender@senderNode"
 	coordinatorLocator := "coordinator@coordinatorNode"
 	builder := NewOriginatorBuilderForTesting(State_Observing).CommitteeMembers(originatorLocator, coordinatorLocator)
-	o, _ := builder.Build(ctx)
-	defer o.Stop()
+	o, _, cleanup := builder.Build(ctx)
+	defer cleanup()
 
 	heartbeatEvent := &HeartbeatReceivedEvent{}
 	heartbeatEvent.From = coordinatorLocator
@@ -62,8 +62,8 @@ func Test_applyHeartbeatReceived_DispatchedTransactionNotFoundLogsAndContinues(t
 	originatorLocator := "sender@senderNode"
 	coordinatorLocator := "coordinator@coordinatorNode"
 	builder := NewOriginatorBuilderForTesting(State_Observing).CommitteeMembers(originatorLocator, coordinatorLocator)
-	o, _ := builder.Build(ctx)
-	defer o.Stop()
+	o, _, cleanup := builder.Build(ctx)
+	defer cleanup()
 
 	heartbeatEvent := &HeartbeatReceivedEvent{}
 	heartbeatEvent.From = coordinatorLocator
@@ -91,8 +91,8 @@ func Test_applyHeartbeatReceived_DispatchedTransactionWithHashUpdatesSubmitted(t
 	originatorLocator := "sender@senderNode"
 	coordinatorLocator := "coordinator@coordinatorNode"
 	builder := NewOriginatorBuilderForTesting(State_Observing).CommitteeMembers(originatorLocator, coordinatorLocator)
-	o, _ := builder.Build(ctx)
-	defer o.Stop()
+	o, _, cleanup := builder.Build(ctx)
+	defer cleanup()
 
 	// Create a real transaction
 	transactionBuilder := testutil.NewPrivateTransactionBuilderForTesting().
@@ -143,8 +143,8 @@ func Test_applyHeartbeatReceived_DispatchedTransactionWithNonceOnlySendsNonceAss
 	originatorLocator := "sender@senderNode"
 	coordinatorLocator := "coordinator@coordinatorNode"
 	builder := NewOriginatorBuilderForTesting(State_Observing).CommitteeMembers(originatorLocator, coordinatorLocator)
-	o, _ := builder.Build(ctx)
-	defer o.Stop()
+	o, _, cleanup := builder.Build(ctx)
+	defer cleanup()
 
 	// Create a real transaction
 	transactionBuilder := testutil.NewPrivateTransactionBuilderForTesting().
@@ -185,8 +185,8 @@ func Test_applyHeartbeatReceived_DispatchedTransactionFromDifferentOriginatorIgn
 	otherOriginatorLocator := "otherSender@otherNode"
 	coordinatorLocator := "coordinator@coordinatorNode"
 	builder := NewOriginatorBuilderForTesting(State_Observing).CommitteeMembers(originatorLocator, coordinatorLocator)
-	o, _ := builder.Build(ctx)
-	defer o.Stop()
+	o, _, cleanup := builder.Build(ctx)
+	defer cleanup()
 
 	heartbeatEvent := &HeartbeatReceivedEvent{}
 	heartbeatEvent.From = coordinatorLocator
@@ -210,8 +210,8 @@ func Test_applyHeartbeatReceived_DispatchedTransactionWithHashAndNonceSucceeds(t
 	originatorLocator := "sender@senderNode"
 	coordinatorLocator := "coordinator@coordinatorNode"
 	builder := NewOriginatorBuilderForTesting(State_Observing).CommitteeMembers(originatorLocator, coordinatorLocator)
-	o, _ := builder.Build(ctx)
-	defer o.Stop()
+	o, _, cleanup := builder.Build(ctx)
+	defer cleanup()
 
 	// Create a real transaction
 	transactionBuilder := testutil.NewPrivateTransactionBuilderForTesting().
@@ -252,8 +252,8 @@ func Test_applyHeartbeatReceived_DispatchedTransactionNonceOnlySucceeds(t *testi
 	originatorLocator := "sender@senderNode"
 	coordinatorLocator := "coordinator@coordinatorNode"
 	builder := NewOriginatorBuilderForTesting(State_Observing).CommitteeMembers(originatorLocator, coordinatorLocator)
-	o, _ := builder.Build(ctx)
-	defer o.Stop()
+	o, _, cleanup := builder.Build(ctx)
+	defer cleanup()
 
 	// Create a real transaction
 	transactionBuilder := testutil.NewPrivateTransactionBuilderForTesting().
@@ -294,8 +294,8 @@ func Test_guard_HeartbeatThresholdExceeded_NilTimeReturnsTrue(t *testing.T) {
 	originatorLocator := "sender@senderNode"
 	coordinatorLocator := "coordinator@coordinatorNode"
 	builder := NewOriginatorBuilderForTesting(State_Observing).CommitteeMembers(originatorLocator, coordinatorLocator)
-	o, _ := builder.Build(ctx)
-	defer o.Stop()
+	o, _, cleanup := builder.Build(ctx)
+	defer cleanup()
 
 	// Ensure timeOfMostRecentHeartbeat is nil
 	o.timeOfMostRecentHeartbeat = nil
@@ -310,8 +310,8 @@ func Test_guard_HeartbeatThresholdExceeded_ThresholdExpiredReturnsTrue(t *testin
 	originatorLocator := "sender@senderNode"
 	coordinatorLocator := "coordinator@coordinatorNode"
 	builder := NewOriginatorBuilderForTesting(State_Observing).CommitteeMembers(originatorLocator, coordinatorLocator)
-	o, mocks := builder.Build(ctx)
-	defer o.Stop()
+	o, mocks, cleanup := builder.Build(ctx)
+	defer cleanup()
 
 	// Set timeOfMostRecentHeartbeat to a time in the past (beyond threshold)
 	// For FakeClockForTesting, we need to advance the clock and then set an old time
@@ -331,8 +331,8 @@ func Test_guard_HeartbeatThresholdExceeded_ThresholdNotExpiredReturnsFalse(t *te
 	originatorLocator := "sender@senderNode"
 	coordinatorLocator := "coordinator@coordinatorNode"
 	builder := NewOriginatorBuilderForTesting(State_Observing).CommitteeMembers(originatorLocator, coordinatorLocator)
-	o, mocks := builder.Build(ctx)
-	defer o.Stop()
+	o, mocks, cleanup := builder.Build(ctx)
+	defer cleanup()
 
 	// Set timeOfMostRecentHeartbeat to a recent time (within threshold)
 	recentTime := mocks.Clock.Now()

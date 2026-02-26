@@ -30,8 +30,8 @@ func Test_confirmTransaction_HashNotFoundReturnsNil(t *testing.T) {
 	originatorLocator := "sender@senderNode"
 	coordinatorLocator := "coordinator@coordinatorNode"
 	builder := NewOriginatorBuilderForTesting(State_Observing).CommitteeMembers(originatorLocator, coordinatorLocator)
-	o, _ := builder.Build(ctx)
-	defer o.Stop()
+	o, _, cleanup := builder.Build(ctx)
+	defer cleanup()
 
 	hash := pldtypes.RandBytes32()
 	revertReason := pldtypes.HexBytes("")
@@ -45,8 +45,8 @@ func Test_confirmTransaction_NilTransactionIDReturnsError(t *testing.T) {
 	originatorLocator := "sender@senderNode"
 	coordinatorLocator := "coordinator@coordinatorNode"
 	builder := NewOriginatorBuilderForTesting(State_Observing).CommitteeMembers(originatorLocator, coordinatorLocator)
-	o, _ := builder.Build(ctx)
-	defer o.Stop()
+	o, _, cleanup := builder.Build(ctx)
+	defer cleanup()
 
 	hash := pldtypes.RandBytes32()
 	revertReason := pldtypes.HexBytes("")
@@ -64,8 +64,8 @@ func Test_confirmTransaction_NilTransactionReturnsError(t *testing.T) {
 	originatorLocator := "sender@senderNode"
 	coordinatorLocator := "coordinator@coordinatorNode"
 	builder := NewOriginatorBuilderForTesting(State_Observing).CommitteeMembers(originatorLocator, coordinatorLocator)
-	o, _ := builder.Build(ctx)
-	defer o.Stop()
+	o, _, cleanup := builder.Build(ctx)
+	defer cleanup()
 
 	hash := pldtypes.RandBytes32()
 	revertReason := pldtypes.HexBytes("")
@@ -85,8 +85,8 @@ func Test_confirmTransaction_TransactionNotFoundReturnsError(t *testing.T) {
 	originatorLocator := "sender@senderNode"
 	coordinatorLocator := "coordinator@coordinatorNode"
 	builder := NewOriginatorBuilderForTesting(State_Observing).CommitteeMembers(originatorLocator, coordinatorLocator)
-	o, _ := builder.Build(ctx)
-	defer o.Stop()
+	o, _, cleanup := builder.Build(ctx)
+	defer cleanup()
 
 	hash := pldtypes.RandBytes32()
 	revertReason := pldtypes.HexBytes("")
@@ -112,8 +112,8 @@ func Test_confirmTransaction_Success_EmptyRevertReasonRemovesHash(t *testing.T) 
 
 	// Add the transaction to the originator using the builder
 	builder.Transactions(txn)
-	o, _ := builder.Build(ctx)
-	defer o.Stop()
+	o, _, cleanup := builder.Build(ctx)
+	defer cleanup()
 
 	// Get the submission hash from the transaction
 	submissionHash := txn.GetLatestSubmissionHash()
@@ -145,8 +145,8 @@ func Test_confirmTransaction_Success_WithRevertReasonRemovesHash(t *testing.T) {
 
 	// Add the transaction to the originator using the builder
 	builder.Transactions(txn)
-	o, _ := builder.Build(ctx)
-	defer o.Stop()
+	o, _, cleanup := builder.Build(ctx)
+	defer cleanup()
 
 	// Get the submission hash from the transaction
 	submissionHash := txn.GetLatestSubmissionHash()

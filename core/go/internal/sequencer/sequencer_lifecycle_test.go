@@ -260,8 +260,9 @@ func TestSequencerManager_LoadSequencer_NewSequencer(t *testing.T) {
 	assert.Contains(t, sm.sequencers, contractAddr.String())
 	mocks.metrics.AssertExpectations(t)
 
-	result.GetCoordinator().Stop()
-	result.GetOriginator().Stop()
+	sm.sequencers[contractAddr.String()].cancelCtx()
+	result.GetCoordinator().WaitForDone(ctx)
+	result.GetOriginator().WaitForDone(ctx)
 }
 
 func TestSequencerManager_LoadSequencer_ExistingSequencer(t *testing.T) {
@@ -455,8 +456,8 @@ func TestSequencerManager_stopLowestPrioritySequencer_IdleSequencer(t *testing.T
 	// Create an idle sequencer
 	seq := newSequencerForTesting(contractAddr, mocks)
 	mocks.coordinator.EXPECT().GetCurrentState().Return(coordinator.State_Idle)
-	mocks.originator.EXPECT().Stop().Once()
-	mocks.coordinator.EXPECT().Stop().Once()
+	mocks.originator.EXPECT().WaitForDone(mock.Anything).Once()
+	mocks.coordinator.EXPECT().WaitForDone(mock.Anything).Once()
 
 	sm.sequencersLock.Lock()
 	sm.sequencers[contractAddr.String()] = seq
@@ -489,8 +490,8 @@ func TestSequencerManager_stopLowestPrioritySequencer_LowestPriority(t *testing.
 	// Setup expectations - both are active, seq1 should be stopped
 	mocks1.coordinator.EXPECT().GetCurrentState().Return(coordinator.State_Active)
 	mocks2.coordinator.EXPECT().GetCurrentState().Return(coordinator.State_Active)
-	mocks1.coordinator.EXPECT().Stop().Once()
-	mocks1.originator.EXPECT().Stop().Once()
+	mocks1.coordinator.EXPECT().WaitForDone(mock.Anything).Once()
+	mocks1.originator.EXPECT().WaitForDone(mock.Anything).Once()
 
 	sm.sequencersLock.Lock()
 	sm.sequencers[contractAddr1.String()] = seq1
@@ -576,8 +577,8 @@ func TestSequencerManager_updateActiveCoordinators_ExceedsLimit(t *testing.T) {
 	mocks1.coordinator.EXPECT().GetCurrentState().Return(coordinator.State_Active)
 	mocks2.coordinator.EXPECT().GetCurrentState().Return(coordinator.State_Active)
 	mocks3.coordinator.EXPECT().GetCurrentState().Return(coordinator.State_Active)
-	mocks1.coordinator.EXPECT().Stop().Once()
-	mocks1.originator.EXPECT().Stop().Once()
+	mocks1.coordinator.EXPECT().WaitForDone(mock.Anything).Once()
+	mocks1.originator.EXPECT().WaitForDone(mock.Anything).Once()
 	mocks1.metrics.EXPECT().SetActiveCoordinators(3).Once()
 
 	sm.sequencersLock.Lock()
@@ -666,9 +667,9 @@ func TestSequencerManager_StopAllSequencers_SingleSequencer(t *testing.T) {
 	sm.sequencers[contractAddr.String()] = seq
 	sm.sequencersLock.Unlock()
 
-	// Setup expectations for Stop() calls
-	mocks.coordinator.EXPECT().Stop().Once()
-	mocks.originator.EXPECT().Stop().Once()
+	// Setup expectations for shutdown waits
+	mocks.coordinator.EXPECT().WaitForDone(mock.Anything).Once()
+	mocks.originator.EXPECT().WaitForDone(mock.Anything).Once()
 
 	// Call StopAllSequencers
 	sm.StopAllSequencers(ctx)
@@ -701,13 +702,13 @@ func TestSequencerManager_StopAllSequencers_MultipleSequencers(t *testing.T) {
 	sm.sequencers[contractAddr3.String()] = seq3
 	sm.sequencersLock.Unlock()
 
-	// Setup expectations for Stop() calls on all sequencers
-	mocks1.coordinator.EXPECT().Stop().Once()
-	mocks1.originator.EXPECT().Stop().Once()
-	mocks2.coordinator.EXPECT().Stop().Once()
-	mocks2.originator.EXPECT().Stop().Once()
-	mocks3.coordinator.EXPECT().Stop().Once()
-	mocks3.originator.EXPECT().Stop().Once()
+	// Setup expectations for shutdown waits on all sequencers
+	mocks1.coordinator.EXPECT().WaitForDone(mock.Anything).Once()
+	mocks1.originator.EXPECT().WaitForDone(mock.Anything).Once()
+	mocks2.coordinator.EXPECT().WaitForDone(mock.Anything).Once()
+	mocks2.originator.EXPECT().WaitForDone(mock.Anything).Once()
+	mocks3.coordinator.EXPECT().WaitForDone(mock.Anything).Once()
+	mocks3.originator.EXPECT().WaitForDone(mock.Anything).Once()
 
 	// Verify shutdown is initially false
 	sm.sequencersLock.RLock()
@@ -937,8 +938,8 @@ func TestSequencerManager_Stop_Success(t *testing.T) {
 	sMgr.sequencersLock.Unlock()
 
 	// Setup expectations for Stop
-	mocks.coordinator.EXPECT().Stop().Once()
-	mocks.originator.EXPECT().Stop().Once()
+	mocks.coordinator.EXPECT().WaitForDone(mock.Anything).Once()
+	mocks.originator.EXPECT().WaitForDone(mock.Anything).Once()
 
 	// Call Stop
 	sMgr.Stop()

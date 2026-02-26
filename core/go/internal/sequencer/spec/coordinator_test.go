@@ -38,8 +38,8 @@ import (
 func TestCoordinator_InitializeOK(t *testing.T) {
 	ctx := context.Background()
 
-	c, _ := coordinator.NewCoordinatorBuilderForTesting(t, coordinator.State_Idle).Build(ctx)
-	defer c.Stop()
+	c, _, done := coordinator.NewCoordinatorBuilderForTesting(t, coordinator.State_Idle).Build(ctx)
+	defer done()
 
 	assert.Equal(t, coordinator.State_Idle, c.GetCurrentState(), "current state is %s", c.GetCurrentState())
 }
@@ -57,8 +57,8 @@ func TestCoordinator_Idle_ToActive_OnTransactionsDelegated(t *testing.T) {
 		CoordinatorSelection: prototk.ContractConfig_COORDINATOR_SENDER,
 	})
 	builder.GetTXManager().On("HasChainedTransaction", mock.Anything, mock.Anything).Return(false, nil)
-	c, _ := builder.Build(ctx)
-	defer c.Stop()
+	c, _, done := builder.Build(ctx)
+	defer done()
 
 	assert.Equal(t, coordinator.State_Idle, c.GetCurrentState())
 
@@ -76,8 +76,8 @@ func TestCoordinator_Idle_ToActive_OnTransactionsDelegated(t *testing.T) {
 
 func TestCoordinator_Idle_ToObserving_OnHeartbeatReceived(t *testing.T) {
 	ctx := context.Background()
-	c, _ := coordinator.NewCoordinatorBuilderForTesting(t, coordinator.State_Idle).Build(ctx)
-	defer c.Stop()
+	c, _, done := coordinator.NewCoordinatorBuilderForTesting(t, coordinator.State_Idle).Build(ctx)
+	defer done()
 
 	assert.Equal(t, coordinator.State_Idle, c.GetCurrentState())
 
@@ -104,8 +104,8 @@ func TestCoordinator_Observing_ToStandby_OnDelegated_IfBehind(t *testing.T) {
 	builder.GetDomainAPI().On("ContractConfig").Return(&prototk.ContractConfig{
 		CoordinatorSelection: prototk.ContractConfig_COORDINATOR_SENDER,
 	})
-	c, _ := builder.Build(ctx)
-	defer c.Stop()
+	c, _, done := builder.Build(ctx)
+	defer done()
 
 	c.QueueEvent(ctx, &coordinator.TransactionsDelegatedEvent{
 		FromNode:     "testNode",
@@ -134,8 +134,8 @@ func TestCoordinator_Observing_ToElect_OnDelegated_IfNotBehind(t *testing.T) {
 	builder.GetDomainAPI().On("ContractConfig").Return(&prototk.ContractConfig{
 		CoordinatorSelection: prototk.ContractConfig_COORDINATOR_SENDER,
 	})
-	c, mocks := builder.Build(ctx)
-	defer c.Stop()
+	c, mocks, done := builder.Build(ctx)
+	defer done()
 
 	c.QueueEvent(ctx, &coordinator.TransactionsDelegatedEvent{
 		FromNode:     "testNode",
@@ -159,8 +159,8 @@ func TestCoordinator_Standby_ToElect_OnNewBlock_IfNotBehind(t *testing.T) {
 		OriginatorIdentityPool(originator).
 		ActiveCoordinatorBlockHeight(200).
 		CurrentBlockHeight(194)
-	c, _ := builder.Build(ctx)
-	defer c.Stop()
+	c, _, done := builder.Build(ctx)
+	defer done()
 
 	c.QueueEvent(ctx, &coordinator.NewBlockEvent{
 		BlockHeight: 195, // default tolerance is 5 in the test setup so we are not behind
@@ -177,8 +177,8 @@ func TestCoordinator_Standby_NoTransition_OnNewBlock_IfStillBehind(t *testing.T)
 	builder := coordinator.NewCoordinatorBuilderForTesting(t, coordinator.State_Standby).
 		ActiveCoordinatorBlockHeight(200).
 		CurrentBlockHeight(193)
-	c, mocks := builder.Build(ctx)
-	defer c.Stop()
+	c, mocks, done := builder.Build(ctx)
+	defer done()
 
 	c.QueueEvent(ctx, &coordinator.NewBlockEvent{
 		BlockHeight: 194, // default tolerance is 5 in the test setup so this is still behind
@@ -195,8 +195,8 @@ func TestCoordinator_Standby_NoTransition_OnNewBlock_IfStillBehind(t *testing.T)
 
 func TestCoordinator_Elect_ToPrepared_OnHandover(t *testing.T) {
 	ctx := context.Background()
-	c, _ := coordinator.NewCoordinatorBuilderForTesting(t, coordinator.State_Elect).Build(ctx)
-	defer c.Stop()
+	c, _, done := coordinator.NewCoordinatorBuilderForTesting(t, coordinator.State_Elect).Build(ctx)
+	defer done()
 
 	c.QueueEvent(ctx, &coordinator.HandoverReceivedEvent{})
 
@@ -209,8 +209,8 @@ func TestCoordinator_PreparedNoTransition_OnHeartbeatReceived_WhenFlushPointsSti
 	ctx := context.Background()
 
 	builder := coordinator.NewCoordinatorBuilderForTesting(t, coordinator.State_Prepared)
-	c, _ := builder.Build(ctx)
-	defer c.Stop()
+	c, _, done := builder.Build(ctx)
+	defer done()
 
 	// Heartbeat with one flush point still unconfirmed -> guard false -> stay in Prepared
 	contractAddr := builder.GetContractAddress()
@@ -247,8 +247,8 @@ func TestCoordinator_Prepared_ToActive_OnHeartbeatReceived_WhenFlushPointsAllCon
 	builder.GetDomainAPI().On("ContractConfig").Return(&prototk.ContractConfig{
 		CoordinatorSelection: prototk.ContractConfig_COORDINATOR_SENDER,
 	})
-	c, _ := builder.Build(ctx)
-	defer c.Stop()
+	c, _, done := builder.Build(ctx)
+	defer done()
 
 	// Heartbeat with flush point confirmed -> guard true -> transition to Active
 	contractAddr := builder.GetContractAddress()
@@ -279,9 +279,9 @@ func TestCoordinator_Prepared_ToActive_OnHeartbeatReceived_WhenFlushPointsAllCon
 func TestCoordinator_Active_ToIdle_NoTransactionsInFlight(t *testing.T) {
 	ctx := context.Background()
 
-	c, _ := coordinator.NewCoordinatorBuilderForTesting(t, coordinator.State_Active).
+	c, _, done := coordinator.NewCoordinatorBuilderForTesting(t, coordinator.State_Active).
 		Build(ctx)
-	defer c.Stop()
+	defer done()
 
 	c.QueueEvent(ctx, &common.HeartbeatIntervalEvent{})
 
@@ -296,10 +296,10 @@ func TestCoordinator_ActiveNoTransition_OnTransactionConfirmed_IfNotTransactions
 	delegation1 := transaction.NewTransactionBuilderForTesting(t, transaction.State_Submitted).Build()
 	delegation2 := transaction.NewTransactionBuilderForTesting(t, transaction.State_Submitted).Build()
 
-	c, _ := coordinator.NewCoordinatorBuilderForTesting(t, coordinator.State_Active).
+	c, _, done := coordinator.NewCoordinatorBuilderForTesting(t, coordinator.State_Active).
 		Transactions(delegation1, delegation2).
 		Build(ctx)
-	defer c.Stop()
+	defer done()
 
 	delegation1Nonce := pldtypes.HexUint64(*delegation1.GetNonce())
 	c.QueueEvent(ctx, &coordinator.TransactionConfirmedEvent{
@@ -322,10 +322,10 @@ func TestCoordinator_Active_ToFlush_OnHandoverRequest(t *testing.T) {
 	delegation1 := transaction.NewTransactionBuilderForTesting(t, transaction.State_Submitted).Build()
 	delegation2 := transaction.NewTransactionBuilderForTesting(t, transaction.State_Submitted).Build()
 
-	c, _ := coordinator.NewCoordinatorBuilderForTesting(t, coordinator.State_Active).
+	c, _, done := coordinator.NewCoordinatorBuilderForTesting(t, coordinator.State_Active).
 		Transactions(delegation1, delegation2).
 		Build(ctx)
-	defer c.Stop()
+	defer done()
 
 	c.QueueEvent(ctx, &coordinator.HandoverRequestEvent{
 		Requester: "newCoordinator",
@@ -345,10 +345,10 @@ func TestCoordinator_Flush_ToClosing_OnTransactionConfirmed_IfFlushComplete(t *t
 	delegation1 := transaction.NewTransactionBuilderForTesting(t, transaction.State_Submitted).Build()
 	delegation2 := transaction.NewTransactionBuilderForTesting(t, transaction.State_Confirming_Dispatchable).Build()
 
-	c, _ := coordinator.NewCoordinatorBuilderForTesting(t, coordinator.State_Flush).
+	c, _, done := coordinator.NewCoordinatorBuilderForTesting(t, coordinator.State_Flush).
 		Transactions(delegation1, delegation2).
 		Build(ctx)
-	defer c.Stop()
+	defer done()
 
 	delegation1Nonce := pldtypes.HexUint64(*delegation1.GetNonce())
 	c.QueueEvent(ctx, &coordinator.TransactionConfirmedEvent{
@@ -373,10 +373,10 @@ func TestCoordinator_FlushNoTransition_OnTransactionConfirmed_IfNotFlushComplete
 	delegation1 := transaction.NewTransactionBuilderForTesting(t, transaction.State_Submitted).Build()
 	delegation2 := transaction.NewTransactionBuilderForTesting(t, transaction.State_Submitted).Build()
 
-	c, _ := coordinator.NewCoordinatorBuilderForTesting(t, coordinator.State_Flush).
+	c, _, done := coordinator.NewCoordinatorBuilderForTesting(t, coordinator.State_Flush).
 		Transactions(delegation1, delegation2).
 		Build(ctx)
-	defer c.Stop()
+	defer done()
 
 	delegation1Nonce := pldtypes.HexUint64(*delegation1.GetNonce())
 	c.QueueEvent(ctx, &coordinator.TransactionConfirmedEvent{
@@ -406,8 +406,8 @@ func TestCoordinator_Closing_ToIdle_OnHeartbeatInterval_IfClosingGracePeriodExpi
 	config := builder.GetSequencerConfig()
 	config.ClosingGracePeriod = confutil.P(5)
 	builder.OverrideSequencerConfig(config)
-	c, _ := builder.Build(ctx)
-	defer c.Stop()
+	c, _, done := builder.Build(ctx)
+	defer done()
 
 	c.QueueEvent(ctx, &common.HeartbeatIntervalEvent{})
 
@@ -429,8 +429,8 @@ func TestCoordinator_ClosingNoTransition_OnHeartbeatInterval_IfNotClosingGracePe
 	config.ClosingGracePeriod = confutil.P(5)
 	builder.OverrideSequencerConfig(config)
 
-	c, _ := builder.Build(ctx)
-	defer c.Stop()
+	c, _, done := builder.Build(ctx)
+	defer done()
 
 	c.QueueEvent(ctx, &common.HeartbeatIntervalEvent{})
 

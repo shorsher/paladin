@@ -46,8 +46,8 @@ func Test_GetTxStatus_KnownTransactionReturnsStatus(t *testing.T) {
 	ctx := context.Background()
 	txn := transaction.NewTransactionBuilderForTesting(t, transaction.State_Pending).Build()
 	builder := NewOriginatorBuilderForTesting(State_Observing).CommitteeMembers("sender@senderNode", "coordinator@coordinatorNode").Transactions(txn)
-	o, _ := builder.Build(ctx)
-	defer o.Stop()
+	o, _, cleanup := builder.Build(ctx)
+	defer cleanup()
 
 	status, err := o.GetTxStatus(ctx, txn.GetID())
 	require.NoError(t, err)
@@ -58,8 +58,8 @@ func Test_GetTxStatus_KnownTransactionReturnsStatus(t *testing.T) {
 func Test_GetTxStatus_UnknownTransactionReturnsUnknown(t *testing.T) {
 	ctx := context.Background()
 	builder := NewOriginatorBuilderForTesting(State_Observing).CommitteeMembers("sender@senderNode", "coordinator@coordinatorNode")
-	o, _ := builder.Build(ctx)
-	defer o.Stop()
+	o, _, cleanup := builder.Build(ctx)
+	defer cleanup()
 
 	unknownID := uuid.New()
 	status, err := o.GetTxStatus(ctx, unknownID)

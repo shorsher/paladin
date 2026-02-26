@@ -312,35 +312,42 @@ func (_c *MockOriginator_QueueEvent_Call) RunAndReturn(run func(ctx context.Cont
 	return _c
 }
 
-// Stop provides a mock function for the type MockOriginator
-func (_mock *MockOriginator) Stop() {
-	_mock.Called()
+// WaitForDone provides a mock function for the type MockOriginator
+func (_mock *MockOriginator) WaitForDone(ctx context.Context) {
+	_mock.Called(ctx)
 	return
 }
 
-// MockOriginator_Stop_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Stop'
-type MockOriginator_Stop_Call struct {
+// MockOriginator_WaitForDone_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'WaitForDone'
+type MockOriginator_WaitForDone_Call struct {
 	*mock.Call
 }
 
-// Stop is a helper method to define mock.On call
-func (_e *MockOriginator_Expecter) Stop() *MockOriginator_Stop_Call {
-	return &MockOriginator_Stop_Call{Call: _e.mock.On("Stop")}
+// WaitForDone is a helper method to define mock.On call
+//   - ctx context.Context
+func (_e *MockOriginator_Expecter) WaitForDone(ctx interface{}) *MockOriginator_WaitForDone_Call {
+	return &MockOriginator_WaitForDone_Call{Call: _e.mock.On("WaitForDone", ctx)}
 }
 
-func (_c *MockOriginator_Stop_Call) Run(run func()) *MockOriginator_Stop_Call {
+func (_c *MockOriginator_WaitForDone_Call) Run(run func(ctx context.Context)) *MockOriginator_WaitForDone_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run()
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		run(
+			arg0,
+		)
 	})
 	return _c
 }
 
-func (_c *MockOriginator_Stop_Call) Return() *MockOriginator_Stop_Call {
+func (_c *MockOriginator_WaitForDone_Call) Return() *MockOriginator_WaitForDone_Call {
 	_c.Call.Return()
 	return _c
 }
 
-func (_c *MockOriginator_Stop_Call) RunAndReturn(run func()) *MockOriginator_Stop_Call {
+func (_c *MockOriginator_WaitForDone_Call) RunAndReturn(run func(ctx context.Context)) *MockOriginator_WaitForDone_Call {
 	_c.Run(run)
 	return _c
 }

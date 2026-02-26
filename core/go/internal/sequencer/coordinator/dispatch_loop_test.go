@@ -36,8 +36,8 @@ func TestDispatchLoop_StopWhileWaitingForInFlightSlot(t *testing.T) {
 	config := builder.GetSequencerConfig()
 	config.MaxDispatchAhead = confutil.P(1)
 	builder.OverrideSequencerConfig(config)
-	c, _ := builder.Build(ctx)
-	defer c.Stop()
+	c, _, done := builder.Build(ctx)
+	defer done()
 
 	// Pre-populate inFlightTxns so the dispatch loop will enter the first Wait() when it pulls the tx
 	dummyTxn := transaction.NewTransactionBuilderForTesting(t, transaction.State_Dispatched).Build()
@@ -57,7 +57,7 @@ func TestDispatchLoop_StopWhileWaitingForInFlightSlot(t *testing.T) {
 	// Give the dispatch loop time to pull the tx and enter the first Wait() (too many in flight).
 	time.Sleep(50 * time.Millisecond)
 	// Stop() sends to stopDispatchLoop (buffered) then Signals; loop wakes, receives from stopDispatchLoop, returns.
-	c.Stop()
+	done()
 }
 
 // TestDispatchLoop_StopAtSelect covers the path where the dispatch loop is in the top-level
@@ -68,8 +68,8 @@ func TestDispatchLoop_StopAtSelect(t *testing.T) {
 	config := builder.GetSequencerConfig()
 	config.MaxDispatchAhead = confutil.P(-1) // no dispatch progress, so loop stays in select
 	builder.OverrideSequencerConfig(config)
-	c, _ := builder.Build(ctx)
+	_, _, done := builder.Build(ctx)
 
 	// Stop without ever queueing a tx; loop is blocked on select between dispatchQueue and stopDispatchLoop
-	c.Stop()
+	done()
 }

@@ -128,7 +128,7 @@ func (b *OriginatorBuilderForTesting) OverrideSequencerConfig(config *pldconf.Se
 	b.sequencerConfig = config
 }
 
-func (b *OriginatorBuilderForTesting) Build(ctx context.Context) (*originator, *OriginatorDependencyMocks) {
+func (b *OriginatorBuilderForTesting) Build(ctx context.Context) (*originator, *OriginatorDependencyMocks, func()) {
 
 	if b.nodeName == nil {
 		b.nodeName = ptrTo("member1@node1")
@@ -150,8 +150,9 @@ func (b *OriginatorBuilderForTesting) Build(ctx context.Context) (*originator, *
 	var originator *originator
 
 	var err error
+	buildCtx, cancel := context.WithCancel(ctx)
 	originator, err = NewOriginator(
-		ctx,
+		buildCtx,
 		*b.nodeName,
 		mocks.SentMessageRecorder,
 		mocks.Clock,
@@ -184,5 +185,9 @@ func (b *OriginatorBuilderForTesting) Build(ctx context.Context) (*originator, *
 
 	originator.activeCoordinatorNode = "coordinator"
 
-	return originator, mocks
+	done := func() {
+		cancel()
+		originator.WaitForDone(context.Background())
+	}
+	return originator, mocks, done
 }

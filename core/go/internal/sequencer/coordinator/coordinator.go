@@ -47,8 +47,8 @@ type Coordinator interface {
 	// Query the state of the coordinator
 	GetCurrentState() State
 
-	// Lifecycle
-	Stop()
+	// WaitForDone blocks until the coordinator has stopped after context cancellation.
+	WaitForDone(ctx context.Context)
 }
 
 type coordinator struct {
@@ -59,8 +59,7 @@ type coordinator struct {
 	// take the read lock when called.
 	sync.RWMutex
 
-	ctx       context.Context
-	cancelCtx context.CancelFunc
+	ctx context.Context
 
 	/* State machine - using generic statemachine.StateMachineEventLoop */
 	stateMachineEventLoop                      *statemachine.StateMachineEventLoop[State, *coordinator]
@@ -102,7 +101,6 @@ type coordinator struct {
 
 	/* Dispatch loop */
 	dispatchQueue       chan *transaction.CoordinatorTransaction
-	stopDispatchLoop    chan struct{}
 	dispatchLoopStopped chan struct{}
 	inFlightTxns        map[uuid.UUID]*transaction.CoordinatorTransaction
 	inFlightMutex       *sync.Cond
@@ -110,7 +108,6 @@ type coordinator struct {
 
 func NewCoordinator(
 	ctx context.Context,
-	cancelCtx context.CancelFunc,
 	contractAddress *pldtypes.EthAddress,
 	domainAPI components.DomainSmartContract,
 	txManager components.TXManager,
@@ -129,7 +126,6 @@ func NewCoordinator(
 	maxInflightTransactions := confutil.IntMin(configuration.MaxInflightTransactions, pldconf.SequencerMinimum.MaxInflightTransactions, *pldconf.SequencerDefaults.MaxInflightTransactions)
 	c := &coordinator{
 		ctx:                                ctx,
-		cancelCtx:                          cancelCtx,
 		heartbeatIntervalsSinceStateChange: 0,
 		transactionsByID:                   make(map[uuid.UUID]*transaction.CoordinatorTransaction),
 		pooledTransactions:                 make([]*transaction.CoordinatorTransaction, 0, maxInflightTransactions),
@@ -147,7 +143,6 @@ func NewCoordinator(
 		coordinatorIdle:                    coordinatorIdle,
 		nodeName:                           nodeName,
 		metrics:                            metrics,
-		stopDispatchLoop:                   make(chan struct{}, 1),
 		dispatchLoopStopped:                make(chan struct{}),
 	}
 	c.originatorNodePool = make([]string, 0, len(initialOriginatorNodePool))
@@ -165,6 +160,13 @@ func NewCoordinator(
 	c.inFlightMutex = sync.NewCond(&sync.Mutex{})
 	c.inFlightTxns = make(map[uuid.UUID]*transaction.CoordinatorTransaction, c.maxDispatchAhead)
 	c.dispatchQueue = make(chan *transaction.CoordinatorTransaction, maxInflightTransactions)
+	context.AfterFunc(ctx, func() {
+		// the disptach loop may be waiting on this mutex when the context is cancelled- this wakes
+		// it up so it may exit
+		c.inFlightMutex.L.Lock()
+		c.inFlightMutex.Broadcast()
+		c.inFlightMutex.L.Unlock()
+	})
 
 	// Configuration
 	c.requestTimeout = confutil.DurationMin(configuration.RequestTimeout, pldconf.SequencerMinimum.RequestTimeout, *pldconf.SequencerDefaults.RequestTimeout)
@@ -185,7 +187,7 @@ func NewCoordinator(
 	go c.dispatchLoop(ctx)
 
 	// Handle loopback messages to the same node without blocking the event loop
-	transportWriter.StartLoopbackWriter(ctx)
+	transportWriter.StartLoopbackWriter()
 
 	// Trigger the initial transition out of State_Initial
 	c.QueueEvent(ctx, &CoordinatorCreatedEvent{})
@@ -201,33 +203,14 @@ func (c *coordinator) GetCurrentState() State {
 	return c.stateMachineEventLoop.GetCurrentState()
 }
 
-// A coordinator may be required to stop if this node has reached its capacity. The node may still need to
-// have an active sequencer for the contract address since it may be the only originator that can honour dispatch
-// requests from another coordinator, but this node is no longer acting as the coordinator.
-func (c *coordinator) Stop() {
-	log.L(context.Background()).Infof("stopping coordinator for contract %s", c.contractAddress.String())
-
-	// Make Stop() idempotent - check if already stopped
-	if c.stateMachineEventLoop.IsStopped() {
+func (c *coordinator) WaitForDone(ctx context.Context) {
+	select {
+	case <-c.dispatchLoopStopped:
+	case <-ctx.Done():
 		return
 	}
-
-	// Stop the dispatch loop first so it is not blocked sending to the state machine's queue
-	// (dispatch loop uses non-blocking queueing and checks stopDispatchLoop).
-	c.stopDispatchLoop <- struct{}{}
-	c.inFlightMutex.L.Lock()
-	c.inFlightMutex.Signal()
-	c.inFlightMutex.L.Unlock()
-	<-c.dispatchLoopStopped
-
-	// Stop the state machine event loop (will process final CoordinatorClosedEvent)
-	c.stateMachineEventLoop.Stop()
-
-	// Stop the loopback goroutine
-	c.transportWriter.StopLoopbackWriter()
-
-	// Cancel this coordinator's context which will cancel any timers started
-	c.cancelCtx()
+	c.stateMachineEventLoop.WaitForDone(ctx)
+	c.transportWriter.WaitForDone(ctx)
 }
 
 func (c *coordinator) sendHandoverRequest(ctx context.Context) {

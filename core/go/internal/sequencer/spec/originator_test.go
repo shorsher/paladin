@@ -30,16 +30,16 @@ import (
 
 func TestStateMachine_InitializeOK(t *testing.T) {
 	ctx := context.Background()
-	o, _ := originator.NewOriginatorBuilderForTesting(originator.State_Idle).Build(ctx)
-	defer o.Stop()
+	o, _, cleanup := originator.NewOriginatorBuilderForTesting(originator.State_Idle).Build(ctx)
+	defer cleanup()
 	assert.Equal(t, originator.State_Idle, o.GetCurrentState(), "current state is %s", o.GetCurrentState().String())
 }
 
 func TestStateMachine_Idle_ToObserving_OnHeartbeatReceived(t *testing.T) {
 	ctx := context.Background()
 	builder := originator.NewOriginatorBuilderForTesting(originator.State_Idle)
-	o, _ := builder.Build(ctx)
-	defer o.Stop()
+	o, _, cleanup := builder.Build(ctx)
+	defer cleanup()
 	assert.Equal(t, originator.State_Idle, o.GetCurrentState())
 
 	heartbeatEvent := &originator.HeartbeatReceivedEvent{}
@@ -53,8 +53,8 @@ func TestStateMachine_Idle_ToObserving_OnHeartbeatReceived(t *testing.T) {
 func TestStateMachine_Idle_ToSending_OnTransactionCreated(t *testing.T) {
 	ctx := context.Background()
 	builder := originator.NewOriginatorBuilderForTesting(originator.State_Idle)
-	o, mocks := builder.Build(ctx)
-	defer o.Stop()
+	o, mocks, cleanup := builder.Build(ctx)
+	defer cleanup()
 	assert.Equal(t, originator.State_Idle, o.GetCurrentState())
 
 	txn := testutil.NewPrivateTransactionBuilderForTesting().Address(builder.GetContractAddress()).Originator("sender@node1").Build()
@@ -66,8 +66,8 @@ func TestStateMachine_Idle_ToSending_OnTransactionCreated(t *testing.T) {
 func TestStateMachine_Observing_ToSending_OnTransactionCreated(t *testing.T) {
 	ctx := context.Background()
 	builder := originator.NewOriginatorBuilderForTesting(originator.State_Observing)
-	o, mocks := builder.Build(ctx)
-	defer o.Stop()
+	o, mocks, cleanup := builder.Build(ctx)
+	defer cleanup()
 
 	txn := testutil.NewPrivateTransactionBuilderForTesting().Address(builder.GetContractAddress()).Originator("sender@node1").Build()
 	o.QueueEvent(ctx, &originator.TransactionCreatedEvent{Transaction: txn})
@@ -80,10 +80,10 @@ func TestStateMachine_Sending_ToObserving_OnTransactionConfirmed_IfNoTransaction
 
 	soleTransaction := transaction.NewTransactionBuilderForTesting(t, transaction.State_Submitted).Build()
 
-	o, _ := originator.NewOriginatorBuilderForTesting(originator.State_Sending).
+	o, _, cleanup := originator.NewOriginatorBuilderForTesting(originator.State_Sending).
 		Transactions(soleTransaction).
 		Build(ctx)
-	defer o.Stop()
+	defer cleanup()
 
 	o.QueueEvent(ctx, &originator.TransactionConfirmedEvent{
 		From:  soleTransaction.GetSignerAddress(),
@@ -98,10 +98,10 @@ func TestStateMachine_Sending_NoTransition_OnTransactionConfirmed_IfHasTransacti
 	txn1 := transaction.NewTransactionBuilderForTesting(t, transaction.State_Submitted).Build()
 	txn2 := transaction.NewTransactionBuilderForTesting(t, transaction.State_Submitted).Build()
 
-	o, _ := originator.NewOriginatorBuilderForTesting(originator.State_Sending).
+	o, _, cleanup := originator.NewOriginatorBuilderForTesting(originator.State_Sending).
 		Transactions(txn1, txn2).
 		Build(ctx)
-	defer o.Stop()
+	defer cleanup()
 
 	o.QueueEvent(ctx, &originator.TransactionConfirmedEvent{
 		From:  txn1.GetSignerAddress(),
@@ -117,8 +117,8 @@ func TestStateMachine_Sending_NoTransition_OnTransactionConfirmed_IfHasTransacti
 func TestStateMachine_Observing_ToIdle_OnHeartbeatInterval_IfHeartbeatThresholdExpired(t *testing.T) {
 	ctx := context.Background()
 	builder := originator.NewOriginatorBuilderForTesting(originator.State_Observing)
-	o, mocks := builder.Build(ctx)
-	defer o.Stop()
+	o, mocks, cleanup := builder.Build(ctx)
+	defer cleanup()
 
 	heartbeatEvent := &originator.HeartbeatReceivedEvent{}
 	heartbeatEvent.From = "coordinator"
@@ -138,8 +138,8 @@ func TestStateMachine_Observing_ToIdle_OnHeartbeatInterval_IfHeartbeatThresholdE
 func TestStateMachine_Observing_NoTransition_OnHeartbeatInterval_IfHeartbeatThresholdNotExpired(t *testing.T) {
 	ctx := context.Background()
 	builder := originator.NewOriginatorBuilderForTesting(originator.State_Observing)
-	o, mocks := builder.Build(ctx)
-	defer o.Stop()
+	o, mocks, cleanup := builder.Build(ctx)
+	defer cleanup()
 
 	heartbeatEvent := &originator.HeartbeatReceivedEvent{}
 	heartbeatEvent.From = "coordinator"
@@ -164,8 +164,8 @@ func TestStateMachine_Sending_DoDelegateTransactions_OnHeartbeatReceived_IfHasDr
 	coordinatorLocator := "coordinator@node1"
 
 	builder := originator.NewOriginatorBuilderForTesting(originator.State_Sending)
-	o, mocks := builder.Build(ctx)
-	defer o.Stop()
+	o, mocks, cleanup := builder.Build(ctx)
+	defer cleanup()
 	txn1 := testutil.NewPrivateTransactionBuilderForTesting().Address(builder.GetContractAddress()).Originator("sender@node1").Build()
 	o.QueueEvent(ctx, &originator.TransactionCreatedEvent{Transaction: txn1})
 	assert.Eventually(t, func() bool { return mocks.SentMessageRecorder.HasSentDelegationRequest() }, 100*time.Millisecond, 1*time.Millisecond, "Delegation request should be sent")
