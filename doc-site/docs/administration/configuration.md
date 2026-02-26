@@ -786,7 +786,7 @@
 |-----|-------------|------|---------|
 | blockHeightTolerance | Tolerance for block height differences | `uint64` | `5` |
 | blockRange | Block range size for sequencer operations | `uint64` | `100` |
-| closingGracePeriod | Grace period for closing operations | `int` | `4` |
+| closingGracePeriod | Grace period for closing operations | `int` | `1` |
 | confirmedLockRetentionGracePeriod | Heartbeat grace period before clearing confirmed transaction state locks from coordinator snapshots | `int` | `1` |
 | coordinatorEventQueueSize | Queue size for coordinator state machine events | `int` | `100` |
 | coordinatorPriorityEventQueueSize | Queue size for coordinator priority events | `int` | `500` |

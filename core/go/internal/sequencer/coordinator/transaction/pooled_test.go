@@ -17,7 +17,6 @@ package transaction
 import (
 	"context"
 	"testing"
-	"time"
 
 	"github.com/LFDT-Paladin/paladin/core/internal/components"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/metrics"
@@ -27,22 +26,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
-
-func Test_action_recordRevert_Success(t *testing.T) {
-	ctx := context.Background()
-	txn, _ := newTransactionForUnitTesting(t, nil)
-
-	// Initially revertTime should be nil
-	assert.Nil(t, txn.revertTime)
-
-	// Call action_recordRevert
-	err := action_recordRevert(ctx, txn, nil)
-	require.NoError(t, err)
-
-	// Verify revertTime is set
-	assert.NotNil(t, txn.revertTime)
-	assert.WithinDuration(t, time.Now(), txn.revertTime.Time(), 1*time.Second)
-}
 
 func Test_action_onTransitionToPooled_Success(t *testing.T) {
 	ctx := context.Background()
@@ -356,9 +339,6 @@ func Test_action_onTransitionToPooled_WithDependents(t *testing.T) {
 
 	// Set up the main transaction to have the dependent as a PrereqOf
 	mainTxn.dependencies.PrereqOf = []uuid.UUID{dependentID}
-
-	// Initially revertTime should be nil
-	assert.Nil(t, mainTxn.revertTime)
 
 	// Call action_onTransitionToPooled - should re-pool dependents
 	err := action_onTransitionToPooled(ctx, mainTxn, nil)

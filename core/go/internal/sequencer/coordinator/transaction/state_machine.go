@@ -102,6 +102,18 @@ var stateDefinitionsMap = StateDefinitions{
 					},
 				},
 			},
+			// We handle a confirmed event in every state so that work can stop if we've been confirmed on the base ledger.
+			// At initial state if we've reverted (e.g. a submission from a previous coordinator),
+			// we don't do anything else other than tell the originator.
+			Event_Confirmed: {
+				Actions: []ActionRule{{Action: action_Confirmed}},
+				Transitions: []Transition{
+					{
+						If: statemachine.Not(guard_HasRevertReason),
+						To: State_Confirmed,
+					},
+				},
+			},
 		},
 	},
 	State_PreAssembly_Blocked: {
@@ -124,6 +136,18 @@ var stateDefinitionsMap = StateDefinitions{
 					If: statemachine.Not(guard_HasUnassembledDependencies),
 				}},
 			},
+			// We handle a confirmed event in every state so that work can stop if we've been confirmed on the base ledger.
+			// In this state if we've reverted we've likely rolled back because a dependency reverted earlier,
+			// so we don't do anything else other than tell the originator.
+			Event_Confirmed: {
+				Actions: []ActionRule{{Action: action_Confirmed}},
+				Transitions: []Transition{
+					{
+						If: statemachine.Not(guard_HasRevertReason),
+						To: State_Confirmed,
+					},
+				},
+			},
 		},
 	},
 	State_Pooled: {
@@ -135,11 +159,22 @@ var stateDefinitionsMap = StateDefinitions{
 						To: State_Assembling,
 					}},
 			},
-
 			Event_DependencyReverted: {
 				Transitions: []Transition{{
 					To: State_PreAssembly_Blocked,
 				}},
+			},
+			// We handle a confirmed event in every state so that work can stop if we've been confirmed on the base ledger.
+			// In this state if we've reverted we've likely rolled back because a dependency reverted earlier,
+			// so we don't do anything else other than tell the originator.
+			Event_Confirmed: {
+				Actions: []ActionRule{{Action: action_Confirmed}},
+				Transitions: []Transition{
+					{
+						If: statemachine.Not(guard_HasRevertReason),
+						To: State_Confirmed,
+					},
+				},
 			},
 		},
 	},
@@ -196,6 +231,18 @@ var stateDefinitionsMap = StateDefinitions{
 					To:     State_Final,
 					Action: action_FinalizeAsUnknownByOriginator,
 				}},
+			},
+			// We handle a confirmed event in every state so that work can stop if we've been confirmed on the base ledger.
+			// In this state if we've reverted we've likely rolled back because a dependency reverted earlier,
+			// so we don't do anything else other than tell the originator.
+			Event_Confirmed: {
+				Actions: []ActionRule{{Action: action_Confirmed}},
+				Transitions: []Transition{
+					{
+						If: statemachine.Not(guard_HasRevertReason),
+						To: State_Confirmed,
+					},
+				},
 			},
 		},
 	},
@@ -254,6 +301,18 @@ var stateDefinitionsMap = StateDefinitions{
 					To: State_Pooled,
 				}},
 			},
+			// We handle a confirmed event in every state so that work can stop if we've been confirmed on the base ledger.
+			// In this state if we've reverted we've likely rolled back because a dependency reverted earlier,
+			// so we don't do anything else other than tell the originator.
+			Event_Confirmed: {
+				Actions: []ActionRule{{Action: action_Confirmed}},
+				Transitions: []Transition{
+					{
+						If: statemachine.Not(guard_HasRevertReason),
+						To: State_Confirmed,
+					},
+				},
+			},
 		},
 	},
 	State_Blocked: {
@@ -273,6 +332,18 @@ var stateDefinitionsMap = StateDefinitions{
 				Transitions: []Transition{{
 					To: State_Pooled,
 				}},
+			},
+			// We handle a confirmed event in every state so that work can stop if we've been confirmed on the base ledger.
+			// In this state if we've reverted we've likely rolled back because a dependency reverted earlier,
+			// so we don't do anything else other than tell the originator.
+			Event_Confirmed: {
+				Actions: []ActionRule{{Action: action_Confirmed}},
+				Transitions: []Transition{
+					{
+						If: statemachine.Not(guard_HasRevertReason),
+						To: State_Confirmed,
+					},
+				},
 			},
 		},
 	},
@@ -315,6 +386,18 @@ var stateDefinitionsMap = StateDefinitions{
 					To: State_Pooled,
 				}},
 			},
+			// We handle a confirmed event in every state so that work can stop if we've been confirmed on the base ledger.
+			// In this state if we've reverted we've likely rolled back because a dependency reverted earlier,
+			// so we don't do anything else other than tell the originator.
+			Event_Confirmed: {
+				Actions: []ActionRule{{Action: action_Confirmed}},
+				Transitions: []Transition{
+					{
+						If: statemachine.Not(guard_HasRevertReason),
+						To: State_Confirmed,
+					},
+				},
+			},
 		},
 	},
 	State_Ready_For_Dispatch: {
@@ -330,6 +413,18 @@ var stateDefinitionsMap = StateDefinitions{
 				Transitions: []Transition{{
 					To: State_Pooled,
 				}},
+			},
+			// We handle a confirmed event in every state so that work can stop if we've been confirmed on the base ledger.
+			// In this state if we've reverted we've likely rolled back because a dependency reverted earlier,
+			// so we don't do anything else other than tell the originator.
+			Event_Confirmed: {
+				Actions: []ActionRule{{Action: action_Confirmed}},
+				Transitions: []Transition{
+					{
+						If: statemachine.Not(guard_HasRevertReason),
+						To: State_Confirmed,
+					},
+				},
 			},
 		},
 	},
@@ -352,8 +447,7 @@ var stateDefinitionsMap = StateDefinitions{
 						To: State_Confirmed,
 					},
 					{
-						Action: action_recordRevert,
-						If:     guard_HasRevertReason,
+						If: guard_HasRevertReason,
 						To:     State_Pooled,
 					},
 				},

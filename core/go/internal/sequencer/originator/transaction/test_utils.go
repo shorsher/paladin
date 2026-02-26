@@ -46,10 +46,10 @@ func NewSentMessageRecorder() *SentMessageRecorder {
 	return &SentMessageRecorder{}
 }
 
-func (r *SentMessageRecorder) StartLoopbackWriter(ctx context.Context) {
+func (r *SentMessageRecorder) StartLoopbackWriter() {
 }
 
-func (r *SentMessageRecorder) StopLoopbackWriter() {
+func (r *SentMessageRecorder) WaitForDone(ctx context.Context) {
 }
 
 func (r *SentMessageRecorder) SendPreDispatchResponse(ctx context.Context, transactionOriginator string, idempotencyKey uuid.UUID, transactionSpecification *prototk.TransactionSpecification) error {
@@ -228,6 +228,15 @@ func (b *TransactionBuilderForTesting) GetLatestSubmissionHash() pldtypes.Bytes3
 		b.latestSubmissionHash = ptrTo(pldtypes.RandBytes32())
 	}
 	return *b.latestSubmissionHash
+}
+
+func (b *TransactionBuilderForTesting) QueueEventsTo(emit func(ctx context.Context, event common.Event)) *TransactionBuilderForTesting {
+	b.queueEventForOriginator = emit
+	return b
+}
+
+func (b *TransactionBuilderForTesting) GetBuiltTransaction() *OriginatorTransaction {
+	return b.txn
 }
 
 type TransactionDependencyFakes struct {
