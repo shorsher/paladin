@@ -459,17 +459,15 @@ func (sMgr *sequencerManager) stopLowestPrioritySequencer(ctx context.Context) {
 		// If any sequencers are already closing we can wait for them to close instead of stopping a different one
 		for _, sequencer := range sMgr.sequencers {
 			coordinatorState := sequencer.coordinator.GetCurrentState()
-			if coordinatorState == coordinator.State_Flush ||
-				coordinatorState == coordinator.State_Closing {
-
+			switch coordinatorState {
+			case coordinator.State_Flush, coordinator.State_Closing:
 				// To avoid blocking the start of new sequencer that has caused us to purge the lowest priority one,
 				// we don't wait for the closing ones to complete. The aim is to allow the node to remain stable while
 				// still being responsive to new contract activity so a closing sequencer is allowed to page out in its
 				// own time.
 				log.L(log.WithLogField(ctx, common.SEQUENCER_LOG_CATEGORY_FIELD, common.CATEGORY_LIFECYCLE)).Debugf("coordinator %s is closing, waiting for it to close", sequencer.contractAddress)
 				return
-			} else if coordinatorState == coordinator.State_Idle ||
-				coordinatorState == coordinator.State_Observing {
+			case coordinator.State_Idle, coordinator.State_Observing:
 				originatorState := sequencer.originator.GetCurrentState()
 				if originatorState == originator.State_Idle ||
 					originatorState == originator.State_Observing {
@@ -499,50 +497,50 @@ func (sMgr *sequencerManager) stopLowestPrioritySequencer(ctx context.Context) {
 	}
 }
 
-func (sMgr *sequencerManager) updateActiveCoordinators(ctx context.Context) {
-	log.L(log.WithLogField(ctx, common.SEQUENCER_LOG_CATEGORY_FIELD, common.CATEGORY_LIFECYCLE)).Debugf("checking if max concurrent coordinators limit reached")
+// func (sMgr *sequencerManager) updateActiveCoordinators(ctx context.Context) {
+// 	log.L(log.WithLogField(ctx, common.SEQUENCER_LOG_CATEGORY_FIELD, common.CATEGORY_LIFECYCLE)).Debugf("checking if max concurrent coordinators limit reached")
 
-	readlock := true
-	sMgr.sequencersLock.RLock()
-	defer func() {
-		if readlock {
-			sMgr.sequencersLock.RUnlock()
-		}
-	}()
+// 	readlock := true
+// 	sMgr.sequencersLock.RLock()
+// 	defer func() {
+// 		if readlock {
+// 			sMgr.sequencersLock.RUnlock()
+// 		}
+// 	}()
 
-	activeCoordinators := 0
-	// If any sequencers are already closing we can wait for them to close instead of stopping a different one
-	for _, sequencer := range sMgr.sequencers {
-		log.L(log.WithLogField(ctx, common.SEQUENCER_LOG_CATEGORY_FIELD, common.CATEGORY_STATE)).Debugf("coord    | %s   | %s", sequencer.contractAddress[0:8], sequencer.coordinator.GetCurrentState())
-		if sequencer.coordinator.GetCurrentState() == coordinator.State_Active {
-			activeCoordinators++
-		}
-	}
+// 	activeCoordinators := 0
+// 	// If any sequencers are already closing we can wait for them to close instead of stopping a different one
+// 	for _, sequencer := range sMgr.sequencers {
+// 		log.L(log.WithLogField(ctx, common.SEQUENCER_LOG_CATEGORY_FIELD, common.CATEGORY_STATE)).Debugf("coord    | %s   | %s", sequencer.contractAddress[0:8], sequencer.coordinator.GetCurrentState())
+// 		if sequencer.coordinator.GetCurrentState() == coordinator.State_Active {
+// 			activeCoordinators++
+// 		}
+// 	}
 
-	sMgr.metrics.SetActiveCoordinators(activeCoordinators)
+// 	sMgr.metrics.SetActiveCoordinators(activeCoordinators)
 
-	if activeCoordinators >= sMgr.targetActiveCoordinatorsLimit {
-		log.L(log.WithLogField(ctx, common.SEQUENCER_LOG_CATEGORY_FIELD, common.CATEGORY_LIFECYCLE)).Debugf("%d coordinators currently active, max concurrent coordinators reached, asking the lowest priority coordinator to hand over to another node", activeCoordinators)
-		// Order existing sequencers by LRU time
-		sequencers := make([]*sequencer, 0)
-		for _, sequencer := range sMgr.sequencers {
-			sequencers = append(sequencers, sequencer)
-		}
-		sort.Slice(sequencers, func(i, j int) bool {
-			return sequencers[i].lastTXTime.Before(sequencers[j].lastTXTime)
-		})
+// 	if activeCoordinators >= sMgr.targetActiveCoordinatorsLimit {
+// 		log.L(log.WithLogField(ctx, common.SEQUENCER_LOG_CATEGORY_FIELD, common.CATEGORY_LIFECYCLE)).Debugf("%d coordinators currently active, max concurrent coordinators reached, asking the lowest priority coordinator to hand over to another node", activeCoordinators)
+// 		// Order existing sequencers by LRU time
+// 		sequencers := make([]*sequencer, 0)
+// 		for _, sequencer := range sMgr.sequencers {
+// 			sequencers = append(sequencers, sequencer)
+// 		}
+// 		sort.Slice(sequencers, func(i, j int) bool {
+// 			return sequencers[i].lastTXTime.Before(sequencers[j].lastTXTime)
+// 		})
 
-		// swap the read lock for a write lock
-		sMgr.sequencersLock.RUnlock()
-		readlock = false
-		sMgr.sequencersLock.Lock()
-		defer sMgr.sequencersLock.Unlock()
+// 		// swap the read lock for a write lock
+// 		sMgr.sequencersLock.RUnlock()
+// 		readlock = false
+// 		sMgr.sequencersLock.Lock()
+// 		defer sMgr.sequencersLock.Unlock()
 
-		// Stop the lowest priority coordinator by emitting an event asking it to handover to another coordinator
-		log.L(log.WithLogField(ctx, common.SEQUENCER_LOG_CATEGORY_FIELD, common.CATEGORY_LIFECYCLE)).Debugf("stopping coordinator %s", sequencers[0].contractAddress)
-		sequencers[0].shutdown(ctx)
-		delete(sMgr.sequencers, sequencers[0].contractAddress)
-	} else {
-		log.L(log.WithLogField(ctx, common.SEQUENCER_LOG_CATEGORY_FIELD, common.CATEGORY_LIFECYCLE)).Debugf("%d coordinators within max coordinator limit %d", activeCoordinators, sMgr.targetActiveCoordinatorsLimit)
-	}
-}
+// 		// Stop the lowest priority coordinator by emitting an event asking it to handover to another coordinator
+// 		log.L(log.WithLogField(ctx, common.SEQUENCER_LOG_CATEGORY_FIELD, common.CATEGORY_LIFECYCLE)).Debugf("stopping coordinator %s", sequencers[0].contractAddress)
+// 		sequencers[0].shutdown(ctx)
+// 		delete(sMgr.sequencers, sequencers[0].contractAddress)
+// 	} else {
+// 		log.L(log.WithLogField(ctx, common.SEQUENCER_LOG_CATEGORY_FIELD, common.CATEGORY_LIFECYCLE)).Debugf("%d coordinators within max coordinator limit %d", activeCoordinators, sMgr.targetActiveCoordinatorsLimit)
+// 	}
+// }

@@ -635,97 +635,97 @@ func TestSequencerManager_stopLowestPrioritySequencer_LowestPriority(t *testing.
 	assert.Contains(t, sm.sequencers, contractAddr2.String())
 }
 
-func TestSequencerManager_updateActiveCoordinators_NoActiveCoordinators(t *testing.T) {
-	ctx := context.Background()
-	contractAddr := pldtypes.RandAddress()
-	mocks := newSequencerLifecycleTestMocks(t)
-	sm := newSequencerManagerForTesting(t, mocks)
+// func TestSequencerManager_updateActiveCoordinators_NoActiveCoordinators(t *testing.T) {
+// 	ctx := context.Background()
+// 	contractAddr := pldtypes.RandAddress()
+// 	mocks := newSequencerLifecycleTestMocks(t)
+// 	sm := newSequencerManagerForTesting(t, mocks)
 
-	// Create a sequencer with inactive coordinator
-	seq := newSequencerForTesting(contractAddr, mocks)
-	mocks.coordinator.EXPECT().GetCurrentState().Return(coordinator.State_Idle)
-	mocks.metrics.EXPECT().SetActiveCoordinators(0).Once()
+// 	// Create a sequencer with inactive coordinator
+// 	seq := newSequencerForTesting(contractAddr, mocks)
+// 	mocks.coordinator.EXPECT().GetCurrentState().Return(coordinator.State_Idle)
+// 	mocks.metrics.EXPECT().SetActiveCoordinators(0).Once()
 
-	sm.sequencersLock.Lock()
-	sm.sequencers[contractAddr.String()] = seq
-	sm.sequencersLock.Unlock()
+// 	sm.sequencersLock.Lock()
+// 	sm.sequencers[contractAddr.String()] = seq
+// 	sm.sequencersLock.Unlock()
 
-	// Call updateActiveCoordinators
-	sm.updateActiveCoordinators(ctx)
+// 	// Call updateActiveCoordinators
+// 	sm.updateActiveCoordinators(ctx)
 
-	mocks.metrics.AssertExpectations(t)
-}
+// 	mocks.metrics.AssertExpectations(t)
+// }
 
-func TestSequencerManager_updateActiveCoordinators_ActiveCoordinators(t *testing.T) {
-	ctx := context.Background()
-	contractAddr := pldtypes.RandAddress()
-	mocks := newSequencerLifecycleTestMocks(t)
-	sm := newSequencerManagerForTesting(t, mocks)
+// func TestSequencerManager_updateActiveCoordinators_ActiveCoordinators(t *testing.T) {
+// 	ctx := context.Background()
+// 	contractAddr := pldtypes.RandAddress()
+// 	mocks := newSequencerLifecycleTestMocks(t)
+// 	sm := newSequencerManagerForTesting(t, mocks)
 
-	// Create a sequencer with active coordinator
-	seq := newSequencerForTesting(contractAddr, mocks)
-	mocks.coordinator.EXPECT().GetCurrentState().Return(coordinator.State_Active)
-	mocks.metrics.EXPECT().SetActiveCoordinators(1).Once()
+// 	// Create a sequencer with active coordinator
+// 	seq := newSequencerForTesting(contractAddr, mocks)
+// 	mocks.coordinator.EXPECT().GetCurrentState().Return(coordinator.State_Active)
+// 	mocks.metrics.EXPECT().SetActiveCoordinators(1).Once()
 
-	sm.sequencersLock.Lock()
-	sm.sequencers[contractAddr.String()] = seq
-	sm.sequencersLock.Unlock()
+// 	sm.sequencersLock.Lock()
+// 	sm.sequencers[contractAddr.String()] = seq
+// 	sm.sequencersLock.Unlock()
 
-	// Call updateActiveCoordinators
-	sm.updateActiveCoordinators(ctx)
+// 	// Call updateActiveCoordinators
+// 	sm.updateActiveCoordinators(ctx)
 
-	mocks.metrics.AssertExpectations(t)
-}
+// 	mocks.metrics.AssertExpectations(t)
+// }
 
-func TestSequencerManager_updateActiveCoordinators_ExceedsLimit(t *testing.T) {
-	ctx := context.Background()
-	contractAddr1 := pldtypes.RandAddress()
-	contractAddr2 := pldtypes.RandAddress()
-	contractAddr3 := pldtypes.RandAddress()
-	mocks1 := newSequencerLifecycleTestMocks(t)
-	mocks2 := newSequencerLifecycleTestMocks(t)
-	mocks3 := newSequencerLifecycleTestMocks(t)
-	sm := newSequencerManagerForTesting(t, mocks1)
+// func TestSequencerManager_updateActiveCoordinators_ExceedsLimit(t *testing.T) {
+// 	ctx := context.Background()
+// 	contractAddr1 := pldtypes.RandAddress()
+// 	contractAddr2 := pldtypes.RandAddress()
+// 	contractAddr3 := pldtypes.RandAddress()
+// 	mocks1 := newSequencerLifecycleTestMocks(t)
+// 	mocks2 := newSequencerLifecycleTestMocks(t)
+// 	mocks3 := newSequencerLifecycleTestMocks(t)
+// 	sm := newSequencerManagerForTesting(t, mocks1)
 
-	// Set limit to 2
-	sm.targetActiveCoordinatorsLimit = 2
+// 	// Set limit to 2
+// 	sm.targetActiveCoordinatorsLimit = 2
 
-	// Create three sequencers with active coordinators
-	seq1 := newSequencerForTesting(contractAddr1, mocks1)
-	seq1.lastTXTime = time.Now().Add(-3 * time.Hour) // Oldest
+// 	// Create three sequencers with active coordinators
+// 	seq1 := newSequencerForTesting(contractAddr1, mocks1)
+// 	seq1.lastTXTime = time.Now().Add(-3 * time.Hour) // Oldest
 
-	seq2 := newSequencerForTesting(contractAddr2, mocks2)
-	seq2.lastTXTime = time.Now().Add(-2 * time.Hour) // Middle
+// 	seq2 := newSequencerForTesting(contractAddr2, mocks2)
+// 	seq2.lastTXTime = time.Now().Add(-2 * time.Hour) // Middle
 
-	seq3 := newSequencerForTesting(contractAddr3, mocks3)
-	seq3.lastTXTime = time.Now().Add(-1 * time.Hour) // Newest
+// 	seq3 := newSequencerForTesting(contractAddr3, mocks3)
+// 	seq3.lastTXTime = time.Now().Add(-1 * time.Hour) // Newest
 
-	// Setup expectations - all are active, seq1 should be stopped
-	mocks1.coordinator.EXPECT().GetCurrentState().Return(coordinator.State_Active)
-	mocks2.coordinator.EXPECT().GetCurrentState().Return(coordinator.State_Active)
-	mocks3.coordinator.EXPECT().GetCurrentState().Return(coordinator.State_Active)
-	mocks1.coordinator.EXPECT().WaitForDone(mock.Anything).Once()
-	mocks1.originator.EXPECT().WaitForDone(mock.Anything).Once()
-	mocks1.metrics.EXPECT().SetActiveCoordinators(3).Once()
+// 	// Setup expectations - all are active, seq1 should be stopped
+// 	mocks1.coordinator.EXPECT().GetCurrentState().Return(coordinator.State_Active)
+// 	mocks2.coordinator.EXPECT().GetCurrentState().Return(coordinator.State_Active)
+// 	mocks3.coordinator.EXPECT().GetCurrentState().Return(coordinator.State_Active)
+// 	mocks1.coordinator.EXPECT().WaitForDone(mock.Anything).Once()
+// 	mocks1.originator.EXPECT().WaitForDone(mock.Anything).Once()
+// 	mocks1.metrics.EXPECT().SetActiveCoordinators(3).Once()
 
-	sm.sequencersLock.Lock()
-	sm.sequencers[contractAddr1.String()] = seq1
-	sm.sequencers[contractAddr2.String()] = seq2
-	sm.sequencers[contractAddr3.String()] = seq3
-	sm.sequencersLock.Unlock()
+// 	sm.sequencersLock.Lock()
+// 	sm.sequencers[contractAddr1.String()] = seq1
+// 	sm.sequencers[contractAddr2.String()] = seq2
+// 	sm.sequencers[contractAddr3.String()] = seq3
+// 	sm.sequencersLock.Unlock()
 
-	// Call updateActiveCoordinators
-	sm.updateActiveCoordinators(ctx)
+// 	// Call updateActiveCoordinators
+// 	sm.updateActiveCoordinators(ctx)
 
-	// Verify only seq1 was removed (lowest priority)
-	sm.sequencersLock.RLock()
-	defer sm.sequencersLock.RUnlock()
-	assert.NotContains(t, sm.sequencers, contractAddr1.String())
-	assert.Contains(t, sm.sequencers, contractAddr2.String())
-	assert.Contains(t, sm.sequencers, contractAddr3.String())
+// 	// Verify only seq1 was removed (lowest priority)
+// 	sm.sequencersLock.RLock()
+// 	defer sm.sequencersLock.RUnlock()
+// 	assert.NotContains(t, sm.sequencers, contractAddr1.String())
+// 	assert.Contains(t, sm.sequencers, contractAddr2.String())
+// 	assert.Contains(t, sm.sequencers, contractAddr3.String())
 
-	mocks1.metrics.AssertExpectations(t)
-}
+// 	mocks1.metrics.AssertExpectations(t)
+// }
 
 func TestSequencerManager_getOriginatorNodesFromTx_InvalidVerifierLookup(t *testing.T) {
 	ctx := context.Background()
