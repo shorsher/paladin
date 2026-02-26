@@ -68,6 +68,7 @@ func (c *coordinator) addToDelegatedTransactions(ctx context.Context, originator
 			originator,
 			txn,
 			hasChainedTransaction,
+			c.signingIdentity,
 			c.transportWriter,
 			c.clock,
 			c.queueEventInternal,

@@ -216,6 +216,7 @@ type TransactionBuilderForTesting struct {
 	privateTransactionBuilder          *testutil.PrivateTransactionBuilderForTesting
 	originator                         *identityForTesting
 	domainSigningIdentity              string
+	coordinatorSigningIdentity         string
 	dispatchConfirmed                  bool
 	signerAddress                      *pldtypes.EthAddress
 	latestSubmissionHash               *pldtypes.Bytes32
@@ -245,6 +246,7 @@ func NewTransactionBuilderForTesting(t *testing.T, state State) *TransactionBuil
 			keyHandle:       originatorName + "_KeyHandle",
 		},
 		domainSigningIdentity:     "",
+		coordinatorSigningIdentity: "coordinator-signer",
 		dispatchConfirmed:         false,
 		signerAddress:             nil,
 		latestSubmissionHash:      nil,
@@ -393,6 +395,7 @@ func (b *TransactionBuilderForTesting) Build() *CoordinatorTransaction {
 		b.originator.identityLocator,
 		privateTransaction,
 		false, // hasChainedTransaction
+		b.coordinatorSigningIdentity,
 		b.sentMessageRecorder,
 		b.fakeClock,
 		func(ctx context.Context, event common.Event) {
@@ -447,9 +450,6 @@ func (b *TransactionBuilderForTesting) Build() *CoordinatorTransaction {
 	b.txn.latestSubmissionHash = b.latestSubmissionHash
 	b.txn.nonce = b.nonce
 	b.txn.stateMachine.CurrentState = b.state
-	if b.domainSigningIdentity == "" {
-		b.txn.dynamicSigningIdentity = false
-	}
 	return b.txn
 
 }

@@ -42,6 +42,7 @@ func TestStateMachine_InitializeOK(t *testing.T) {
 			ID: uuid.New(),
 		},
 		false,
+		"coordinator-signer",
 		transportWriter,
 		clock,
 		func(ctx context.Context, event common.Event) {

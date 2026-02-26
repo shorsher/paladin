@@ -306,7 +306,6 @@ func Test_guard_HasDependenciesNotReady(t *testing.T) {
 		NumberOfRequiredEndorsers(3).
 		NumberOfEndorsements(3)
 	dep3 := dep3Builder.Build()
-	dep3.dynamicSigningIdentity = false
 
 	txn3Builder := NewTransactionBuilderForTesting(t, State_Assembling).
 		Grapher(grapher).

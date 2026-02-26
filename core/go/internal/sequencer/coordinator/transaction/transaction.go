@@ -40,16 +40,16 @@ type CoordinatorTransaction struct {
 
 	stateMachine *StateMachine
 
-	originator             string // The fully qualified identity of the originator e.g. "member1@node1"
-	originatorNode         string // The node the originator is running on e.g. "node1"
-	signerAddress          *pldtypes.EthAddress
-	domainSigningIdentity  string                                    // Used if an endorsement constraint doesn't stipulate a specific endorser must submit
-	submitterSelection     prototk.ContractConfig_SubmitterSelection // The selection of submitter for the transaction
-	dynamicSigningIdentity bool                                      // True if the signing identity isn't fixed by domain config or endorser constraints
-	latestSubmissionHash   *pldtypes.Bytes32
-	nonce                  *uint64
-	revertReason           pldtypes.HexBytes
-	revertTime             *pldtypes.Timestamp
+	originator                 string // The fully qualified identity of the originator e.g. "member1@node1"
+	originatorNode             string // The node the originator is running on e.g. "node1"
+	signerAddress              *pldtypes.EthAddress
+	domainSigningIdentity      string // Used if an endorsement constraint doesn't stipulate a specific endorser must submit
+	coordinatorSigningIdentity string
+	submitterSelection         prototk.ContractConfig_SubmitterSelection // The selection of submitter for the transaction
+	latestSubmissionHash       *pldtypes.Bytes32
+	nonce                      *uint64
+	revertReason               pldtypes.HexBytes
+	revertTime                 *pldtypes.Timestamp
 
 	//TODO move the fields that are really just fine grained state info.  Move them into the stateMachine struct ( consider separate structs for each concrete state)
 	heartbeatIntervalsSinceStateChange int
@@ -87,6 +87,7 @@ func NewTransaction(
 	originator string,
 	pt *components.PrivateTransaction,
 	hasChainedTransaction bool,
+	coordinatorSigningIdentity string,
 	transportWriter transport.TransportWriter,
 	clock common.Clock,
 	queueEventForCoordinator func(context.Context, common.Event),
@@ -106,10 +107,7 @@ func NewTransaction(
 		log.L(ctx).Errorf("error validating originator %s: %s", originator, err)
 		return nil, err
 	}
-	// Assume no nonce protection for dispatch ordering until we determine otherwise; however, if the domain
-	// has been configured with a fixed signing identity, we can assume nonce protection is provided by the
-	// fixed signing identity.
-	dynamicSigningIdentity := domainSigningIdentity == ""
+
 	txn := &CoordinatorTransaction{
 		originator:                        originator,
 		originatorNode:                    originatorNode,
@@ -120,7 +118,7 @@ func NewTransaction(
 		engineIntegration:                 engineIntegration,
 		syncPoints:                        syncPoints,
 		domainSigningIdentity:             domainSigningIdentity,
-		dynamicSigningIdentity:            dynamicSigningIdentity,
+		coordinatorSigningIdentity:        coordinatorSigningIdentity,
 		requestTimeout:                    requestTimeout,
 		stateTimeout:                      stateTimeout,
 		finalizingGracePeriod:             finalizingGracePeriod,

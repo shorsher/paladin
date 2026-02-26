@@ -17,6 +17,7 @@ package coordinator
 
 import (
 	"context"
+	"fmt"
 	"slices"
 	"sync"
 
@@ -62,6 +63,8 @@ type coordinator struct {
 
 	ctx       context.Context
 	cancelCtx context.CancelFunc
+
+	signingIdentity string
 
 	/* State machine - using generic statemachine.StateMachineEventLoop */
 	stateMachineEventLoop                      *statemachine.StateMachineEventLoop[State, *coordinator]
@@ -156,6 +159,8 @@ func NewCoordinator(
 	for _, node := range initialOriginatorNodePool {
 		c.updateOriginatorNodePool(node)
 	}
+
+	c.signingIdentity = fmt.Sprintf("domains.%s.submit.%s", c.contractAddress.String(), uuid.New())
 
 	coordinatorEventQueueSize := confutil.IntMin(configuration.CoordinatorEventQueueSize, pldconf.SequencerMinimum.CoordinatorEventQueueSize, *pldconf.SequencerDefaults.CoordinatorEventQueueSize)
 	coordinatorPriorityEventQueueSize := confutil.IntMin(configuration.CoordinatorPriorityEventQueueSize, pldconf.SequencerMinimum.CoordinatorPriorityEventQueueSize, *pldconf.SequencerDefaults.CoordinatorPriorityEventQueueSize)

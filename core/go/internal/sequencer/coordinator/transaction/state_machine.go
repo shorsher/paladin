@@ -154,7 +154,7 @@ var stateDefinitionsMap = StateDefinitions{
 					},
 					{
 						Action: action_UpdateSigningIdentity,
-						If:     statemachine.And(guard_AttestationPlanFulfilled, guard_HasDynamicSigningIdentity),
+						If:     statemachine.And(guard_AttestationPlanFulfilled, statemachine.Not(guard_HasSigner)),
 					},
 				},
 				Transitions: []Transition{
@@ -213,7 +213,7 @@ var stateDefinitionsMap = StateDefinitions{
 					},
 					{
 						Action: action_UpdateSigningIdentity,
-						If:     statemachine.And(guard_AttestationPlanFulfilled, guard_HasDynamicSigningIdentity),
+						If:     statemachine.And(guard_AttestationPlanFulfilled, statemachine.Not(guard_HasSigner)),
 					}},
 				Transitions: []Transition{
 					{
@@ -262,7 +262,7 @@ var stateDefinitionsMap = StateDefinitions{
 				Actions: []ActionRule{
 					{
 						Action: action_UpdateSigningIdentity,
-						If:     statemachine.And(guard_AttestationPlanFulfilled, guard_HasDynamicSigningIdentity),
+						If:     statemachine.And(guard_AttestationPlanFulfilled, statemachine.Not(guard_HasSigner)),
 					}},
 				Transitions: []Transition{{
 					To: State_Confirming_Dispatchable,

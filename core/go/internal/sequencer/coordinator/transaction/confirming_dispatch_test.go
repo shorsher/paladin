@@ -217,6 +217,7 @@ func Test_sendPreDispatchRequest_RequestTimeoutSchedulesTimer_QueueEventCalled(t
 			},
 		},
 		false,
+		"coordinator-signer",
 		mockTransportWriter,
 		realClock,
 		func(ctx context.Context, event common.Event) {},

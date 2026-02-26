@@ -116,6 +116,7 @@ func Test_sendEndorsementRequests_WhenPendingNil_SchedulesTimerAndQueueEventOnFi
 			PostAssembly: nil, // no unfulfilled requirements so we only hit the nil branch and schedule timer
 		},
 		false,
+		"coordinator-signer",
 		mockTransportWriter,
 		realClock,
 		func(ctx context.Context, event common.Event) {},
