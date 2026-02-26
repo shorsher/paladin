@@ -53,7 +53,7 @@ func (t *CoordinatorTransaction) updateSigningIdentity() {
 func (t *CoordinatorTransaction) dependentsMustWait() bool {
 	// The return value of this function is based on whether it has progress far enough that it is safe for its dependents to be dispatched.
 	log.L(context.Background()).Tracef("Checking if TX %s has progressed to dispatch state and unblocks it dependents", t.pt.ID.String())
-	// afe to dispatch as soon as the dependency TX is dispatched
+	// Safe to dispatch as soon as the dependency TX is dispatched
 	notReady := t.stateMachine.CurrentState != State_Confirmed &&
 		t.stateMachine.CurrentState != State_Dispatched &&
 		t.stateMachine.CurrentState != State_Ready_For_Dispatch
