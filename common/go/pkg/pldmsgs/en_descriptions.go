@@ -474,15 +474,16 @@ var (
 	PluginConfigClass   = pdm("PluginConfig.class", "Plugin class name")
 
 	// TransportManagerInlineConfig field descriptions
-	TransportManagerInlineConfigNodeName              = pdm("TransportManagerInlineConfig.nodeName", "Node name for transport identification")
-	TransportManagerInlineConfigSendQueueLen          = pdm("TransportManagerInlineConfig.sendQueueLen", "Maximum length of send queue")
-	TransportManagerInlineConfigPeerInactivityTimeout = pdm("TransportManagerInlineConfig.peerInactivityTimeout", "Timeout for peer inactivity detection")
-	TransportManagerInlineConfigPeerReaperInterval    = pdm("TransportManagerInlineConfig.peerReaperInterval", "Interval for peer reaper cleanup")
-	TransportManagerInlineConfigSendRetry             = pdm("TransportManagerInlineConfig.sendRetry", "Send retry configuration")
-	TransportManagerInlineConfigReliableScanRetry     = pdm("TransportManagerInlineConfig.reliableScanRetry", "Reliable scan retry configuration")
-	TransportManagerInlineConfigReliableMessageResend = pdm("TransportManagerInlineConfig.reliableMessageResend", "Reliable message resend configuration")
-	TransportManagerInlineConfigReliableMessageWriter = pdm("TransportManagerInlineConfig.reliableMessageWriter", "Reliable message writer configuration")
-	TransportManagerInlineConfigTransports            = pdm("TransportManagerInlineConfig.transports", "Map of transport configurations")
+	TransportManagerInlineConfigNodeName                  = pdm("TransportManagerInlineConfig.nodeName", "Node name for transport identification")
+	TransportManagerInlineConfigSendQueueLen              = pdm("TransportManagerInlineConfig.sendQueueLen", "Maximum length of send queue")
+	TransportManagerInlineConfigPeerInactivityTimeout     = pdm("TransportManagerInlineConfig.peerInactivityTimeout", "Timeout for peer inactivity detection")
+	TransportManagerInlineConfigPeerReaperInterval        = pdm("TransportManagerInlineConfig.peerReaperInterval", "Interval for peer reaper cleanup")
+	TransportManagerInlineConfigSendFailureResetThreshold = pdm("TransportManagerInlineConfig.sendFailureResetThreshold", "Consecutive send failure threshold before resetting a peer sender loop")
+	TransportManagerInlineConfigSendRetry                 = pdm("TransportManagerInlineConfig.sendRetry", "Send retry configuration")
+	TransportManagerInlineConfigReliableScanRetry         = pdm("TransportManagerInlineConfig.reliableScanRetry", "Reliable scan retry configuration")
+	TransportManagerInlineConfigReliableMessageResend     = pdm("TransportManagerInlineConfig.reliableMessageResend", "Reliable message resend configuration")
+	TransportManagerInlineConfigReliableMessageWriter     = pdm("TransportManagerInlineConfig.reliableMessageWriter", "Reliable message writer configuration")
+	TransportManagerInlineConfigTransports                = pdm("TransportManagerInlineConfig.transports", "Map of transport configurations")
 
 	// RegistryManagerInlineConfig field descriptions
 	RegistryManagerInlineConfigRegistries      = pdm("RegistryManagerInlineConfig.registries", "Map of registry configurations")
@@ -714,14 +715,16 @@ var (
 	DistributerConfigReceivedObjectWriter  = pdm("DistributerConfig.receivedStateWriter", "Received state writer configuration")
 
 	// SequencerConfig field descriptions
-	SequencerConfigAssembleTimeout                   = pdm("SequencerConfig.assembleTimeout", "Timeout for transaction assembly")
+	SequencerConfigStateTimeout                      = pdm("SequencerConfig.stateTimeout", "Timeout for request-driven transaction states before repooling")
 	SequencerConfigRequestTimeout                    = pdm("SequencerConfig.requestTimeout", "Timeout for sequencer requests")
 	SequencerConfigBlockHeightTolerance              = pdm("SequencerConfig.blockHeightTolerance", "Tolerance for block height differences")
 	SequencerConfigBlockRange                        = pdm("SequencerConfig.blockRange", "Block range size for sequencer operations")
 	SequencerConfigCoordinatorEventQueueSize         = pdm("SequencerConfig.coordinatorEventQueueSize", "Queue size for coordinator state machine events")
 	SequencerConfigCoordinatorPriorityEventQueueSize = pdm("SequencerConfig.coordinatorPriorityEventQueueSize", "Queue size for coordinator priority events")
 	SequencerConfigOriginatorEventQueueSize          = pdm("SequencerConfig.originatorEventQueueSize", "Queue size for originator state machine events")
+	SequencerConfigOriginatorPriorityEventQueueSize  = pdm("SequencerConfig.originatorPriorityEventQueueSize", "Queue size for originator priority events")
 	SequencerConfigClosingGracePeriod                = pdm("SequencerConfig.closingGracePeriod", "Grace period for closing operations")
+	SequencerConfigConfirmedLockRetentionGracePeriod = pdm("SequencerConfig.confirmedLockRetentionGracePeriod", "Heartbeat grace period before clearing confirmed transaction state locks from coordinator snapshots")
 	SequencerConfigDelegateTimeout                   = pdm("SequencerConfig.delegateTimeout", "Timeout for re-delegating transactions")
 	SequencerConfigHeartbeatInterval                 = pdm("SequencerConfig.heartbeatInterval", "Heartbeat interval for coordinators")
 	SequencerConfigHeartbeatThreshold                = pdm("SequencerConfig.heartbeatThreshold", "Heartbeat threshold")
