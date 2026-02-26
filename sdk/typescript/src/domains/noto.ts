@@ -422,7 +422,7 @@ export class NotoInstance {
       this.paladin.sendTransaction({
         type: TransactionType.PRIVATE,
         abi: notoPrivateJSON.abi,
-        function: "prepareUnlock(bytes32,string,(string,uint256)[],bytes,bytes)", // the override with the additional unlockData parameter
+        function: "prepareUnlock",
         to: this.address,
         from: from.lookup,
         data: {
