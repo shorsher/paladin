@@ -651,7 +651,7 @@ func (sMgr *sequencerManager) handleTransactionConfirmedDirect(ctx context.Conte
 			From:         from, // The base ledger signing address
 			Hash:         confirmedTxn.OnChain.TransactionHash,
 			RevertReason: confirmedTxn.RevertData,
-			Nonce: nonce, // nil when nonce is not available
+			Nonce:        nonce, // nil when nonce is not available
 		}
 
 		sequencer.GetCoordinator().QueueEvent(ctx, confirmedEvent)

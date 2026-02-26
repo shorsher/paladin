@@ -41,6 +41,7 @@ type Originator interface {
 	QueueEvent(ctx context.Context, event common.Event)
 
 	GetTxStatus(ctx context.Context, txID uuid.UUID) (status components.PrivateTxStatus, err error)
+	GetCurrentState() State
 
 	WaitForDone(ctx context.Context)
 }
@@ -52,7 +53,7 @@ type originator struct {
 	// Any functions that expose non atomic state outside of the originator must
 	// take the read lock when called.
 	sync.RWMutex
-	ctx       context.Context
+	ctx context.Context
 
 	/* State machine - using generic statemachine.StateMachineEventLoop */
 	stateMachineEventLoop       *statemachine.StateMachineEventLoop[State, *originator]
@@ -128,6 +129,8 @@ func (o *originator) WaitForDone(ctx context.Context) {
 }
 
 func (o *originator) GetCurrentState() State {
+	o.RLock()
+	defer o.RUnlock()
 	return o.stateMachineEventLoop.GetCurrentState()
 }
 

@@ -443,8 +443,9 @@ func (sMgr *sequencerManager) stopLowestPrioritySequencer(ctx context.Context) {
 	if len(sMgr.sequencers) != 0 {
 		// If any sequencers are already closing we can wait for them to close instead of stopping a different one
 		for _, sequencer := range sMgr.sequencers {
-			if sequencer.coordinator.GetCurrentState() == coordinator.State_Flush ||
-				sequencer.coordinator.GetCurrentState() == coordinator.State_Closing {
+			coordinatorState := sequencer.coordinator.GetCurrentState()
+			if coordinatorState == coordinator.State_Flush ||
+				coordinatorState == coordinator.State_Closing {
 
 				// To avoid blocking the start of new sequencer that has caused us to purge the lowest priority one,
 				// we don't wait for the closing ones to complete. The aim is to allow the node to remain stable while
@@ -452,14 +453,18 @@ func (sMgr *sequencerManager) stopLowestPrioritySequencer(ctx context.Context) {
 				// own time.
 				log.L(log.WithLogField(ctx, common.SEQUENCER_LOG_CATEGORY_FIELD, common.CATEGORY_LIFECYCLE)).Debugf("coordinator %s is closing, waiting for it to close", sequencer.contractAddress)
 				return
-			} else if sequencer.coordinator.GetCurrentState() == coordinator.State_Idle ||
-				sequencer.coordinator.GetCurrentState() == coordinator.State_Observing {
-				// This sequencer is already idle or observing so we can page it out immediately.
-				// Caller holds the sequencers write lock.
-				log.L(log.WithLogField(ctx, common.SEQUENCER_LOG_CATEGORY_FIELD, common.CATEGORY_LIFECYCLE)).Debugf("stopping coordinator %s", sequencer.contractAddress)
-				sequencer.shutdown(ctx)
-				delete(sMgr.sequencers, sequencer.contractAddress)
-				return
+			} else if coordinatorState == coordinator.State_Idle ||
+				coordinatorState == coordinator.State_Observing {
+				originatorState := sequencer.originator.GetCurrentState()
+				if originatorState == originator.State_Idle ||
+					originatorState == originator.State_Observing {
+					// This sequencer is already idle/observing on both coordinator and originator,
+					// so we can page it out immediately. Caller holds the sequencers write lock.
+					log.L(log.WithLogField(ctx, common.SEQUENCER_LOG_CATEGORY_FIELD, common.CATEGORY_LIFECYCLE)).Debugf("stopping coordinator %s", sequencer.contractAddress)
+					sequencer.shutdown(ctx)
+					delete(sMgr.sequencers, sequencer.contractAddress)
+					return
+				}
 			}
 		}
 
