@@ -90,41 +90,13 @@ func (s *grapher) Forget(transactionID uuid.UUID) error {
 	return nil
 }
 
+// Temporary approach that removes updates depends-on list for any transactions this is a pre-req of
+// Note - this doesn't update the grapher itself
 func (s *grapher) pruneDependencyLinks(txn *CoordinatorTransaction) {
-	// Remove this TX from all prerequisite reverse links.
-	prereqIDs := make(map[uuid.UUID]struct{})
-	if txn.dependencies != nil {
-		for _, dependencyID := range txn.dependencies.DependsOn {
-			prereqIDs[dependencyID] = struct{}{}
-		}
-	}
-	if txn.pt.PreAssembly != nil && txn.pt.PreAssembly.Dependencies != nil {
-		for _, dependencyID := range txn.pt.PreAssembly.Dependencies.DependsOn {
-			prereqIDs[dependencyID] = struct{}{}
-		}
-	}
-	for prerequisiteID := range prereqIDs {
-		prerequisite := s.transactionByID[prerequisiteID]
-		if prerequisite == nil {
-			continue
-		}
-		if prerequisite.dependencies != nil {
-			prerequisite.dependencies.PrereqOf = removeUUID(prerequisite.dependencies.PrereqOf, txn.pt.ID)
-		}
-		if prerequisite.pt.PreAssembly != nil && prerequisite.pt.PreAssembly.Dependencies != nil {
-			prerequisite.pt.PreAssembly.Dependencies.PrereqOf = removeUUID(prerequisite.pt.PreAssembly.Dependencies.PrereqOf, txn.pt.ID)
-		}
-	}
-
 	// Remove this TX from all dependent forward links.
 	dependentIDs := make(map[uuid.UUID]struct{})
 	if txn.dependencies != nil {
 		for _, dependentID := range txn.dependencies.PrereqOf {
-			dependentIDs[dependentID] = struct{}{}
-		}
-	}
-	if txn.pt.PreAssembly != nil && txn.pt.PreAssembly.Dependencies != nil {
-		for _, dependentID := range txn.pt.PreAssembly.Dependencies.PrereqOf {
 			dependentIDs[dependentID] = struct{}{}
 		}
 	}
@@ -135,9 +107,6 @@ func (s *grapher) pruneDependencyLinks(txn *CoordinatorTransaction) {
 		}
 		if dependent.dependencies != nil {
 			dependent.dependencies.DependsOn = removeUUID(dependent.dependencies.DependsOn, txn.pt.ID)
-		}
-		if dependent.pt.PreAssembly != nil && dependent.pt.PreAssembly.Dependencies != nil {
-			dependent.pt.PreAssembly.Dependencies.DependsOn = removeUUID(dependent.pt.PreAssembly.Dependencies.DependsOn, txn.pt.ID)
 		}
 	}
 }
