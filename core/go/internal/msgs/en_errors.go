@@ -216,9 +216,9 @@ var (
 	MsgBlockIndexerLimitRequired              = pde("PD011311", "limit is required on all queries")
 	MsgBlockIndexerEventStreamNotFound        = pde("PD011312", "Event stream not found: %s")
 	MsgBlockIndexerReceiptCountMismatch       = pde("PD011313", "Receipt integrity check failed for block %s (%d): expected %d receipts from block transactions, received %d")
-	MsgBlockIndexerReceiptBlockMismatch       = pde("PD011315", "Receipt integrity check failed for block %s (%d): receipt for tx %s references block %s (%d)")
-	MsgBlockIndexerReceiptIntegrityNilReceipt = pde("PD011316", "Receipt integrity check failed for block %s (%d): nil receipt entry")
-	MsgBlockIndexerReceiptMissingTxHash       = pde("PD011317", "Receipt integrity check failed for block %s (%d): missing transaction hash from receipts %s")
+	MsgBlockIndexerReceiptBlockMismatch       = pde("PD011314", "Receipt integrity check failed for block %s (%d): receipt for tx %s references block %s (%d)")
+	MsgBlockIndexerReceiptIntegrityNilReceipt = pde("PD011315", "Receipt integrity check failed for block %s (%d): nil receipt entry")
+	MsgBlockIndexerReceiptMissingTxHash       = pde("PD011316", "Receipt integrity check failed for block %s (%d): missing transaction hash from receipts %s")
 
 	// EthClient module PD0115XX
 	MsgEthClientInvalidInput            = pde("PD011500", "Unable to convert to ABI function input (func=%s)")
