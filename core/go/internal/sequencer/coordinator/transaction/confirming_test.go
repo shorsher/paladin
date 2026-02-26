@@ -192,3 +192,84 @@ func Test_action_NotifyDependantsOfConfirmation_ResetsLocksImmediatelyWhenRetent
 	assert.NoError(t, err)
 	assert.True(t, txn.confirmedLocksReleased)
 }
+
+func Test_EventConfirmed_NonTerminalStates_TransitionsToConfirmed_WhenNoRevertReason(t *testing.T) {
+	ctx := context.Background()
+	nonTerminalStates := []State{
+		State_Initial,
+		State_PreAssembly_Blocked,
+		State_Pooled,
+		State_Assembling,
+		State_Endorsement_Gathering,
+		State_Blocked,
+		State_Confirming_Dispatchable,
+		State_Ready_For_Dispatch,
+		State_Dispatched,
+	}
+
+	for _, state := range nonTerminalStates {
+		t.Run(state.String(), func(t *testing.T) {
+			txn, _ := NewTransactionBuilderForTesting(t, state).BuildWithMocks()
+			nonce := pldtypes.HexUint64(77)
+			event := &ConfirmedEvent{
+				BaseCoordinatorEvent: BaseCoordinatorEvent{
+					TransactionID: txn.pt.ID,
+				},
+				Nonce: &nonce,
+			}
+
+			err := txn.HandleEvent(ctx, event)
+			assert.NoError(t, err)
+			assert.Equal(t, State_Confirmed, txn.GetCurrentState())
+		})
+	}
+}
+
+func Test_EventConfirmed_NonTerminalStates_RevertStaysInPlace_ForNewHandlers(t *testing.T) {
+	ctx := context.Background()
+	nonTerminalStates := []State{
+		State_Initial,
+		State_PreAssembly_Blocked,
+		State_Pooled,
+		State_Assembling,
+		State_Endorsement_Gathering,
+		State_Blocked,
+		State_Confirming_Dispatchable,
+		State_Ready_For_Dispatch,
+	}
+
+	for _, state := range nonTerminalStates {
+		t.Run(state.String(), func(t *testing.T) {
+			txn, _ := NewTransactionBuilderForTesting(t, state).BuildWithMocks()
+			nonce := pldtypes.HexUint64(88)
+			event := &ConfirmedEvent{
+				BaseCoordinatorEvent: BaseCoordinatorEvent{
+					TransactionID: txn.pt.ID,
+				},
+				Nonce:        &nonce,
+				RevertReason: pldtypes.MustParseHexBytes("0xbeef"),
+			}
+
+			err := txn.HandleEvent(ctx, event)
+			assert.NoError(t, err)
+			assert.Equal(t, state, txn.GetCurrentState())
+		})
+	}
+}
+
+func Test_EventConfirmed_StateDispatched_RevertTransitionsToPooled(t *testing.T) {
+	ctx := context.Background()
+	txn, _ := NewTransactionBuilderForTesting(t, State_Dispatched).BuildWithMocks()
+	nonce := pldtypes.HexUint64(88)
+	event := &ConfirmedEvent{
+		BaseCoordinatorEvent: BaseCoordinatorEvent{
+			TransactionID: txn.pt.ID,
+		},
+		Nonce:        &nonce,
+		RevertReason: pldtypes.MustParseHexBytes("0xbeef"),
+	}
+
+	err := txn.HandleEvent(ctx, event)
+	assert.NoError(t, err)
+	assert.Equal(t, State_Pooled, txn.GetCurrentState())
+}

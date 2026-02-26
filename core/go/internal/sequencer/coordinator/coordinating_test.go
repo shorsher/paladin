@@ -129,7 +129,7 @@ func Test_action_TransactionConfirmed_TransactionTracked_DifferentHash_HandleEve
 	assert.Equal(t, transaction.State_Confirmed, txn.GetCurrentState())
 }
 
-func Test_action_TransactionConfirmed_TransactionTracked_EventNotHandledByTransaction_ReturnsNil(t *testing.T) {
+func Test_action_TransactionConfirmed_TransactionTracked_PooledTransitionsToConfirmed(t *testing.T) {
 	ctx := context.Background()
 	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
 	c, _, done := builder.Build(ctx)
@@ -146,7 +146,7 @@ func Test_action_TransactionConfirmed_TransactionTracked_EventNotHandledByTransa
 	})
 
 	require.NoError(t, err)
-	assert.Equal(t, transaction.State_Pooled, txn.GetCurrentState())
+	assert.Equal(t, transaction.State_Confirmed, txn.GetCurrentState())
 }
 
 func Test_action_TransactionConfirmed_MultipleTransactions_EachHandleEventSucceeds(t *testing.T) {

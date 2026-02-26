@@ -49,7 +49,6 @@ type CoordinatorTransaction struct {
 	latestSubmissionHash       *pldtypes.Bytes32
 	nonce                      *uint64
 	revertReason               pldtypes.HexBytes
-	revertTime                 *pldtypes.Timestamp
 
 	//TODO move the fields that are really just fine grained state info.  Move them into the stateMachine struct ( consider separate structs for each concrete state)
 	heartbeatIntervalsSinceStateChange int

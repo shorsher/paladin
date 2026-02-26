@@ -129,46 +129,6 @@ func (_c *MockCoordinator_QueueEvent_Call) RunAndReturn(run func(ctx context.Con
 	return _c
 }
 
-// WaitForDone provides a mock function for the type MockCoordinator
-func (_mock *MockCoordinator) WaitForDone(ctx context.Context) {
-	_mock.Called(ctx)
-	return
-}
-
-// MockCoordinator_WaitForDone_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'WaitForDone'
-type MockCoordinator_WaitForDone_Call struct {
-	*mock.Call
-}
-
-// WaitForDone is a helper method to define mock.On call
-//   - ctx context.Context
-func (_e *MockCoordinator_Expecter) WaitForDone(ctx interface{}) *MockCoordinator_WaitForDone_Call {
-	return &MockCoordinator_WaitForDone_Call{Call: _e.mock.On("WaitForDone", ctx)}
-}
-
-func (_c *MockCoordinator_WaitForDone_Call) Run(run func(ctx context.Context)) *MockCoordinator_WaitForDone_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		var arg0 context.Context
-		if args[0] != nil {
-			arg0 = args[0].(context.Context)
-		}
-		run(
-			arg0,
-		)
-	})
-	return _c
-}
-
-func (_c *MockCoordinator_WaitForDone_Call) Return() *MockCoordinator_WaitForDone_Call {
-	_c.Call.Return()
-	return _c
-}
-
-func (_c *MockCoordinator_WaitForDone_Call) RunAndReturn(run func(ctx context.Context)) *MockCoordinator_WaitForDone_Call {
-	_c.Run(run)
-	return _c
-}
-
 // TryQueueEvent provides a mock function for the type MockCoordinator
 func (_mock *MockCoordinator) TryQueueEvent(ctx context.Context, event common.Event) bool {
 	ret := _mock.Called(ctx, event)
@@ -223,6 +183,46 @@ func (_c *MockCoordinator_TryQueueEvent_Call) Return(b bool) *MockCoordinator_Tr
 
 func (_c *MockCoordinator_TryQueueEvent_Call) RunAndReturn(run func(ctx context.Context, event common.Event) bool) *MockCoordinator_TryQueueEvent_Call {
 	_c.Call.Return(run)
+	return _c
+}
+
+// WaitForDone provides a mock function for the type MockCoordinator
+func (_mock *MockCoordinator) WaitForDone(ctx context.Context) {
+	_mock.Called(ctx)
+	return
+}
+
+// MockCoordinator_WaitForDone_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'WaitForDone'
+type MockCoordinator_WaitForDone_Call struct {
+	*mock.Call
+}
+
+// WaitForDone is a helper method to define mock.On call
+//   - ctx context.Context
+func (_e *MockCoordinator_Expecter) WaitForDone(ctx interface{}) *MockCoordinator_WaitForDone_Call {
+	return &MockCoordinator_WaitForDone_Call{Call: _e.mock.On("WaitForDone", ctx)}
+}
+
+func (_c *MockCoordinator_WaitForDone_Call) Run(run func(ctx context.Context)) *MockCoordinator_WaitForDone_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		run(
+			arg0,
+		)
+	})
+	return _c
+}
+
+func (_c *MockCoordinator_WaitForDone_Call) Return() *MockCoordinator_WaitForDone_Call {
+	_c.Call.Return()
+	return _c
+}
+
+func (_c *MockCoordinator_WaitForDone_Call) RunAndReturn(run func(ctx context.Context)) *MockCoordinator_WaitForDone_Call {
+	_c.Run(run)
 	return _c
 }
 
