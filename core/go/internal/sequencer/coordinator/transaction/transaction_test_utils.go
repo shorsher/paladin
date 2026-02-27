@@ -63,10 +63,10 @@ func (r *SentMessageRecorder) Reset(ctx context.Context) {
 	r.numberOfSentDispatchConfirmationRequests = 0
 }
 
-func (r *SentMessageRecorder) StartLoopbackWriter(ctx context.Context) {
+func (r *SentMessageRecorder) StartLoopbackWriter() {
 }
 
-func (r *SentMessageRecorder) StopLoopbackWriter() {
+func (r *SentMessageRecorder) WaitForDone(ctx context.Context) {
 }
 
 func (r *SentMessageRecorder) HasSentAssembleRequest() bool {

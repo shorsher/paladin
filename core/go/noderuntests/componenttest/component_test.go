@@ -27,6 +27,7 @@ import (
 	"time"
 
 	"github.com/LFDT-Paladin/paladin/config/pkg/confutil"
+	"github.com/LFDT-Paladin/paladin/config/pkg/pldconf"
 	testutils "github.com/LFDT-Paladin/paladin/core/noderuntests/pkg"
 	"github.com/LFDT-Paladin/paladin/core/noderuntests/pkg/domains"
 	"github.com/google/uuid"
@@ -64,6 +65,14 @@ func newInstanceForComponentTestingWithDomainRegistry(t *testing.T) testutils.Co
 
 func startNode(t *testing.T, party testutils.Party, domainConfig interface{}) {
 	party.Start(t, domainConfig, CONFIG_PATHS[party.GetNodeName()], false)
+}
+
+func newSingleNodePartyForComponentTestingWithSequencerConfig(t *testing.T, nodeName string, sequencerConfig *pldconf.SequencerConfig) testutils.Party {
+	domainRegistryAddress := deployDomainRegistry(t, nodeName)
+	party := testutils.NewPartyForTestingWithNodeName(t, nodeName, nodeName, domainRegistryAddress)
+	party.OverrideSequencerConfig(sequencerConfig)
+	startNode(t, party, nil)
+	return party
 }
 
 func TestRunSimpleStorageEthTransaction(t *testing.T) {

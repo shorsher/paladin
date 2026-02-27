@@ -150,10 +150,6 @@ type StateDefinitions[S State, E any] map[S]StateDefinition[S, E]
 // It receives the entity, old state, new state, and the event that triggered the transition.
 type TransitionCallback[S State, E any] func(ctx context.Context, entity E, from S, to S, event common.Event)
 
-// OnStopCallback is called when the event loop receives a stop signal.
-// It can optionally return a final event to process before stopping.
-type OnStopCallback func(ctx context.Context) common.Event
-
 // StateMachine holds the current state, metadata, and processing logic for a state machine instance.
 // The entity type E must implement Lockable; the state machine holds the entity's lock
 // for the duration of each ProcessEvent call.
@@ -363,9 +359,7 @@ type StateMachineEventLoop[S State, E Lockable] struct {
 	entity         E
 	events         chan common.Event
 	eventsPriority chan common.Event
-	stopLoop       chan struct{}
 	loopStopped    chan struct{}
-	onStop         OnStopCallback
 	name           string
 	running        bool
 	processEvent   func(ctx context.Context, event common.Event) error
@@ -392,9 +386,6 @@ type StateMachineEventLoopConfig[S State, E Lockable] struct {
 	// Name for the event loop and the state machine; required. Used in logging (e.g. transition logs).
 	// The same name is applied to both.
 	Name string
-
-	// OnStop callback invoked when the event loop stops, can return a final event to process
-	OnStop OnStopCallback
 
 	// TransitionCallback is invoked on state transitions (optional)
 	TransitionCallback TransitionCallback[S, E]
@@ -438,9 +429,7 @@ func NewStateMachineEventLoop[S State, E Lockable](config StateMachineEventLoopC
 		entity:         config.Entity,
 		events:         make(chan common.Event, config.EventQueueSize),
 		eventsPriority: make(chan common.Event, config.PriorityEventQueueSize),
-		stopLoop:       make(chan struct{}, 1),
 		loopStopped:    make(chan struct{}),
-		onStop:         config.OnStop,
 		name:           config.Name,
 		processEvent:   processEvent,
 	}
@@ -501,19 +490,6 @@ func (sel *StateMachineEventLoop[S, E]) Start(ctx context.Context) {
 			if err != nil {
 				log.L(ctx).Errorf("%s | %s | %s | error: %v", sel.name, sel.stateMachine.CurrentState.String(), event.TypeString(), err)
 			}
-		case <-sel.stopLoop:
-			if sel.onStop != nil {
-				if finalEvent := sel.onStop(ctx); finalEvent != nil {
-					log.L(ctx).Debugf("%s | %s | %s | processing final", sel.name, sel.stateMachine.CurrentState.String(), finalEvent.TypeString())
-					err := sel.processEvent(ctx, finalEvent)
-					if err != nil {
-						log.L(ctx).Errorf("%s | %s | %s | error: %v", sel.name, sel.stateMachine.CurrentState.String(), finalEvent.TypeString(), err)
-					}
-				}
-			}
-			log.L(ctx).Debugf("%s | %s | event loop stopped", sel.name, sel.stateMachine.CurrentState.String())
-			sel.running = false
-			return
 		case <-ctx.Done():
 			log.L(ctx).Debugf("%s | %s | context cancelled, stopping", sel.name, sel.stateMachine.CurrentState.String())
 			sel.running = false
@@ -550,7 +526,11 @@ func (sel *StateMachineEventLoop[S, E]) TryQueueEvent(ctx context.Context, event
 // Priority events are always fully drained before the main queue is read.
 func (sel *StateMachineEventLoop[S, E]) QueuePriorityEvent(ctx context.Context, event common.Event) {
 	log.L(ctx).Tracef("%s | %s | queueing priority event %s", sel.name, sel.stateMachine.CurrentState.String(), event.TypeString())
-	sel.eventsPriority <- event
+	select {
+	case sel.eventsPriority <- event:
+	case <-ctx.Done():
+		log.L(ctx).Warnf("%s | %s | context cancelled, dropping priority event %s", sel.name, sel.stateMachine.CurrentState.String(), event.TypeString())
+	}
 }
 
 // TryQueuePriorityEvent attempts to queue an event on the priority queue without blocking.
@@ -572,39 +552,12 @@ func (sel *StateMachineEventLoop[S, E]) ProcessEvent(ctx context.Context, event 
 	return sel.stateMachine.ProcessEvent(ctx, sel.entity, event)
 }
 
-// Stop signals the event loop to stop and waits for it to complete.
-func (sel *StateMachineEventLoop[S, E]) Stop() {
+// WaitForDone waits for the event loop to complete after context cancellation.
+func (sel *StateMachineEventLoop[S, E]) WaitForDone(ctx context.Context) {
 	select {
 	case <-sel.loopStopped:
-		return
-	default:
+	case <-ctx.Done():
 	}
-
-	select {
-	case sel.stopLoop <- struct{}{}:
-	default:
-	}
-
-	<-sel.loopStopped
-}
-
-// StopAsync signals the event loop to stop but does not wait for completion.
-func (sel *StateMachineEventLoop[S, E]) StopAsync() {
-	select {
-	case <-sel.loopStopped:
-		return
-	default:
-	}
-
-	select {
-	case sel.stopLoop <- struct{}{}:
-	default:
-	}
-}
-
-// WaitForStop waits for the event loop to complete after Stop or StopAsync was called.
-func (sel *StateMachineEventLoop[S, E]) WaitForStop() {
-	<-sel.loopStopped
 }
 
 // IsStopped returns true if the event loop has been stopped.

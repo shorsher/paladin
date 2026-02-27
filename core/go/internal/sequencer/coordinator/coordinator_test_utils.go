@@ -271,7 +271,7 @@ func (b *CoordinatorBuilderForTesting) OverrideSequencerConfig(config *pldconf.S
 	return b
 }
 
-func (b *CoordinatorBuilderForTesting) Build(ctx context.Context) (*coordinator, *CoordinatorDependencyMocks) {
+func (b *CoordinatorBuilderForTesting) Build(ctx context.Context) (*coordinator, *CoordinatorDependencyMocks, func()) {
 	// TODO: This is a bit of a hack, but all this code gets substantial rework in the restructing PRs so
 	// it makes sense to clean this up as part of that merge
 	hasContractConfigExpectation := false
@@ -302,13 +302,12 @@ func (b *CoordinatorBuilderForTesting) Build(ctx context.Context) (*coordinator,
 		mocks.emittedEvents = append(mocks.emittedEvents, event)
 	}
 
-	ctx, cancelCtx := context.WithCancel(ctx)
 	b.domainAPI.On("ContractConfig").Return(&prototk.ContractConfig{
 		CoordinatorSelection: prototk.ContractConfig_COORDINATOR_SENDER,
 	}).Maybe()
+	buildCtx, cancel := context.WithCancel(ctx)
 	coordinator, err := NewCoordinator(
-		ctx,
-		cancelCtx,
+		buildCtx,
 		b.contractAddress, // Contract address,
 		b.domainAPI,
 		b.txManager,
@@ -388,5 +387,9 @@ func (b *CoordinatorBuilderForTesting) Build(ctx context.Context) (*coordinator,
 		coordinator.activeCoordinatorsFlushPointsBySignerNonce = make(map[string]*common.FlushPoint)
 	}
 
-	return coordinator, mocks
+	done := func() {
+		cancel()
+		coordinator.WaitForDone(context.Background())
+	}
+	return coordinator, mocks, done
 }

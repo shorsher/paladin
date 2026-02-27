@@ -23,7 +23,6 @@ import (
 	"github.com/LFDT-Paladin/paladin/core/internal/msgs"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/common"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldapi"
-	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldtypes"
 )
 
 // Function hasDependenciesNotAssembled checks if the transaction has any dependencies that have not been assembled yet
@@ -105,12 +104,6 @@ func (t *CoordinatorTransaction) initializeForNewAssemply(ctx context.Context) e
 	t.resetEndorsementRequests(ctx)
 	t.engineIntegration.ResetTransactions(ctx, t.pt.ID)
 
-	return nil
-}
-
-func action_recordRevert(ctx context.Context, txn *CoordinatorTransaction, _ common.Event) error {
-	now := pldtypes.TimestampNow()
-	txn.revertTime = &now
 	return nil
 }
 

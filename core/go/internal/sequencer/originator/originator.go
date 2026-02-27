@@ -41,8 +41,9 @@ type Originator interface {
 	QueueEvent(ctx context.Context, event common.Event)
 
 	GetTxStatus(ctx context.Context, txID uuid.UUID) (status components.PrivateTxStatus, err error)
+	GetCurrentState() State
 
-	Stop()
+	WaitForDone(ctx context.Context)
 }
 
 type originator struct {
@@ -52,6 +53,7 @@ type originator struct {
 	// Any functions that expose non atomic state outside of the originator must
 	// take the read lock when called.
 	sync.RWMutex
+	ctx context.Context
 
 	/* State machine - using generic statemachine.StateMachineEventLoop */
 	stateMachineEventLoop       *statemachine.StateMachineEventLoop[State, *originator]
@@ -77,7 +79,6 @@ type originator struct {
 	metrics           metrics.DistributedSequencerMetrics
 
 	/* Delegate loop */
-	stopDelegateLoop    chan struct{}
 	delegateLoopStopped chan struct{}
 }
 
@@ -94,6 +95,7 @@ func NewOriginator(
 	metrics metrics.DistributedSequencerMetrics,
 ) (*originator, error) {
 	o := &originator{
+		ctx:                         ctx,
 		nodeName:                    nodeName,
 		transactionsByID:            make(map[uuid.UUID]*transaction.OriginatorTransaction),
 		submittedTransactionsByHash: make(map[pldtypes.Bytes32]*uuid.UUID),
@@ -105,7 +107,6 @@ func NewOriginator(
 		heartbeatThresholdMs:        clock.Duration(heartbeatPeriodMs * heartbeatThresholdIntervals),
 		delegateTimeout:             confutil.DurationMin(configuration.DelegateTimeout, pldconf.SequencerMinimum.DelegateTimeout, *pldconf.SequencerDefaults.DelegateTimeout),
 		metrics:                     metrics,
-		stopDelegateLoop:            make(chan struct{}),
 		delegateLoopStopped:         make(chan struct{}),
 	}
 	originatorEventQueueSize := confutil.IntMin(configuration.OriginatorEventQueueSize, pldconf.SequencerMinimum.OriginatorEventQueueSize, *pldconf.SequencerDefaults.OriginatorEventQueueSize)
@@ -118,23 +119,18 @@ func NewOriginator(
 	return o, nil
 }
 
-// A sequencer can be asked to page itself out at any time to make space for other sequencers.
-// This hook point provides a place to perform any tidy up actions needed in the originator
-func (o *originator) Stop() {
-	log.L(context.Background()).Infof("Stopping originator for contract %s", o.contractAddress.String())
-
-	// Make Stop() idempotent - make sure we've not already been stopped
-	if o.stateMachineEventLoop.IsStopped() {
+func (o *originator) WaitForDone(ctx context.Context) {
+	select {
+	case <-o.delegateLoopStopped:
+	case <-ctx.Done():
 		return
 	}
-
-	o.stopDelegateLoop <- struct{}{}
-	<-o.delegateLoopStopped
-
-	o.stateMachineEventLoop.Stop()
+	o.stateMachineEventLoop.WaitForDone(ctx)
 }
 
 func (o *originator) GetCurrentState() State {
+	o.RLock()
+	defer o.RUnlock()
 	return o.stateMachineEventLoop.GetCurrentState()
 }
 
@@ -167,11 +163,10 @@ func (o *originator) delegateLoop(ctx context.Context) {
 			delegateTimeoutEvent := &DelegateTimeoutEvent{}
 			delegateTimeoutEvent.BaseEvent = common.BaseEvent{}
 			delegateTimeoutEvent.EventTime = time.Now()
-			// TryQueueEvent is acceptable here as if the event cannot be queued, it will be retried next
-			// time the ticker fires. Not blocking on a full channel means that we aren't blocked on
-			// shutdown if 0.stopDelegateLoop fires
+			// TryQueueEvent is acceptable here as if the event cannot be queued, it will be retried on
+			// the next tick. Not blocking on a full channel also avoids stalling shutdown.
 			o.stateMachineEventLoop.TryQueueEvent(ctx, delegateTimeoutEvent)
-		case <-o.stopDelegateLoop:
+		case <-ctx.Done():
 			log.L(ctx).Debugf("delegate loop stopped for contract %s", o.contractAddress.String())
 			return
 		}

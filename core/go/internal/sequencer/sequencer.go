@@ -27,6 +27,7 @@ import (
 	coordinatorTx "github.com/LFDT-Paladin/paladin/core/internal/sequencer/coordinator/transaction"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/metrics"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/originator"
+	originatorTx "github.com/LFDT-Paladin/paladin/core/internal/sequencer/originator/transaction"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/syncpoints"
 	"github.com/LFDT-Paladin/paladin/toolkit/pkg/prototk"
 	"github.com/google/uuid"
@@ -523,7 +524,7 @@ func (sMgr *sequencerManager) HandleTransactionCollected(ctx context.Context, si
 	log.L(sMgr.ctx).Tracef("HandleTransactionCollected %s %s %s", signerAddress, contractAddress, txID.String())
 
 	// Get the sequencer for the signer address
-	sequencer, err := sMgr.LoadSequencer(ctx, sMgr.components.Persistence().NOTX(), *pldtypes.MustEthAddress(contractAddress), nil, nil)
+	sequencer, err := sMgr.GetSequencer(ctx, *pldtypes.MustEthAddress(contractAddress))
 	if err != nil {
 		return err
 	}
@@ -552,7 +553,7 @@ func (sMgr *sequencerManager) HandleNonceAssigned(ctx context.Context, nonce uin
 	log.L(sMgr.ctx).Tracef("HandleNonceAssigned %d %s %s", nonce, contractAddress, txID.String())
 
 	// Get the sequencer for the signer address
-	sequencer, err := sMgr.LoadSequencer(ctx, sMgr.components.Persistence().NOTX(), *pldtypes.MustEthAddress(contractAddress), nil, nil)
+	sequencer, err := sMgr.GetSequencer(ctx, *pldtypes.MustEthAddress(contractAddress))
 	if err != nil {
 		return err
 	}
@@ -580,7 +581,7 @@ func (sMgr *sequencerManager) HandlePublicTXSubmission(ctx context.Context, dbTX
 
 	deploy := tx.To == nil
 	if !deploy {
-		sequencer, err := sMgr.LoadSequencer(ctx, dbTX, *pldtypes.MustEthAddress(tx.TransactionContractAddress), nil, nil)
+		sequencer, err := sMgr.GetSequencer(ctx, *pldtypes.MustEthAddress(tx.TransactionContractAddress))
 		if err != nil {
 			return err
 		}
@@ -640,7 +641,7 @@ func (sMgr *sequencerManager) handleTransactionConfirmedDirect(ctx context.Conte
 		contractAddress = confirmedTxn.PSC.Address()
 	}
 
-	sequencer, err := sMgr.LoadSequencer(ctx, sMgr.components.Persistence().NOTX(), contractAddress, nil, nil)
+	sequencer, err := sMgr.GetSequencer(ctx, contractAddress)
 	if err != nil {
 		return err
 	}
@@ -650,8 +651,8 @@ func (sMgr *sequencerManager) handleTransactionConfirmedDirect(ctx context.Conte
 		if from == nil {
 			return i18n.NewError(ctx, msgs.MsgSequencerInternalError, "nil From address for confirmed transaction %s", confirmedTxn.TransactionID)
 		}
-		// we leave it to the coordinator to decide whether it is in a state where it handles the event
-		// and check whether it's a transaction that it is tracking
+		// we leave it to the coordinator and originator to decide whether they are in a state where they handle the event
+		// and check whether it's a transaction that they are tracking
 		confirmedEvent := &coordinator.TransactionConfirmedEvent{
 			TxID:         confirmedTxn.TransactionID,
 			From:         from, // The base ledger signing address
@@ -661,6 +662,22 @@ func (sMgr *sequencerManager) handleTransactionConfirmedDirect(ctx context.Conte
 		}
 
 		sequencer.GetCoordinator().QueueEvent(ctx, confirmedEvent)
+		if confirmedTxn.RevertData != nil {
+			sequencer.GetOriginator().QueueEvent(ctx, &originatorTx.ConfirmedRevertedEvent{
+				BaseEvent: originatorTx.BaseEvent{
+					BaseEvent:     common.BaseEvent{EventTime: time.Now()},
+					TransactionID: confirmedTxn.TransactionID,
+				},
+				RevertReason: confirmedTxn.RevertData,
+			})
+		} else {
+			sequencer.GetOriginator().QueueEvent(ctx, &originatorTx.ConfirmedSuccessEvent{
+				BaseEvent: originatorTx.BaseEvent{
+					BaseEvent:     common.BaseEvent{EventTime: time.Now()},
+					TransactionID: confirmedTxn.TransactionID,
+				},
+			})
+		}
 	}
 
 	return nil
@@ -684,15 +701,15 @@ func (sMgr *sequencerManager) handleTransactionConfirmedByChainedTransaction(ctx
 		contractAddress = confirmedTxn.PSC.Address()
 	}
 
-	sequencer, err := sMgr.LoadSequencer(ctx, sMgr.components.Persistence().NOTX(), contractAddress, nil, nil)
+	sequencer, err := sMgr.GetSequencer(ctx, contractAddress)
 	if err != nil {
 		return err
 	}
 
 	// For a deploy we won't have tracked the transaction through the state machine
 	if sequencer != nil && !deploy {
-		// we leave it to the coordinator to decide whether it is in a state where it handles the event
-		// and check whether it's a transaction that it is tracking
+		// we leave it to the coordinator and originator to decide whether they are in a state where they handle the event
+		// and check whether it's a transaction that they are tracking
 		confirmedEvent := &coordinator.TransactionConfirmedEvent{
 			TxID:         confirmedTxn.TransactionID,
 			Hash:         confirmedTxn.OnChain.TransactionHash,
@@ -701,6 +718,22 @@ func (sMgr *sequencerManager) handleTransactionConfirmedByChainedTransaction(ctx
 		confirmedEvent.EventTime = time.Now()
 
 		sequencer.GetCoordinator().QueueEvent(ctx, confirmedEvent)
+		if confirmedTxn.RevertData != nil {
+			sequencer.GetOriginator().QueueEvent(ctx, &originatorTx.ConfirmedRevertedEvent{
+				BaseEvent: originatorTx.BaseEvent{
+					BaseEvent:     common.BaseEvent{EventTime: time.Now()},
+					TransactionID: confirmedTxn.TransactionID,
+				},
+				RevertReason: confirmedTxn.RevertData,
+			})
+		} else {
+			sequencer.GetOriginator().QueueEvent(ctx, &originatorTx.ConfirmedSuccessEvent{
+				BaseEvent: originatorTx.BaseEvent{
+					BaseEvent:     common.BaseEvent{EventTime: time.Now()},
+					TransactionID: confirmedTxn.TransactionID,
+				},
+			})
+		}
 	}
 
 	return nil
@@ -731,15 +764,15 @@ func (sMgr *sequencerManager) HandleTransactionFailed(ctx context.Context, dbTX 
 		}
 		contractAddress := tx.To
 
-		sequencer, err := sMgr.LoadSequencer(ctx, dbTX, *contractAddress, nil, nil)
+		sequencer, err := sMgr.GetSequencer(ctx, *contractAddress)
 		if err != nil {
 			return err
 		}
 
 		// For a deploy we won't have tracked the transaction through the state machine
 		if sequencer != nil {
-			// we leave it to the coordinator to decide whether it is in a state where it handles the event
-			// and check whether it's a transaction that it is tracking
+			// we leave it to the coordinator and originator to decide whether they are in a state where they handle the event
+			// and check whether it's a transaction that they are tracking
 			if tx.From == nil {
 				return i18n.NewError(ctx, msgs.MsgSequencerInternalError, "nil From address for confirmed transaction %s", tx.TransactionID)
 			}
@@ -755,6 +788,13 @@ func (sMgr *sequencerManager) HandleTransactionFailed(ctx context.Context, dbTX 
 			failedEvent.EventTime = time.Now()
 
 			sequencer.GetCoordinator().QueueEvent(ctx, failedEvent)
+			sequencer.GetOriginator().QueueEvent(ctx, &originatorTx.ConfirmedRevertedEvent{
+				BaseEvent: originatorTx.BaseEvent{
+					BaseEvent:     common.BaseEvent{EventTime: failedEvent.EventTime},
+					TransactionID: tx.TransactionID,
+				},
+				RevertReason: tx.RevertReason,
+			})
 		}
 	}
 

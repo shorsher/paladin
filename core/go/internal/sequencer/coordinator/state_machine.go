@@ -305,10 +305,6 @@ func (c *coordinator) initializeStateMachineEventLoop(initialState State, eventQ
 		EventQueueSize:         eventQueueSize,
 		PriorityEventQueueSize: priorityEventQueueSize,
 		Name:                   fmt.Sprintf("coordinator-%s", c.contractAddress.String()[0:8]),
-		OnStop: func(ctx context.Context) common.Event {
-			// Return the final event to process when stopping
-			return &CoordinatorClosedEvent{}
-		},
 		TransitionCallback: c.onStateTransition,
 		PreProcess:         c.preProcessEvent,
 	})
