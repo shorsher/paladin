@@ -132,18 +132,21 @@ type UnlockParams struct {
 type CreateTransferLockParams struct {
 	From       string             `json:"from"`
 	Recipients []*UnlockRecipient `json:"recipients"`
+	UnlockData pldtypes.HexBytes  `json:"unlockData"`
 	Data       pldtypes.HexBytes  `json:"data"`
 }
 
 type CreateMintLockParams struct {
 	Recipients []*UnlockRecipient `json:"recipients"`
+	UnlockData pldtypes.HexBytes  `json:"unlockData"`
 	Data       pldtypes.HexBytes  `json:"data"`
 }
 
 type CreateBurnLockParams struct {
-	From   string               `json:"from"`
-	Amount *pldtypes.HexUint256 `json:"amount"`
-	Data   pldtypes.HexBytes    `json:"data"`
+	From       string               `json:"from"`
+	Amount     *pldtypes.HexUint256 `json:"amount"`
+	UnlockData pldtypes.HexBytes    `json:"unlockData"`
+	Data       pldtypes.HexBytes    `json:"data"`
 }
 
 type PrepareMintUnlockParams struct {
