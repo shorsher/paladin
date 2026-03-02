@@ -78,7 +78,19 @@ var stateDefinitionsMap = StateDefinitions{
 				}},
 			},
 			common.Event_TransactionStateTransition: {
-				Actions: []ActionRule{{Action: action_OriginatorTransactionStateTransition}},
+				Actions: []ActionRule{
+					{
+						Validator: validator_OriginatorTransactionStateTransitionToFinal,
+						Action:    action_CleanUpTransaction,
+					},
+					{
+						Validator: statemachine.ValidatorOr(
+							validator_OriginatorTransactionStateTransitionToConfirmed,
+							validator_OriginatorTransactionStateTransitionToReverted,
+						),
+						Action: action_FinalizeTransaction,
+					},
+				},
 			},
 		},
 	},
@@ -103,7 +115,19 @@ var stateDefinitionsMap = StateDefinitions{
 			Event_NewBlock:          {},
 			Event_HeartbeatReceived: {Actions: []ActionRule{{Action: action_HeartbeatReceived}}},
 			common.Event_TransactionStateTransition: {
-				Actions: []ActionRule{{Action: action_OriginatorTransactionStateTransition}},
+				Actions: []ActionRule{
+					{
+						Validator: validator_OriginatorTransactionStateTransitionToFinal,
+						Action:    action_CleanUpTransaction,
+					},
+					{
+						Validator: statemachine.ValidatorOr(
+							validator_OriginatorTransactionStateTransitionToConfirmed,
+							validator_OriginatorTransactionStateTransitionToReverted,
+						),
+						Action: action_FinalizeTransaction,
+					},
+				},
 			},
 		},
 	},
@@ -136,9 +160,21 @@ var stateDefinitionsMap = StateDefinitions{
 				Actions: []ActionRule{{Action: action_ResendTimedOutDelegationRequest}},
 			},
 			common.Event_TransactionStateTransition: {
-				Actions: []ActionRule{{Action: action_OriginatorTransactionStateTransition}},
+				Actions: []ActionRule{
+					{
+						Validator: validator_OriginatorTransactionStateTransitionToFinal,
+						Action:    action_CleanUpTransaction,
+					},
+					{
+						Validator: statemachine.ValidatorOr(
+							validator_OriginatorTransactionStateTransitionToConfirmed,
+							validator_OriginatorTransactionStateTransitionToReverted,
+						),
+						Action: action_FinalizeTransaction,
+					},
+				},
 				Transitions: []Transition{
-					{To: State_Observing, If: statemachine.Not(guard_HasUnconfirmedTransactions)},
+					{To: State_Observing, If: statemachine.GuardNot(guard_HasUnconfirmedTransactions)},
 				},
 			},
 		},

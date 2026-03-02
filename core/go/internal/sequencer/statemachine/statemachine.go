@@ -103,11 +103,13 @@ type Action[E any] func(ctx context.Context, entity E, event common.Event) error
 type Guard[E any] func(ctx context.Context, entity E) bool
 
 // ActionRule pairs an action with an optional guard condition.
+// Validator is evaluated first for event-aware filtering.
 // If the guard (If) is nil, the action is always executed.
 // If the guard returns true, the action is executed.
 type ActionRule[E any] struct {
-	Action Action[E]
-	If     Guard[E]
+	Action    Action[E]
+	Validator Validator[E]
+	If        Guard[E]
 }
 
 // Transition defines a possible state transition.
@@ -270,6 +272,15 @@ func (sm *StateMachine[S, E]) executeActionRules(
 	actionRules []ActionRule[E],
 ) error {
 	for _, rule := range actionRules {
+		if rule.Validator != nil {
+			valid, err := rule.Validator(ctx, entity, event)
+			if err != nil {
+				return err
+			}
+			if !valid {
+				continue
+			}
+		}
 		if rule.If == nil || rule.If(ctx, entity) {
 			err := rule.Action(ctx, entity, event)
 			if err != nil {

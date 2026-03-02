@@ -239,9 +239,25 @@ var stateDefinitionsMap = StateDefinitions{
 			},
 			common.Event_TransactionStateTransition: {
 				Actions: []ActionRule{
-					{Action: action_TransactionStateTransition},
-					{Action: action_NudgeDispatchLoop},
-					{Action: action_SelectTransaction, If: guard_Not(guard_HasTransactionAssembling)},
+					{
+						Validator: validator_TransactionStateTransitionToPooled,
+						Action:    action_PoolTransaction,
+					},
+					{
+						Validator: validator_TransactionStateTransitionToReadyForDispatch,
+						Action:    action_QueueTransactionForDispatch,
+					},
+					{
+						Validator: validator_TransactionStateTransitionToFinal,
+						Action:    action_CleanUpTransaction,
+					},
+					{
+						Action: action_NudgeDispatchLoop,
+					},
+					{
+						Action: action_SelectTransaction,
+						If:     guard_Not(guard_HasTransactionAssembling),
+					},
 				},
 			},
 			Event_OriginatorNodePoolUpdateRequested: {
@@ -267,7 +283,20 @@ var stateDefinitionsMap = StateDefinitions{
 				}},
 			},
 			common.Event_TransactionStateTransition: {
-				Actions: []ActionRule{{Action: action_TransactionStateTransition}},
+				Actions: []ActionRule{
+					{
+						Validator: validator_TransactionStateTransitionToPooled,
+						Action:    action_PoolTransaction,
+					},
+					{
+						Validator: validator_TransactionStateTransitionToReadyForDispatch,
+						Action:    action_QueueTransactionForDispatch,
+					},
+					{
+						Validator: validator_TransactionStateTransitionToFinal,
+						Action:    action_CleanUpTransaction,
+					},
+				},
 			},
 			Event_OriginatorNodePoolUpdateRequested: {
 				Actions: []ActionRule{{Action: action_UpdateOriginatorNodePoolFromEvent}},
@@ -288,7 +317,20 @@ var stateDefinitionsMap = StateDefinitions{
 				}},
 			},
 			common.Event_TransactionStateTransition: {
-				Actions: []ActionRule{{Action: action_TransactionStateTransition}},
+				Actions: []ActionRule{
+					{
+						Validator: validator_TransactionStateTransitionToPooled,
+						Action:    action_PoolTransaction,
+					},
+					{
+						Validator: validator_TransactionStateTransitionToReadyForDispatch,
+						Action:    action_QueueTransactionForDispatch,
+					},
+					{
+						Validator: validator_TransactionStateTransitionToFinal,
+						Action:    action_CleanUpTransaction,
+					},
+				},
 			},
 			Event_OriginatorNodePoolUpdateRequested: {
 				Actions: []ActionRule{{Action: action_UpdateOriginatorNodePoolFromEvent}},

@@ -208,7 +208,7 @@ var stateDefinitionsMap = StateDefinitions{
 				Actions: []ActionRule{
 					{Action: action_AssembleRequestReceived},
 					{
-						If:     statemachine.Not(guard_AssembleRequestMatchesPreviousResponse),
+						If:     statemachine.GuardNot(guard_AssembleRequestMatchesPreviousResponse),
 						Action: action_AssembleAndSign,
 					},
 					{
@@ -238,7 +238,7 @@ var stateDefinitionsMap = StateDefinitions{
 					}},
 				Transitions: []Transition{{
 					//This is different from the previous request. The coordinator must have decided that it was necessary to re-assemble with different available states so we go back to assembling state for a do-over
-					If: statemachine.Not(guard_AssembleRequestMatchesPreviousResponse),
+					If: statemachine.GuardNot(guard_AssembleRequestMatchesPreviousResponse),
 					To: State_Assembling,
 				}},
 			},
@@ -293,7 +293,7 @@ var stateDefinitionsMap = StateDefinitions{
 					}},
 				Transitions: []Transition{{
 					//This is different from the previous request. The coordinator must have decided that it was necessary to re-assemble with different available states so we go back to assembling state for a do-over
-					If: statemachine.Not(guard_AssembleRequestMatchesPreviousResponse),
+					If: statemachine.GuardNot(guard_AssembleRequestMatchesPreviousResponse),
 					To: State_Assembling,
 				}},
 			},

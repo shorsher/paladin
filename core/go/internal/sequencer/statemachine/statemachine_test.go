@@ -511,6 +511,93 @@ func TestEventValidator(t *testing.T) {
 	assert.Equal(t, State_Idle, entity2.sm.GetCurrentState()) // No transition
 }
 
+func TestActionRuleValidator_TrueExecutesAction(t *testing.T) {
+	definitions := StateDefinitions[TestState, *TestEntity]{
+		State_Idle: {
+			Events: map[common.EventType]EventHandler[TestState, *TestEntity]{
+				Event_Start: {
+					Actions: []ActionRule[*TestEntity]{{
+						Validator: func(ctx context.Context, e *TestEntity, event common.Event) (bool, error) {
+							return true, nil
+						},
+						Action: func(ctx context.Context, e *TestEntity, event common.Event) error {
+							e.counter++
+							return nil
+						},
+					}},
+				},
+			},
+		},
+	}
+
+	entity := newTestEntity(definitions, "test-entity")
+	ctx := context.Background()
+
+	err := entity.sm.ProcessEvent(ctx, entity, newTestEvent(Event_Start))
+	require.NoError(t, err)
+	assert.Equal(t, 1, entity.counter)
+}
+
+func TestActionRuleValidator_FalseSkipsAction(t *testing.T) {
+	definitions := StateDefinitions[TestState, *TestEntity]{
+		State_Idle: {
+			Events: map[common.EventType]EventHandler[TestState, *TestEntity]{
+				Event_Start: {
+					Actions: []ActionRule[*TestEntity]{{
+						Validator: func(ctx context.Context, e *TestEntity, event common.Event) (bool, error) {
+							return false, nil
+						},
+						Action: func(ctx context.Context, e *TestEntity, event common.Event) error {
+							e.counter++
+							return nil
+						},
+					}},
+				},
+			},
+		},
+	}
+
+	entity := newTestEntity(definitions, "test-entity")
+	ctx := context.Background()
+
+	err := entity.sm.ProcessEvent(ctx, entity, newTestEvent(Event_Start))
+	require.NoError(t, err)
+	assert.Equal(t, 0, entity.counter)
+}
+
+func TestActionRuleValidator_ErrorStopsProcessing(t *testing.T) {
+	validationErr := errors.New("action rule validation failed")
+
+	definitions := StateDefinitions[TestState, *TestEntity]{
+		State_Idle: {
+			Events: map[common.EventType]EventHandler[TestState, *TestEntity]{
+				Event_Start: {
+					Actions: []ActionRule[*TestEntity]{{
+						Validator: func(ctx context.Context, e *TestEntity, event common.Event) (bool, error) {
+							return false, validationErr
+						},
+						Action: func(ctx context.Context, e *TestEntity, event common.Event) error {
+							e.counter++
+							return nil
+						},
+					}},
+					Transitions: []Transition[TestState, *TestEntity]{{
+						To: State_Active,
+					}},
+				},
+			},
+		},
+	}
+
+	entity := newTestEntity(definitions, "test-entity")
+	ctx := context.Background()
+
+	err := entity.sm.ProcessEvent(ctx, entity, newTestEvent(Event_Start))
+	assert.Equal(t, validationErr, err)
+	assert.Equal(t, 0, entity.counter)
+	assert.Equal(t, State_Idle, entity.sm.GetCurrentState())
+}
+
 func TestFirstActionAppliesEventData(t *testing.T) {
 	definitions := StateDefinitions[TestState, *TestEntity]{
 		State_Idle: {

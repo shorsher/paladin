@@ -94,11 +94,11 @@ var stateDefinitionsMap = StateDefinitions{
 					},
 					{
 						To: State_Pooled,
-						If: statemachine.And(statemachine.Not(guard_HasUnassembledDependencies), statemachine.Not(guard_HasUnknownDependencies)),
+						If: statemachine.GuardAnd(statemachine.GuardNot(guard_HasUnassembledDependencies), statemachine.GuardNot(guard_HasUnknownDependencies)),
 					},
 					{
 						To: State_PreAssembly_Blocked,
-						If: statemachine.Or(guard_HasUnassembledDependencies, guard_HasUnknownDependencies),
+						If: statemachine.GuardOr(guard_HasUnassembledDependencies, guard_HasUnknownDependencies),
 					},
 				},
 			},
@@ -109,7 +109,7 @@ var stateDefinitionsMap = StateDefinitions{
 				Actions: []ActionRule{{Action: action_Confirmed}},
 				Transitions: []Transition{
 					{
-						If: statemachine.Not(guard_HasRevertReason),
+						If: statemachine.GuardNot(guard_HasRevertReason),
 						To: State_Confirmed,
 					},
 				},
@@ -127,13 +127,13 @@ var stateDefinitionsMap = StateDefinitions{
 			Event_DependencyAssembled: {
 				Transitions: []Transition{{
 					To: State_Pooled,
-					If: statemachine.Not(guard_HasUnassembledDependencies),
+					If: statemachine.GuardNot(guard_HasUnassembledDependencies),
 				}},
 			},
 			Event_DependencyReverted: {
 				Transitions: []Transition{{
 					To: State_Pooled,
-					If: statemachine.Not(guard_HasUnassembledDependencies),
+					If: statemachine.GuardNot(guard_HasUnassembledDependencies),
 				}},
 			},
 			// We handle a confirmed event in every state so that work can stop if we've been confirmed on the base ledger.
@@ -143,7 +143,7 @@ var stateDefinitionsMap = StateDefinitions{
 				Actions: []ActionRule{{Action: action_Confirmed}},
 				Transitions: []Transition{
 					{
-						If: statemachine.Not(guard_HasRevertReason),
+						If: statemachine.GuardNot(guard_HasRevertReason),
 						To: State_Confirmed,
 					},
 				},
@@ -171,7 +171,7 @@ var stateDefinitionsMap = StateDefinitions{
 				Actions: []ActionRule{{Action: action_Confirmed}},
 				Transitions: []Transition{
 					{
-						If: statemachine.Not(guard_HasRevertReason),
+						If: statemachine.GuardNot(guard_HasRevertReason),
 						To: State_Confirmed,
 					},
 				},
@@ -192,18 +192,18 @@ var stateDefinitionsMap = StateDefinitions{
 					},
 					{
 						Action: action_UpdateSigningIdentity,
-						If:     statemachine.And(guard_AttestationPlanFulfilled, statemachine.Not(guard_HasSigner)),
+						If:     statemachine.GuardAnd(guard_AttestationPlanFulfilled, statemachine.GuardNot(guard_HasSigner)),
 					},
 				},
 				Transitions: []Transition{
 					{
 						To:      State_Endorsement_Gathering,
 						Actions: []ActionRule{{Action: action_NotifyDependentsOfAssembled}},
-						If:      statemachine.Not(guard_AttestationPlanFulfilled),
+						If:      statemachine.GuardNot(guard_AttestationPlanFulfilled),
 					},
 					{
 						To: State_Confirming_Dispatchable,
-						If: statemachine.And(guard_AttestationPlanFulfilled, statemachine.Not(guard_HasDependenciesNotReady)),
+						If: statemachine.GuardAnd(guard_AttestationPlanFulfilled, statemachine.GuardNot(guard_HasDependenciesNotReady)),
 					}},
 			},
 			Event_RequestTimeoutInterval: {
@@ -241,7 +241,7 @@ var stateDefinitionsMap = StateDefinitions{
 				Actions: []ActionRule{{Action: action_Confirmed}},
 				Transitions: []Transition{
 					{
-						If: statemachine.Not(guard_HasRevertReason),
+						If: statemachine.GuardNot(guard_HasRevertReason),
 						To: State_Confirmed,
 					},
 				},
@@ -265,16 +265,16 @@ var stateDefinitionsMap = StateDefinitions{
 					},
 					{
 						Action: action_UpdateSigningIdentity,
-						If:     statemachine.And(guard_AttestationPlanFulfilled, statemachine.Not(guard_HasSigner)),
+						If:     statemachine.GuardAnd(guard_AttestationPlanFulfilled, statemachine.GuardNot(guard_HasSigner)),
 					}},
 				Transitions: []Transition{
 					{
 						To: State_Confirming_Dispatchable,
-						If: statemachine.And(guard_AttestationPlanFulfilled, statemachine.Not(guard_HasDependenciesNotReady)),
+						If: statemachine.GuardAnd(guard_AttestationPlanFulfilled, statemachine.GuardNot(guard_HasDependenciesNotReady)),
 					},
 					{
 						To: State_Blocked,
-						If: statemachine.And(guard_AttestationPlanFulfilled, guard_HasDependenciesNotReady),
+						If: statemachine.GuardAnd(guard_AttestationPlanFulfilled, guard_HasDependenciesNotReady),
 					},
 				},
 			},
@@ -312,7 +312,7 @@ var stateDefinitionsMap = StateDefinitions{
 				Actions: []ActionRule{{Action: action_Confirmed}},
 				Transitions: []Transition{
 					{
-						If: statemachine.Not(guard_HasRevertReason),
+						If: statemachine.GuardNot(guard_HasRevertReason),
 						To: State_Confirmed,
 					},
 				},
@@ -325,11 +325,11 @@ var stateDefinitionsMap = StateDefinitions{
 				Actions: []ActionRule{
 					{
 						Action: action_UpdateSigningIdentity,
-						If:     statemachine.And(guard_AttestationPlanFulfilled, statemachine.Not(guard_HasSigner)),
+						If:     statemachine.GuardAnd(guard_AttestationPlanFulfilled, statemachine.GuardNot(guard_HasSigner)),
 					}},
 				Transitions: []Transition{{
 					To: State_Confirming_Dispatchable,
-					If: statemachine.And(guard_AttestationPlanFulfilled, statemachine.Not(guard_HasDependenciesNotReady)),
+					If: statemachine.GuardAnd(guard_AttestationPlanFulfilled, statemachine.GuardNot(guard_HasDependenciesNotReady)),
 				}},
 			},
 			Event_DependencyRepooled: {
@@ -344,7 +344,7 @@ var stateDefinitionsMap = StateDefinitions{
 				Actions: []ActionRule{{Action: action_Confirmed}},
 				Transitions: []Transition{
 					{
-						If: statemachine.Not(guard_HasRevertReason),
+						If: statemachine.GuardNot(guard_HasRevertReason),
 						To: State_Confirmed,
 					},
 				},
@@ -399,7 +399,7 @@ var stateDefinitionsMap = StateDefinitions{
 				Actions: []ActionRule{{Action: action_Confirmed}},
 				Transitions: []Transition{
 					{
-						If: statemachine.Not(guard_HasRevertReason),
+						If: statemachine.GuardNot(guard_HasRevertReason),
 						To: State_Confirmed,
 					},
 				},
@@ -427,7 +427,7 @@ var stateDefinitionsMap = StateDefinitions{
 				Actions: []ActionRule{{Action: action_Confirmed}},
 				Transitions: []Transition{
 					{
-						If: statemachine.Not(guard_HasRevertReason),
+						If: statemachine.GuardNot(guard_HasRevertReason),
 						To: State_Confirmed,
 					},
 				},
@@ -449,7 +449,7 @@ var stateDefinitionsMap = StateDefinitions{
 				Actions: []ActionRule{{Action: action_Confirmed}},
 				Transitions: []Transition{
 					{
-						If: statemachine.Not(guard_HasRevertReason),
+						If: statemachine.GuardNot(guard_HasRevertReason),
 						To: State_Confirmed,
 					},
 					{
