@@ -179,7 +179,10 @@ var stateDefinitionsMap = StateDefinitions{
 		},
 	},
 	State_Assembling: {
-		OnTransitionTo: []ActionRule{{Action: action_OnTransitionToAssembling}},
+		OnTransitionTo: []ActionRule{
+			{Action: action_ScheduleStateTimeout},
+			{Action: action_SendAssembleRequest},
+		},
 		Events: map[EventType]EventHandler{
 			Event_Assemble_Success: {
 				Validator: validator_MatchesPendingAssembleRequest,
@@ -206,7 +209,6 @@ var stateDefinitionsMap = StateDefinitions{
 			Event_RequestTimeoutInterval: {
 				Actions: []ActionRule{{
 					Action: action_NudgeAssembleRequest,
-					If:     statemachine.Not(guard_AssembleStateTimeoutExceeded),
 				}},
 			},
 			Event_StateTimeoutInterval: {
@@ -247,7 +249,10 @@ var stateDefinitionsMap = StateDefinitions{
 		},
 	},
 	State_Endorsement_Gathering: {
-		OnTransitionTo: []ActionRule{{Action: action_OnTransitionToEndorsementGathering}},
+		OnTransitionTo: []ActionRule{
+			{Action: action_ScheduleStateTimeout},
+			{Action: action_SendEndorsementRequests},
+		},
 		Events: map[EventType]EventHandler{
 			Event_Endorsed: {
 				Actions: []ActionRule{
@@ -285,7 +290,6 @@ var stateDefinitionsMap = StateDefinitions{
 			Event_RequestTimeoutInterval: {
 				Actions: []ActionRule{{
 					Action: action_NudgeEndorsementRequests,
-					If:     statemachine.Not(guard_EndorsementStateTimeoutExceeded),
 				}},
 			},
 			Event_StateTimeoutInterval: {
@@ -348,7 +352,10 @@ var stateDefinitionsMap = StateDefinitions{
 		},
 	},
 	State_Confirming_Dispatchable: {
-		OnTransitionTo: []ActionRule{{Action: action_OnTransitionToConfirmingDispatchable}},
+		OnTransitionTo: []ActionRule{
+			{Action: action_ScheduleStateTimeout},
+			{Action: action_SendPreDispatchRequest},
+		},
 		Events: map[EventType]EventHandler{
 			Event_DispatchRequestApproved: {
 				Validator: validator_MatchesPendingPreDispatchRequest,
@@ -370,7 +377,6 @@ var stateDefinitionsMap = StateDefinitions{
 			Event_RequestTimeoutInterval: {
 				Actions: []ActionRule{{
 					Action: action_NudgePreDispatchRequest,
-					If:     statemachine.Not(guard_DispatchConfirmationStateTimeoutExceeded),
 				}},
 			},
 			Event_StateTimeoutInterval: {
