@@ -26,7 +26,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func Test_action_onTransitionToPooled_Success(t *testing.T) {
+func Test_action_InitializeForNewAssembly_Success(t *testing.T) {
 	ctx := context.Background()
 	grapher := NewGrapher(ctx)
 
@@ -41,6 +41,8 @@ func Test_action_onTransitionToPooled_Success(t *testing.T) {
 	txn, mocks := NewTransactionBuilderForTesting(t, State_Initial).
 		Grapher(grapher).
 		PredefinedDependencies(dependencyID).
+		PreparedPrivateTransaction(&pldapi.TransactionInput{}).
+		PreparedPublicTransaction(&pldapi.TransactionInput{}).
 		Build()
 
 	mocks.EngineIntegration.EXPECT().ResetTransactions(ctx, txn.pt.ID).Return()
@@ -50,28 +52,30 @@ func Test_action_onTransitionToPooled_Success(t *testing.T) {
 	require.Len(t, txn.pt.PreAssembly.Dependencies.DependsOn, 1)
 	require.Equal(t, dependencyID, txn.pt.PreAssembly.Dependencies.DependsOn[0])
 
-	// Call action_onTransitionToPooled
-	err := action_onTransitionToPooled(ctx, txn, nil)
+	// Call action_InitializeForNewAssembly
+	err := action_InitializeForNewAssembly(ctx, txn, nil)
 	require.NoError(t, err)
 
 	// Verify that the dependency transaction has been updated with this transaction as a dependent
 	require.NotNil(t, dependencyTxn.pt.PreAssembly.Dependencies)
 	require.Contains(t, dependencyTxn.pt.PreAssembly.Dependencies.PrereqOf, txn.pt.ID)
+	require.Nil(t, txn.pt.PreparedPublicTransaction)
+	require.Nil(t, txn.pt.PreparedPrivateTransaction)
 }
 
-func Test_action_onTransitionToPooled_NoPreAssembly(t *testing.T) {
+func Test_action_InitializeForNewAssembly_NoPreAssembly(t *testing.T) {
 	ctx := context.Background()
 	txn, _ := NewTransactionBuilderForTesting(t, State_Initial).Build()
 
 	// Remove PreAssembly to test error case
 	txn.pt.PreAssembly = nil
 
-	// Call action_onTransitionToPooled - should return error
-	err := action_onTransitionToPooled(ctx, txn, nil)
+	// Call action_InitializeForNewAssembly - should return error
+	err := action_InitializeForNewAssembly(ctx, txn, nil)
 	assert.Error(t, err)
 }
 
-func Test_action_onTransitionToPooled_MissingDependency(t *testing.T) {
+func Test_action_InitializeForNewAssembly_MissingDependency(t *testing.T) {
 	ctx := context.Background()
 
 	// Create a transaction with a dependency that doesn't exist in grapher
@@ -81,12 +85,12 @@ func Test_action_onTransitionToPooled_MissingDependency(t *testing.T) {
 		Build()
 
 	mocks.EngineIntegration.EXPECT().ResetTransactions(ctx, txn.pt.ID).Return()
-	// Call action_onTransitionToPooled - should not error, just log
-	err := action_onTransitionToPooled(ctx, txn, nil)
+	// Call action_InitializeForNewAssembly - should not error, just log
+	err := action_InitializeForNewAssembly(ctx, txn, nil)
 	require.NoError(t, err)
 }
 
-func Test_action_onTransitionToPooled_DependencyWithNilDependencies(t *testing.T) {
+func Test_action_InitializeForNewAssembly_DependencyWithNilDependencies(t *testing.T) {
 	ctx := context.Background()
 	grapher := NewGrapher(ctx)
 
@@ -118,8 +122,8 @@ func Test_action_onTransitionToPooled_DependencyWithNilDependencies(t *testing.T
 	// Verify dependency has nil Dependencies
 	require.Nil(t, dependencyTxn.pt.PreAssembly.Dependencies)
 
-	// Call action_onTransitionToPooled
-	err := action_onTransitionToPooled(ctx, txn, nil)
+	// Call action_InitializeForNewAssembly
+	err := action_InitializeForNewAssembly(ctx, txn, nil)
 	require.NoError(t, err)
 
 	// Verify that the dependency transaction now has Dependencies initialized
@@ -320,7 +324,7 @@ func Test_guard_HasChainedTxInProgress(t *testing.T) {
 	assert.True(t, guard_HasChainedTxInProgress(ctx, txn2))
 }
 
-func Test_action_onTransitionToPooled_WithDependents(t *testing.T) {
+func Test_action_NotifyDependentsOfRepool_WithDependents(t *testing.T) {
 	ctx := context.Background()
 	grapher := NewGrapher(ctx)
 
@@ -334,7 +338,7 @@ func Test_action_onTransitionToPooled_WithDependents(t *testing.T) {
 
 	// Create the main transaction
 	mainTxnID := uuid.New()
-	mainTxn, mainMocks := NewTransactionBuilderForTesting(t, State_Pooled).
+	mainTxn, _ := NewTransactionBuilderForTesting(t, State_Pooled).
 		TransactionID(mainTxnID).
 		Grapher(grapher).
 		PreAssembly(&components.TransactionPreAssembly{}).
@@ -343,24 +347,21 @@ func Test_action_onTransitionToPooled_WithDependents(t *testing.T) {
 		}).
 		Build()
 
-	mainMocks.EngineIntegration.EXPECT().ResetTransactions(ctx, mainTxnID).Return()
-
-	// Call action_onTransitionToPooled - should re-pool dependents
-	err := action_onTransitionToPooled(ctx, mainTxn, nil)
+	// Call action_InitializeForNewAssembly - should re-pool dependents
+	err := action_NotifyDependentsOfRepool(ctx, mainTxn, nil)
 	require.NoError(t, err)
 
 	// Verify the dependent transaction received the event
 	assert.Equal(t, State_Pooled, dependentTxn.GetCurrentState())
 }
 
-func Test_action_onTransitionToPooled_InitialTransitionHasNoDependents(t *testing.T) {
+func Test_action_NotifyDependentsOfRepool_InitialTransitionHasNoDependents(t *testing.T) {
 	ctx := context.Background()
-	txn, txnMocks := NewTransactionBuilderForTesting(t, State_Pooled).
+	txn, _ := NewTransactionBuilderForTesting(t, State_Pooled).
 		PreAssembly(&components.TransactionPreAssembly{}).
 		Build()
-	txnMocks.EngineIntegration.EXPECT().ResetTransactions(ctx, txn.pt.ID).Return()
 
-	err := action_onTransitionToPooled(ctx, txn, nil)
+	err := action_NotifyDependentsOfRepool(ctx, txn, nil)
 	require.NoError(t, err)
 }
 

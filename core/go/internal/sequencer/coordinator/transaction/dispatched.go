@@ -19,7 +19,17 @@ import (
 
 	"github.com/LFDT-Paladin/paladin/common/go/pkg/log"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/common"
+	"github.com/LFDT-Paladin/paladin/toolkit/pkg/prototk"
+	"github.com/google/uuid"
 )
+
+func action_SendDispatched(ctx context.Context, t *CoordinatorTransaction, _ common.Event) error {
+	var txSpec *prototk.TransactionSpecification
+	if t.pt.PreAssembly != nil {
+		txSpec = t.pt.PreAssembly.TransactionSpecification
+	}
+	return t.transportWriter.SendDispatched(ctx, t.originator, uuid.New(), txSpec)
+}
 
 func action_Collected(_ context.Context, t *CoordinatorTransaction, event common.Event) error {
 	e := event.(*CollectedEvent)

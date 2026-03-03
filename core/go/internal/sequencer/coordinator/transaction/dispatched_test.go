@@ -19,7 +19,9 @@ import (
 	"testing"
 
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldtypes"
+	"github.com/LFDT-Paladin/paladin/toolkit/pkg/prototk"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
 
@@ -144,4 +146,48 @@ func Test_action_Submitted_PropagatesSendError(t *testing.T) {
 	// State still updated
 	require.NotNil(t, txn.latestSubmissionHash)
 	assert.Equal(t, submissionHash, *txn.latestSubmissionHash)
+}
+
+func Test_action_SendDispatched_UsesTransactionSpec(t *testing.T) {
+	ctx := context.Background()
+	txn, mocks := NewTransactionBuilderForTesting(t, State_Dispatched).
+		UseMockTransportWriter().
+		Build()
+
+	spec := txn.pt.PreAssembly.TransactionSpecification
+	mocks.TransportWriter.EXPECT().
+		SendDispatched(ctx, txn.originator, mock.Anything, spec).
+		Return(nil)
+
+	err := action_SendDispatched(ctx, txn, nil)
+	require.NoError(t, err)
+}
+
+func Test_action_SendDispatched_AllowsNilTransactionSpec(t *testing.T) {
+	ctx := context.Background()
+	txn, mocks := NewTransactionBuilderForTesting(t, State_Dispatched).
+		UseMockTransportWriter().
+		Build()
+	txn.pt.PreAssembly = nil
+
+	mocks.TransportWriter.EXPECT().
+		SendDispatched(ctx, txn.originator, mock.Anything, (*prototk.TransactionSpecification)(nil)).
+		Return(nil)
+
+	err := action_SendDispatched(ctx, txn, nil)
+	require.NoError(t, err)
+}
+
+func Test_action_SendDispatched_PropagatesSendError(t *testing.T) {
+	ctx := context.Background()
+	txn, mocks := NewTransactionBuilderForTesting(t, State_Dispatched).
+		UseMockTransportWriter().
+		Build()
+
+	mocks.TransportWriter.EXPECT().
+		SendDispatched(ctx, txn.originator, mock.Anything, txn.pt.PreAssembly.TransactionSpecification).
+		Return(assert.AnError)
+
+	err := action_SendDispatched(ctx, txn, nil)
+	require.Error(t, err)
 }

@@ -27,6 +27,7 @@ import (
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/metrics"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/syncpoints"
 	"github.com/LFDT-Paladin/paladin/core/mocks/componentsmocks"
+	"github.com/LFDT-Paladin/paladin/core/pkg/persistence/mockpersistence"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldtypes"
 	"github.com/LFDT-Paladin/paladin/toolkit/pkg/prototk"
 	"github.com/google/uuid"
@@ -83,6 +84,7 @@ type CoordinatorBuilderForTesting struct {
 	originatorIdentityPool                   []string
 	domainAPI                                *componentsmocks.DomainSmartContract
 	txManager                                *componentsmocks.TXManager
+	sequencerManager                         *componentsmocks.SequencerManager
 	contractAddress                          *pldtypes.EthAddress
 	currentBlockHeight                       *uint64
 	activeCoordinatorBlockHeight             *uint64
@@ -200,13 +202,15 @@ func NewCoordinatorBuilderForTesting(t *testing.T, state State) *CoordinatorBuil
 
 	domainAPI := componentsmocks.NewDomainSmartContract(t)
 	txManager := componentsmocks.NewTXManager(t)
+	sequencerManager := componentsmocks.NewSequencerManager(t)
 	return &CoordinatorBuilderForTesting{
-		t:               t,
-		state:           state,
-		domainAPI:       domainAPI,
-		txManager:       txManager,
-		metrics:         metrics.InitMetrics(context.Background(), prometheus.NewRegistry()),
-		sequencerConfig: copySequencerDefaultsForTest(),
+		t:                t,
+		state:            state,
+		domainAPI:        domainAPI,
+		txManager:        txManager,
+		sequencerManager: sequencerManager,
+		metrics:          metrics.InitMetrics(context.Background(), prometheus.NewRegistry()),
+		sequencerConfig:  copySequencerDefaultsForTest(),
 	}
 }
 
@@ -264,6 +268,10 @@ func (b *CoordinatorBuilderForTesting) GetTXManager() *componentsmocks.TXManager
 	return b.txManager
 }
 
+func (b *CoordinatorBuilderForTesting) GetSequencerManager() *componentsmocks.SequencerManager {
+	return b.sequencerManager
+}
+
 func (b *CoordinatorBuilderForTesting) GetSequencerConfig() *pldconf.SequencerConfig {
 	return b.sequencerConfig
 }
@@ -310,10 +318,17 @@ func (b *CoordinatorBuilderForTesting) Build(ctx context.Context) (*coordinator,
 	buildCtx, cancel := context.WithCancel(ctx)
 
 	allComponents := componentsmocks.NewAllComponents(b.t)
+	mp, err := mockpersistence.NewSQLMockProvider()
+	if err != nil {
+		panic(err)
+	}
+
 	transportManager := componentsmocks.NewTransportManager(b.t)
 	transportManager.On("LocalNodeName").Return("node1").Maybe()
 	allComponents.On("TransportManager").Return(transportManager).Maybe()
 	allComponents.On("TxManager").Return(b.txManager).Maybe()
+	allComponents.On("SequencerManager").Return(b.sequencerManager).Maybe()
+	allComponents.On("Persistence").Return(mp.P).Maybe()
 
 	coordinator, err := NewCoordinator(
 		buildCtx,
@@ -331,7 +346,6 @@ func (b *CoordinatorBuilderForTesting) Build(ctx context.Context) (*coordinator,
 		b.sequencerConfig,
 		"node1",
 		b.metrics,
-		func(context.Context, *transaction.CoordinatorTransaction) {},         // onReadyForDispatch function, not used in tests
 		func(contractAddress *pldtypes.EthAddress, coordinatorNode string) {}, // coordinatorStarted function, not used in tests
 		func(contractAddress *pldtypes.EthAddress) {},                         // coordinatorIdle function, not used in tests
 	)

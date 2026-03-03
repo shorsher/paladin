@@ -31,6 +31,8 @@ import (
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/testutil"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/transport"
 	"github.com/LFDT-Paladin/paladin/core/mocks/componentsmocks"
+	"github.com/LFDT-Paladin/paladin/core/pkg/persistence/mockpersistence"
+	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldapi"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldtypes"
 	"github.com/LFDT-Paladin/paladin/toolkit/pkg/prototk"
 	"github.com/google/uuid"
@@ -52,11 +54,16 @@ func NewCoordinatorForUnitTest(t *testing.T, ctx context.Context, originatorIden
 	}
 	mockDomainAPI := componentsmocks.NewDomainSmartContract(t)
 	mockTXManager := componentsmocks.NewTXManager(t)
+	mockSequencerManager := componentsmocks.NewSequencerManager(t)
 	allComponents := componentsmocks.NewAllComponents(t)
 	transportManager := componentsmocks.NewTransportManager(t)
+	mp, err := mockpersistence.NewSQLMockProvider()
+	require.NoError(t, err)
 	transportManager.On("LocalNodeName").Return("node1").Maybe()
 	allComponents.On("TransportManager").Return(transportManager).Maybe()
 	allComponents.On("TxManager").Return(mockTXManager).Maybe()
+	allComponents.On("SequencerManager").Return(mockSequencerManager).Maybe()
+	allComponents.On("Persistence").Return(mp.P).Maybe()
 	allComponents.On("KeyManager").Return(nil).Maybe()
 	allComponents.On("PublicTxManager").Return(nil).Maybe()
 	mockDomainAPI.On("ContractConfig").Return(&prototk.ContractConfig{
@@ -82,9 +89,6 @@ func NewCoordinatorForUnitTest(t *testing.T, ctx context.Context, originatorIden
 
 	coordinator, err := NewCoordinator(buildCtx, pldtypes.RandAddress(), mockDomainAPI, nil, allComponents, nil, nil, mocks.transportWriter, mocks.clock, mocks.engineIntegration, mocks.syncPoints, originatorIdentityPool, config, "node1",
 		metrics,
-		func(context.Context, *transaction.CoordinatorTransaction) {
-			// Not used
-		},
 		func(contractAddress *pldtypes.EthAddress, coordinatorNode string) {
 			// Not used
 		},
@@ -123,15 +127,30 @@ func TestCoordinator_SingleTransactionLifecycle(t *testing.T) {
 	builder.GetDomainAPI().On("ContractConfig").Return(&prototk.ContractConfig{
 		CoordinatorSelection: prototk.ContractConfig_COORDINATOR_SENDER,
 	})
+	builder.GetDomainAPI().On("PrepareTransaction", mock.Anything, mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
+		tx := args.Get(2).(*components.PrivateTransaction)
+		tx.PreparedPrivateTransaction = &pldapi.TransactionInput{}
+	}).Return(nil).Once()
 	builder.GetTXManager().On("HasChainedTransaction", mock.Anything, mock.Anything).Return(false, nil)
+	builder.GetSequencerManager().On("BuildNullifiers", mock.Anything, mock.Anything).Return(nil, nil).Once()
 	config := builder.GetSequencerConfig()
 	config.MaxDispatchAhead = confutil.P(-1) // Stop the dispatcher loop from progressing states - we're manually updating state throughout the test
 	builder.OverrideSequencerConfig(config)
 	c, mocks, done := builder.Build(ctx)
 	defer done()
+	mocks.SyncPoints.(*syncpoints.MockSyncPoints).On("PersistDispatchBatch", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil).Once()
 
 	// Start by simulating the originator and delegate a transaction to the coordinator
-	transactionBuilder := testutil.NewPrivateTransactionBuilderForTesting().Address(builder.GetContractAddress()).Originator(originator).NumberOfRequiredEndorsers(1)
+	transactionBuilder := testutil.NewPrivateTransactionBuilderForTesting().
+		Address(builder.GetContractAddress()).
+		Originator(originator).
+		NumberOfRequiredEndorsers(1).
+		PreAssembly(&components.TransactionPreAssembly{
+			TransactionSpecification: &prototk.TransactionSpecification{
+				From:   originator,
+				Intent: prototk.TransactionSpecification_PREPARE_TRANSACTION,
+			},
+		})
 	txn := transactionBuilder.BuildSparse()
 	c.QueueEvent(ctx, &TransactionsDelegatedEvent{
 		FromNode:     "testNode",

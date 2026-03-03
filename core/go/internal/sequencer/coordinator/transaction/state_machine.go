@@ -151,7 +151,10 @@ var stateDefinitionsMap = StateDefinitions{
 		},
 	},
 	State_Pooled: {
-		OnTransitionTo: []ActionRule{{Action: action_onTransitionToPooled}},
+		OnTransitionTo: []ActionRule{
+			{Action: action_NotifyDependentsOfRepool},
+			{Action: action_InitializeForNewAssembly},
+		},
 		Events: map[EventType]EventHandler{
 			Event_Selected: {
 				Transitions: []Transition{
@@ -414,10 +417,16 @@ var stateDefinitionsMap = StateDefinitions{
 		},
 		Events: map[EventType]EventHandler{
 			Event_Dispatched: {
+				Actions: []ActionRule{
+					{
+						Action: action_Dispatch,
+					},
+				},
 				Transitions: []Transition{
 					{
 						To: State_Dispatched,
-					}},
+					},
+				},
 			},
 			Event_DependencyRepooled: {
 				Transitions: []Transition{{
@@ -439,6 +448,9 @@ var stateDefinitionsMap = StateDefinitions{
 		},
 	},
 	State_Dispatched: {
+		OnTransitionTo: []ActionRule{
+			{Action: action_SendDispatched},
+		},
 		Events: map[EventType]EventHandler{
 			Event_Collected: {
 				Actions: []ActionRule{{Action: action_Collected}},

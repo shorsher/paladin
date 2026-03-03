@@ -65,8 +65,12 @@ func (t *CoordinatorTransaction) hasUnknownDependencies(ctx context.Context) boo
 	return false
 }
 
+func action_InitializeForNewAssembly(ctx context.Context, txn *CoordinatorTransaction, event common.Event) error {
+	return txn.initializeForNewAssembly(ctx)
+}
+
 // Initializes (or re-initializes) the transaction as it arrives in the pool
-func (t *CoordinatorTransaction) initializeForNewAssemply(ctx context.Context) error {
+func (t *CoordinatorTransaction) initializeForNewAssembly(ctx context.Context) error {
 	if t.pt.PreAssembly == nil {
 		msg := fmt.Sprintf("cannot calculate dependencies for transaction %s without a PreAssembly", t.pt.ID)
 		log.L(ctx).Error(msg)
@@ -98,6 +102,8 @@ func (t *CoordinatorTransaction) initializeForNewAssemply(ctx context.Context) e
 	// and only time we pool & assemble this transaction but if we're re-pooling for any reason we must clear the post-assembly and any post-assembly
 	// dependencies from a previous version of the grapher.
 	t.pt.PostAssembly = nil
+	t.pt.PreparedPublicTransaction = nil
+	t.pt.PreparedPrivateTransaction = nil
 	t.dependencies = &pldapi.TransactionDependencies{}
 	t.pendingPreDispatchRequest = nil
 	t.grapher.ForgetMints(t.pt.ID)
@@ -106,16 +112,6 @@ func (t *CoordinatorTransaction) initializeForNewAssemply(ctx context.Context) e
 	t.engineIntegration.ResetTransactions(ctx, t.pt.ID)
 
 	return nil
-}
-
-func action_onTransitionToPooled(ctx context.Context, txn *CoordinatorTransaction, event common.Event) error {
-	// We emit a DependencyRepooledEvent whenever we transition to pooled. For the initial transition
-	// from State_Initial to State_Pooled and the transition from State_Assembling to State_Pooled
-	// we do not expect any dependents yet, so this is a no-op.
-	if err := txn.notifyDependentsOfRepool(ctx); err != nil {
-		return err
-	}
-	return txn.initializeForNewAssemply(ctx)
 }
 
 func guard_HasUnassembledDependencies(ctx context.Context, txn *CoordinatorTransaction) bool {
@@ -128,6 +124,13 @@ func guard_HasUnknownDependencies(ctx context.Context, txn *CoordinatorTransacti
 
 func guard_HasChainedTxInProgress(ctx context.Context, txn *CoordinatorTransaction) bool {
 	return txn.chainedTxAlreadyDispatched
+}
+
+func action_NotifyDependentsOfRepool(ctx context.Context, txn *CoordinatorTransaction, _ common.Event) error {
+	// We emit a DependencyRepooledEvent whenever we transition to pooled. For the initial transition
+	// from State_Initial to State_Pooled and the transition from State_Assembling to State_Pooled
+	// we do not expect any dependents yet, so this is a no-op.
+	return txn.notifyDependentsOfRepool(ctx)
 }
 
 func (t *CoordinatorTransaction) notifyDependentsOfRepool(ctx context.Context) error {

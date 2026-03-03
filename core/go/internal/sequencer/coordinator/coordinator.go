@@ -100,7 +100,6 @@ type coordinator struct {
 	buildNullifiers       func(context.Context, []*components.StateDistributionWithData) ([]*components.NullifierUpsert, error)
 	newPrivateTransaction func(context.Context, []*components.ValidatedTransaction) error
 	syncPoints            syncpoints.SyncPoints
-	readyForDispatch      func(context.Context, *transaction.CoordinatorTransaction)
 	coordinatorActive     func(contractAddress *pldtypes.EthAddress, coordinatorNode string)
 	coordinatorIdle       func(contractAddress *pldtypes.EthAddress)
 	heartbeatCtx          context.Context
@@ -130,7 +129,6 @@ func NewCoordinator(
 	configuration *pldconf.SequencerConfig,
 	nodeName string,
 	metrics metrics.DistributedSequencerMetrics,
-	readyForDispatch func(context.Context, *transaction.CoordinatorTransaction),
 	coordinatorActive func(contractAddress *pldtypes.EthAddress, coordinatorNode string),
 	coordinatorIdle func(contractAddress *pldtypes.EthAddress),
 ) (*coordinator, error) {
@@ -149,7 +147,6 @@ func NewCoordinator(
 		clock:                              clock,
 		engineIntegration:                  engineIntegration,
 		syncPoints:                         syncPoints,
-		readyForDispatch:                   readyForDispatch,
 		coordinatorActive:                  coordinatorActive,
 		coordinatorIdle:                    coordinatorIdle,
 		nodeName:                           nodeName,

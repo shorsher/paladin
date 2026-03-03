@@ -133,7 +133,7 @@ func NewPrivateTransactionBuilderForTesting() *PrivateTransactionBuilderForTesti
 		signerAddress:        nil,
 		numberOfEndorsers:    3,
 		numberOfEndorsements: 0,
-		numberOfOutputStates: 1,
+		numberOfOutputStates: 0,
 	}
 
 	return builder

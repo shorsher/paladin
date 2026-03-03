@@ -21,6 +21,7 @@ import (
 	"math/rand/v2"
 	"testing"
 
+	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/LFDT-Paladin/paladin/core/internal/components"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/common"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/metrics"
@@ -28,12 +29,14 @@ import (
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/testutil"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/transport"
 	"github.com/LFDT-Paladin/paladin/core/mocks/componentsmocks"
+	"github.com/LFDT-Paladin/paladin/core/pkg/persistence/mockpersistence"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldapi"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldtypes"
 	"github.com/LFDT-Paladin/paladin/toolkit/pkg/prototk"
 	"github.com/google/uuid"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 )
 
 // pendingEndorsementRequestAddition is used by the builder to add one pending endorsement request (builder creates IdempotentRequest from clock/requestTimeout).
@@ -341,6 +344,11 @@ func (b *TransactionBuilderForTesting) Originator(originator string) *Transactio
 	return b
 }
 
+func (b *TransactionBuilderForTesting) NodeName(nodeName string) *TransactionBuilderForTesting {
+	b.nodeName = nodeName
+	return b
+}
+
 func (b *TransactionBuilderForTesting) HeartbeatIntervalsSinceStateChange(heartbeatIntervalsSinceStateChange int) *TransactionBuilderForTesting {
 	b.heartbeatIntervalsSinceStateChange = heartbeatIntervalsSinceStateChange
 	return b
@@ -551,9 +559,12 @@ type transactionDependencyMocks struct {
 	AllComponents       *componentsmocks.AllComponents
 	DomainAPI           *componentsmocks.DomainSmartContract
 	Domain              *componentsmocks.Domain
+	DomainContext       *componentsmocks.DomainContext
 	KeyManager          *componentsmocks.KeyManager
 	PublicTxManager     *componentsmocks.PublicTxManager
 	TXManager           *componentsmocks.TXManager
+	SequenceManager     *componentsmocks.SequencerManager
+	DB                  sqlmock.Sqlmock
 }
 
 func (b *TransactionBuilderForTesting) Build() (*CoordinatorTransaction, *transactionDependencyMocks) {
@@ -561,6 +572,9 @@ func (b *TransactionBuilderForTesting) Build() (*CoordinatorTransaction, *transa
 	if b.grapher == nil {
 		b.grapher = NewGrapher(ctx)
 	}
+
+	mp, err := mockpersistence.NewSQLMockProvider()
+	require.NoError(b.t, err)
 
 	mocks := &transactionDependencyMocks{
 		TransportWriter:     transport.NewMockTransportWriter(b.t),
@@ -572,14 +586,19 @@ func (b *TransactionBuilderForTesting) Build() (*CoordinatorTransaction, *transa
 		KeyManager:          componentsmocks.NewKeyManager(b.t),
 		PublicTxManager:     componentsmocks.NewPublicTxManager(b.t),
 		TXManager:           componentsmocks.NewTXManager(b.t),
+		SequenceManager:     componentsmocks.NewSequencerManager(b.t),
 		DomainAPI:           componentsmocks.NewDomainSmartContract(b.t),
 		Domain:              componentsmocks.NewDomain(b.t),
+		DomainContext:       componentsmocks.NewDomainContext(b.t),
+		DB:                  mp.Mock,
 	}
 
 	// link the mocks which return other mocks
 	mocks.AllComponents.On("KeyManager").Return(mocks.KeyManager).Maybe()
 	mocks.AllComponents.On("PublicTxManager").Return(mocks.PublicTxManager).Maybe()
 	mocks.AllComponents.On("TxManager").Return(mocks.TXManager).Maybe()
+	mocks.AllComponents.On("SequencerManager").Return(mocks.SequenceManager).Maybe()
+	mocks.AllComponents.On("Persistence").Return(mp.P).Maybe()
 	mocks.DomainAPI.On("Domain").Return(mocks.Domain).Maybe()
 
 	// create the mocks needed for the NewTransaction call below
@@ -612,7 +631,7 @@ func (b *TransactionBuilderForTesting) Build() (*CoordinatorTransaction, *transa
 		mocks.SyncPoints,
 		mocks.AllComponents,
 		mocks.DomainAPI,
-		nil,
+		mocks.DomainContext,
 		mocks.Clock.Duration(b.requestTimeout),
 		mocks.Clock.Duration(b.stateTimeout),
 		b.finalizingGracePeriod,
@@ -620,9 +639,7 @@ func (b *TransactionBuilderForTesting) Build() (*CoordinatorTransaction, *transa
 		b.grapher,
 		metrics.InitMetrics(ctx, prometheus.NewRegistry()),
 	)
-	if err != nil {
-		panic(fmt.Sprintf("Error from NewTransaction: %v", err))
-	}
+	require.NoError(b.t, err)
 
 	txn.signerAddress = b.signerAddress
 	txn.domainSigningIdentity = b.domainSigningIdentity
@@ -661,9 +678,8 @@ func (b *TransactionBuilderForTesting) Build() (*CoordinatorTransaction, *transa
 	if privateTransaction.PostAssembly != nil {
 		if _, isRealGrapher := b.grapher.(*grapher); isRealGrapher {
 			for _, state := range privateTransaction.PostAssembly.OutputStates {
-				if err := b.grapher.AddMinter(ctx, state.ID, txn); err != nil {
-					panic(fmt.Sprintf("Error from AddMinter: %v", err))
-				}
+				err := b.grapher.AddMinter(ctx, state.ID, txn)
+				require.NoError(b.t, err)
 			}
 		}
 	}
