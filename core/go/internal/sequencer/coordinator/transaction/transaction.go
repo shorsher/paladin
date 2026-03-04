@@ -67,7 +67,6 @@ type CoordinatorTransaction struct {
 	//Configuration
 	requestTimeout                    common.Duration
 	stateTimeout                      common.Duration
-	errorCount                        int
 	finalizingGracePeriod             int // number of heartbeat intervals that the transaction will remain in one of the terminal states ( Reverted or Confirmed) before it is removed from memory and no longer reported in heartbeats
 	confirmedLockRetentionGracePeriod int // number of heartbeat intervals after confirmation before we clear in-memory state locks
 	confirmedLocksReleased            bool
@@ -161,42 +160,6 @@ func (t *CoordinatorTransaction) GetCurrentState() State {
 // These functions are all called externally and return data that can change so always take
 // a read lock. A consumer could also take a read lock if they wanted to be certain that a group of
 // read functions are atomic
-
-func (t *CoordinatorTransaction) GetSignerAddress() *pldtypes.EthAddress {
-	t.RLock()
-	defer t.RUnlock()
-	return t.signerAddress
-}
-
-func (t *CoordinatorTransaction) GetNonce() *uint64 {
-	t.RLock()
-	defer t.RUnlock()
-	return t.nonce
-}
-
-func (t *CoordinatorTransaction) GetLatestSubmissionHash() *pldtypes.Bytes32 {
-	t.RLock()
-	defer t.RUnlock()
-	return t.latestSubmissionHash
-}
-
-func (t *CoordinatorTransaction) GetRevertReason() pldtypes.HexBytes {
-	t.RLock()
-	defer t.RUnlock()
-	return t.revertReason
-}
-
-func (t *CoordinatorTransaction) Originator() string {
-	t.RLock()
-	defer t.RUnlock()
-	return t.originator
-}
-
-func (t *CoordinatorTransaction) GetErrorCount() int {
-	t.RLock()
-	defer t.RUnlock()
-	return t.errorCount
-}
 
 func (t *CoordinatorTransaction) GetID() uuid.UUID {
 	t.RLock()

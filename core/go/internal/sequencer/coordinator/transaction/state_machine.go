@@ -216,8 +216,7 @@ var stateDefinitionsMap = StateDefinitions{
 			},
 			Event_StateTimeoutInterval: {
 				Transitions: []Transition{{
-					To:      State_Pooled,
-					Actions: []ActionRule{{Action: action_IncrementErrors}},
+					To: State_Pooled,
 				}},
 			},
 			Event_Assemble_Revert_Response: {
@@ -282,11 +281,9 @@ var stateDefinitionsMap = StateDefinitions{
 				},
 			},
 			Event_EndorsedRejected: {
-				Actions: []ActionRule{{Action: action_EndorsedRejected}},
 				Transitions: []Transition{
 					{
-						To:      State_Pooled,
-						Actions: []ActionRule{{Action: action_IncrementErrors}},
+						To: State_Pooled,
 					},
 				},
 			},
@@ -298,8 +295,7 @@ var stateDefinitionsMap = StateDefinitions{
 			Event_StateTimeoutInterval: {
 				Transitions: []Transition{
 					{
-						To:      State_Pooled,
-						Actions: []ActionRule{{Action: action_IncrementErrors}},
+						To: State_Pooled,
 					},
 				},
 			},
@@ -373,8 +369,7 @@ var stateDefinitionsMap = StateDefinitions{
 				Actions:   []ActionRule{{Action: action_DispatchRequestRejected}},
 				Transitions: []Transition{
 					{
-						To:      State_Pooled,
-						Actions: []ActionRule{{Action: action_IncrementErrors}},
+						To: State_Pooled,
 					},
 				},
 			},

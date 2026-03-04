@@ -63,12 +63,6 @@ func (t *CoordinatorTransaction) applyEndorsement(ctx context.Context, endorseme
 	return nil
 }
 
-func (t *CoordinatorTransaction) applyEndorsementRejection(ctx context.Context, revertReason string, party string, attestationRequestName string) error {
-	//The endorsement rejection is not currently stored in the PrivateTransaction struct.
-	//  Only thing that the state machine currently cares about is the error count (which may be used as part of the logic to select transactions from the pool for assembly) and that is incremented in the transition functions
-	return nil
-}
-
 func (t *CoordinatorTransaction) hasUnfulfilledEndorsementRequirements(ctx context.Context) bool {
 	return len(t.unfulfilledEndorsementRequirements(ctx)) > 0
 }
@@ -196,11 +190,6 @@ func toEndorsableList(states []*components.FullState) []*prototk.EndorsableState
 func action_Endorsed(ctx context.Context, t *CoordinatorTransaction, event common.Event) error {
 	e := event.(*EndorsedEvent)
 	return t.applyEndorsement(ctx, e.Endorsement, e.RequestID)
-}
-
-func action_EndorsedRejected(ctx context.Context, t *CoordinatorTransaction, event common.Event) error {
-	e := event.(*EndorsedRejectedEvent)
-	return t.applyEndorsementRejection(ctx, e.RevertReason, e.Party, e.AttestationRequestName)
 }
 
 func action_SendEndorsementRequests(ctx context.Context, txn *CoordinatorTransaction, _ common.Event) error {

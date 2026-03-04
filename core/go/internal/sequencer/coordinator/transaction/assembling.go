@@ -199,11 +199,6 @@ func (t *CoordinatorTransaction) writeLockStates(ctx context.Context) error {
 	return t.engineIntegration.WriteLockStatesForTransaction(ctx, t.pt)
 }
 
-func (t *CoordinatorTransaction) incrementErrors() error {
-	t.errorCount++
-	return nil
-}
-
 func validator_MatchesPendingAssembleRequest(ctx context.Context, txn *CoordinatorTransaction, event common.Event) (bool, error) {
 	switch event := event.(type) {
 	// TODO: Snapshot freshness
@@ -245,9 +240,4 @@ func action_NudgeAssembleRequest(ctx context.Context, txn *CoordinatorTransactio
 
 func action_NotifyDependentsOfAssembled(ctx context.Context, txn *CoordinatorTransaction, _ common.Event) error {
 	return txn.notifyDependentsOfAssembled(ctx)
-}
-
-func action_IncrementErrors(ctx context.Context, txn *CoordinatorTransaction, _ common.Event) error {
-	txn.resetEndorsementRequests(ctx)
-	return txn.incrementErrors()
 }

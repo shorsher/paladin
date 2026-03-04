@@ -140,7 +140,7 @@ func TestGuard_ActiveCoordinatorFlushComplete_EmptyFlushPointsMap(t *testing.T) 
 	builder := NewCoordinatorBuilderForTesting(t, State_Prepared)
 	c, _, done := builder.Build(ctx)
 	defer done()
-	c.activeCoordinatorsFlushPointsBySignerNonce = make(map[string]*common.FlushPoint)
+	c.activeCoordinatorsFlushPointsBySignerNonce = make(map[string]*common.SnapshotFlushPoint)
 	result := guard_ActiveCoordinatorFlushComplete(ctx, c)
 	assert.True(t, result, "empty map should return true")
 }
@@ -152,7 +152,7 @@ func TestGuard_ActiveCoordinatorFlushComplete_AllFlushPointsConfirmed(t *testing
 	defer done()
 	signer1 := pldtypes.RandAddress()
 	signer2 := pldtypes.RandAddress()
-	c.activeCoordinatorsFlushPointsBySignerNonce = map[string]*common.FlushPoint{
+	c.activeCoordinatorsFlushPointsBySignerNonce = map[string]*common.SnapshotFlushPoint{
 		"signer1:1": {
 			From:      *signer1,
 			Nonce:     1,
@@ -175,7 +175,7 @@ func TestGuard_ActiveCoordinatorFlushComplete_OneFlushPointNotConfirmed(t *testi
 	defer done()
 	signer1 := pldtypes.RandAddress()
 	signer2 := pldtypes.RandAddress()
-	c.activeCoordinatorsFlushPointsBySignerNonce = map[string]*common.FlushPoint{
+	c.activeCoordinatorsFlushPointsBySignerNonce = map[string]*common.SnapshotFlushPoint{
 		"signer1:1": {
 			From:      *signer1,
 			Nonce:     1,
@@ -197,7 +197,7 @@ func TestGuard_ActiveCoordinatorFlushComplete_AllFlushPointsNotConfirmed(t *test
 	c, _, done := builder.Build(ctx)
 	defer done()
 	signer1 := pldtypes.RandAddress()
-	c.activeCoordinatorsFlushPointsBySignerNonce = map[string]*common.FlushPoint{
+	c.activeCoordinatorsFlushPointsBySignerNonce = map[string]*common.SnapshotFlushPoint{
 		"signer1:1": {
 			From:      *signer1,
 			Nonce:     1,

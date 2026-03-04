@@ -29,6 +29,15 @@ func guard_HasRevertReason(ctx context.Context, txn *CoordinatorTransaction) boo
 
 func action_Confirmed(ctx context.Context, t *CoordinatorTransaction, event common.Event) error {
 	e := event.(*ConfirmedEvent)
+	if t.latestSubmissionHash == nil {
+		// The transaction created a chained private transaction so there is no hash to compare
+		log.L(ctx).Debugf("transaction %s confirmed with nil dispatch hash (confirmed hash of chained TX %s)", t.pt.ID.String(), e.Hash.String())
+	} else if *t.latestSubmissionHash != e.Hash {
+		// We have missed a submission?  Or is it possible that an earlier submission has managed to get confirmed?
+		// It is interesting so we log it but either way, this must be the transaction that we are looking for because the block indexer correlates with transaction IDs
+		log.L(ctx).Debugf("transaction %s confirmed with a different hash than expected. Dispatch hash %s, confirmed hash %s", t.pt.ID.String(), t.latestSubmissionHash, e.Hash.String())
+	}
+
 	t.revertReason = e.RevertReason
 	return t.transportWriter.SendTransactionConfirmed(ctx, t.pt.ID, t.originatorNode, &t.pt.Address, e.Nonce, e.RevertReason)
 }

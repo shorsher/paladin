@@ -74,7 +74,7 @@ type coordinator struct {
 	transactionsByID                           map[uuid.UUID]*transaction.CoordinatorTransaction
 	pooledTransactions                         []*transaction.CoordinatorTransaction
 	currentBlockHeight                         uint64
-	activeCoordinatorsFlushPointsBySignerNonce map[string]*common.FlushPoint
+	activeCoordinatorsFlushPointsBySignerNonce map[string]*common.SnapshotFlushPoint
 	grapher                                    transaction.Grapher
 	originatorNodePool                         []string // The (possibly changing) list of originator nodes
 

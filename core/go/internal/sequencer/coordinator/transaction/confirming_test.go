@@ -158,6 +158,47 @@ func Test_action_Confirmed_SetsRevertReasonAndSends(t *testing.T) {
 	assert.Equal(t, revertReason, txn.revertReason)
 }
 
+// TODO AM: add tests that cover the two logging branches
+
+// func Test_action_TransactionConfirmed_TransactionTracked_NilSubmissionHash_HandleEventSucceeds(t *testing.T) {
+// 	ctx := context.Background()
+// 	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
+// 	c, _, done := builder.Build(ctx)
+// 	defer done()
+
+// 	txn, _ := transaction.NewTransactionBuilderForTesting(t, transaction.State_Dispatched).Build()
+// 	c.transactionsByID[txn.GetID()] = txn
+
+// 	hash := pldtypes.Bytes32(pldtypes.RandBytes(32))
+// 	err := action_TransactionConfirmed(ctx, c, &TransactionConfirmedEvent{
+// 		TxID: txn.GetID(),
+// 		Hash: hash,
+// 	})
+
+// 	require.NoError(t, err)
+// 	assert.Equal(t, transaction.State_Confirmed, txn.stateMachine.GetCurrentState())
+// }
+
+// func Test_action_TransactionConfirmed_TransactionTracked_MatchingHash_HandleEventSucceeds(t *testing.T) {
+// 	ctx := context.Background()
+// 	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
+// 	c, _, done := builder.Build(ctx)
+// 	defer done()
+
+// 	txn, _ := transaction.NewTransactionBuilderForTesting(t, transaction.State_Dispatched).Build()
+// 	c.transactionsByID[txn.GetID()] = txn
+// 	submissionHash := txn.GetLatestSubmissionHash()
+// 	require.NotNil(t, submissionHash, "builder sets submission hash for State_Dispatched")
+
+// 	err := action_TransactionConfirmed(ctx, c, &TransactionConfirmedEvent{
+// 		TxID: txn.GetID(),
+// 		Hash: *submissionHash,
+// 	})
+
+// 	require.NoError(t, err)
+// 	assert.Equal(t, transaction.State_Confirmed, txn.stateMachine.GetCurrentState())
+// }
+
 func Test_action_NotifyDependantsOfConfirmation_Success(t *testing.T) {
 	ctx := context.Background()
 	txn, _ := NewTransactionBuilderForTesting(t, State_Confirmed).
@@ -235,7 +276,7 @@ func Test_EventConfirmed_NonTerminalStates_TransitionsToConfirmed_WhenNoRevertRe
 
 			err := txn.HandleEvent(ctx, event)
 			require.NoError(t, err)
-			assert.Equal(t, State_Confirmed, txn.GetCurrentState())
+			assert.Equal(t, State_Confirmed, txn.stateMachine.GetCurrentState())
 		})
 	}
 }
@@ -267,7 +308,7 @@ func Test_EventConfirmed_NonTerminalStates_RevertStaysInPlace_ForNewHandlers(t *
 
 			err := txn.HandleEvent(ctx, event)
 			require.NoError(t, err)
-			assert.Equal(t, state, txn.GetCurrentState())
+			assert.Equal(t, state, txn.stateMachine.GetCurrentState())
 		})
 	}
 }
@@ -287,5 +328,5 @@ func Test_EventConfirmed_StateDispatched_RevertTransitionsToPooled(t *testing.T)
 
 	err := txn.HandleEvent(ctx, event)
 	require.NoError(t, err)
-	assert.Equal(t, State_Pooled, txn.GetCurrentState())
+	assert.Equal(t, State_Pooled, txn.stateMachine.GetCurrentState())
 }

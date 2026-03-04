@@ -190,7 +190,7 @@ func Test_ConfirmingDispatch_Timeout_TransitionsToPooled_AndClearsPendingRequest
 		},
 	})
 	require.NoError(t, err)
-	assert.Equal(t, State_Pooled, txn.GetCurrentState())
+	assert.Equal(t, State_Pooled, txn.stateMachine.GetCurrentState())
 	assert.Nil(t, txn.pendingPreDispatchRequest)
 }
 
