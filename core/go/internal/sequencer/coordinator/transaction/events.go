@@ -155,20 +155,6 @@ func (*DispatchRequestApprovedEvent) TypeString() string {
 	return "Event_DispatchRequestApproved"
 }
 
-// DispatchRequestRejectedEvent
-type DispatchRequestRejectedEvent struct {
-	BaseCoordinatorEvent
-	RequestID uuid.UUID
-}
-
-func (*DispatchRequestRejectedEvent) Type() EventType {
-	return Event_DispatchRequestRejected
-}
-
-func (*DispatchRequestRejectedEvent) TypeString() string {
-	return "Event_DispatchRequestRejected"
-}
-
 // CollectedEvent
 // Collected by the public transaction manager after being dispatched
 type CollectedEvent struct {

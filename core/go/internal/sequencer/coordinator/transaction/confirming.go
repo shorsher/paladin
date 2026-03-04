@@ -27,7 +27,7 @@ func guard_HasRevertReason(ctx context.Context, txn *coordinatorTransaction) boo
 	return txn.revertReason.String() != ""
 }
 
-func action_Confirmed(ctx context.Context, t *coordinatorTransaction, event common.Event) error {
+func action_recordConfirmationDetails(ctx context.Context, t *coordinatorTransaction, event common.Event) error {
 	e := event.(*ConfirmedEvent)
 	if t.latestSubmissionHash == nil {
 		// The transaction created a chained private transaction so there is no hash to compare
@@ -39,6 +39,12 @@ func action_Confirmed(ctx context.Context, t *coordinatorTransaction, event comm
 	}
 
 	t.revertReason = e.RevertReason
+	return nil
+}
+
+func action_NotifyConfirmed(ctx context.Context, t *coordinatorTransaction, event common.Event) error {
+	e := event.(*ConfirmedEvent)
+
 	return t.transportWriter.SendTransactionConfirmed(ctx, t.pt.ID, t.originatorNode, &t.pt.Address, e.Nonce, e.RevertReason)
 }
 

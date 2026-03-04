@@ -73,13 +73,12 @@ func (t *coordinatorTransaction) dispatch(ctx context.Context) error {
 	}
 
 	if len(dispatchBatch.PrivateDispatches) > 0 {
-		txis := make([]*components.ValidatedTransaction, 0, len(dispatchBatch.PrivateDispatches))
 		for _, chained := range dispatchBatch.PrivateDispatches {
-			txis = append(txis, chained.NewTransaction)
-		}
-		if err := t.components.SequencerManager().HandleNewTransactions(ctx, txis); err != nil {
-			log.L(ctx).Errorf("error handling new transactions: %v", err)
-			return err
+			err := t.components.SequencerManager().HandleNewTx(ctx, t.components.Persistence().NOTX(), chained.NewTransaction)
+			if err != nil {
+				log.L(ctx).Errorf("error handling new private transaction: %v", err)
+				return err
+			}
 		}
 	}
 	return nil

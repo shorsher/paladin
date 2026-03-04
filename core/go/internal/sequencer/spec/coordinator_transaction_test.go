@@ -396,18 +396,6 @@ func TestCoordinatorTransaction_ConfirmingDispatch_NoTransition_OnDispatchConfir
 	assert.Equal(t, transaction.State_Confirming_Dispatchable, txn.GetCurrentState(), "current state is %s", txn.GetCurrentState().String())
 }
 
-func TestCoordinatorTransaction_ConfirmingDispatch_ToPooled_OnDispatchRejected(t *testing.T) {
-	ctx := context.Background()
-	builder := transaction.NewTransactionBuilderForTesting(t, transaction.State_Confirming_Dispatchable).
-		AddPendingPreDispatchRequest()
-	txn, mocks := builder.Build()
-	mocks.EngineIntegration.EXPECT().ResetTransactions(ctx, txn.GetID()).Return()
-
-	err := txn.HandleEvent(ctx, builder.BuildDispatchRequestRejectedEvent())
-	require.NoError(t, err)
-	assert.Equal(t, transaction.State_Pooled, txn.GetCurrentState(), "current state is %s", txn.GetCurrentState().String())
-}
-
 func TestCoordinatorTransaction_Blocked_ToConfirmingDispatch_OnDependencyReady_IfNotHasDependenciesNotReady(t *testing.T) {
 	//TODO rethink naming of this test and/or the guard function because we end up with a double negative
 	ctx := context.Background()

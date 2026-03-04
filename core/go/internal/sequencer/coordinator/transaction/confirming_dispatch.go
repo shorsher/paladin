@@ -98,8 +98,6 @@ func validator_MatchesPendingPreDispatchRequest(ctx context.Context, txn *coordi
 	switch event := event.(type) {
 	case *DispatchRequestApprovedEvent:
 		return txn.pendingPreDispatchRequest != nil && txn.pendingPreDispatchRequest.IdempotencyKey() == event.RequestID, nil
-	case *DispatchRequestRejectedEvent:
-		return txn.pendingPreDispatchRequest != nil && txn.pendingPreDispatchRequest.IdempotencyKey() == event.RequestID, nil
 	}
 	return false, nil
 }
