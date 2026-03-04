@@ -49,9 +49,6 @@ func TestRealClock_HasExpired_ExactlyAtExpiry(t *testing.T) {
 	start := time.Now().Add(-100 * time.Millisecond) // 100ms ago
 	duration := 100 * time.Millisecond
 
-	// Start + duration = now (approximately), but After() returns true only if strictly after
-	// So we need to wait a tiny bit to ensure it's expired
-	time.Sleep(1 * time.Millisecond)
 	expired := clock.HasExpired(start, duration)
 	assert.True(t, expired, "should be expired when start + duration is exactly at or before now")
 }

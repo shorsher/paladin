@@ -914,36 +914,7 @@ func (sMgr *sequencerManager) WriteOrDistributeReceiptsPostSubmit(ctx context.Co
 }
 
 func (sMgr *sequencerManager) BuildStateDistributions(ctx context.Context, tx *components.PrivateTransaction) (*components.StateDistributionSet, error) {
-	return common.NewStateDistributionBuilder(sMgr.components, tx).Build(ctx)
-}
-
-func mapPreparedTransaction(tx *components.PrivateTransaction) *components.PreparedTransactionWithRefs {
-	pt := &components.PreparedTransactionWithRefs{
-		PreparedTransactionBase: &pldapi.PreparedTransactionBase{
-			ID:       tx.ID,
-			Domain:   tx.Domain,
-			To:       &tx.Address,
-			Metadata: tx.PreparedMetadata,
-		},
-	}
-	for _, s := range tx.PostAssembly.InputStates {
-		pt.StateRefs.Spent = append(pt.StateRefs.Spent, s.ID)
-	}
-	for _, s := range tx.PostAssembly.ReadStates {
-		pt.StateRefs.Read = append(pt.StateRefs.Read, s.ID)
-	}
-	for _, s := range tx.PostAssembly.OutputStates {
-		pt.StateRefs.Confirmed = append(pt.StateRefs.Confirmed, s.ID)
-	}
-	for _, s := range tx.PostAssembly.InfoStates {
-		pt.StateRefs.Info = append(pt.StateRefs.Info, s.ID)
-	}
-	if tx.PreparedPublicTransaction != nil {
-		pt.Transaction = *tx.PreparedPublicTransaction
-	} else {
-		pt.Transaction = *tx.PreparedPrivateTransaction
-	}
-	return pt
+	return common.NewStateDistributionBuilder(sMgr.nodeName, tx).Build(ctx)
 }
 
 func (sMgr *sequencerManager) PrivateTransactionConfirmed(ctx context.Context, completion *components.TxCompletion) {
