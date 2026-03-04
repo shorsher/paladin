@@ -27,7 +27,7 @@ func guard_HasRevertReason(ctx context.Context, txn *CoordinatorTransaction) boo
 	return txn.revertReason.String() != ""
 }
 
-func action_Confirmed(ctx context.Context, t *CoordinatorTransaction, event common.Event) error {
+func action_NotifyConfirmed(ctx context.Context, t *CoordinatorTransaction, event common.Event) error {
 	e := event.(*ConfirmedEvent)
 	t.revertReason = e.RevertReason
 	return t.transportWriter.SendTransactionConfirmed(ctx, t.pt.ID, t.originatorNode, &t.pt.Address, e.Nonce, e.RevertReason)

@@ -106,7 +106,7 @@ var stateDefinitionsMap = StateDefinitions{
 			// At initial state if we've reverted (e.g. a submission from a previous coordinator),
 			// we don't do anything else other than tell the originator.
 			Event_Confirmed: {
-				Actions: []ActionRule{{Action: action_Confirmed}},
+				Actions: []ActionRule{{Action: action_NotifyConfirmed}},
 				Transitions: []Transition{
 					{
 						If: statemachine.GuardNot(guard_HasRevertReason),
@@ -140,7 +140,7 @@ var stateDefinitionsMap = StateDefinitions{
 			// In this state if we've reverted we've likely rolled back because a dependency reverted earlier,
 			// so we don't do anything else other than tell the originator.
 			Event_Confirmed: {
-				Actions: []ActionRule{{Action: action_Confirmed}},
+				Actions: []ActionRule{{Action: action_NotifyConfirmed}},
 				Transitions: []Transition{
 					{
 						If: statemachine.GuardNot(guard_HasRevertReason),
@@ -171,7 +171,7 @@ var stateDefinitionsMap = StateDefinitions{
 			// In this state if we've reverted we've likely rolled back because a dependency reverted earlier,
 			// so we don't do anything else other than tell the originator.
 			Event_Confirmed: {
-				Actions: []ActionRule{{Action: action_Confirmed}},
+				Actions: []ActionRule{{Action: action_NotifyConfirmed}},
 				Transitions: []Transition{
 					{
 						If: statemachine.GuardNot(guard_HasRevertReason),
@@ -241,7 +241,7 @@ var stateDefinitionsMap = StateDefinitions{
 			// In this state if we've reverted we've likely rolled back because a dependency reverted earlier,
 			// so we don't do anything else other than tell the originator.
 			Event_Confirmed: {
-				Actions: []ActionRule{{Action: action_Confirmed}},
+				Actions: []ActionRule{{Action: action_NotifyConfirmed}},
 				Transitions: []Transition{
 					{
 						If: statemachine.GuardNot(guard_HasRevertReason),
@@ -312,7 +312,7 @@ var stateDefinitionsMap = StateDefinitions{
 			// In this state if we've reverted we've likely rolled back because a dependency reverted earlier,
 			// so we don't do anything else other than tell the originator.
 			Event_Confirmed: {
-				Actions: []ActionRule{{Action: action_Confirmed}},
+				Actions: []ActionRule{{Action: action_NotifyConfirmed}},
 				Transitions: []Transition{
 					{
 						If: statemachine.GuardNot(guard_HasRevertReason),
@@ -344,7 +344,7 @@ var stateDefinitionsMap = StateDefinitions{
 			// In this state if we've reverted we've likely rolled back because a dependency reverted earlier,
 			// so we don't do anything else other than tell the originator.
 			Event_Confirmed: {
-				Actions: []ActionRule{{Action: action_Confirmed}},
+				Actions: []ActionRule{{Action: action_NotifyConfirmed}},
 				Transitions: []Transition{
 					{
 						If: statemachine.GuardNot(guard_HasRevertReason),
@@ -400,7 +400,7 @@ var stateDefinitionsMap = StateDefinitions{
 			// In this state if we've reverted we've likely rolled back because a dependency reverted earlier,
 			// so we don't do anything else other than tell the originator.
 			Event_Confirmed: {
-				Actions: []ActionRule{{Action: action_Confirmed}},
+				Actions: []ActionRule{{Action: action_NotifyConfirmed}},
 				Transitions: []Transition{
 					{
 						If: statemachine.GuardNot(guard_HasRevertReason),
@@ -437,7 +437,7 @@ var stateDefinitionsMap = StateDefinitions{
 			// In this state if we've reverted we've likely rolled back because a dependency reverted earlier,
 			// so we don't do anything else other than tell the originator.
 			Event_Confirmed: {
-				Actions: []ActionRule{{Action: action_Confirmed}},
+				Actions: []ActionRule{{Action: action_NotifyConfirmed}},
 				Transitions: []Transition{
 					{
 						If: statemachine.GuardNot(guard_HasRevertReason),
@@ -449,20 +449,20 @@ var stateDefinitionsMap = StateDefinitions{
 	},
 	State_Dispatched: {
 		OnTransitionTo: []ActionRule{
-			{Action: action_SendDispatched},
+			{Action: action_NotifyDispatched},
 		},
 		Events: map[EventType]EventHandler{
 			Event_Collected: {
-				Actions: []ActionRule{{Action: action_Collected}},
+				Actions: []ActionRule{{Action: action_NotifyCollected}},
 			},
 			Event_NonceAllocated: {
-				Actions: []ActionRule{{Action: action_NonceAllocated}},
+				Actions: []ActionRule{{Action: action_NotifyNonceAllocated}},
 			},
 			Event_Submitted: {
-				Actions: []ActionRule{{Action: action_Submitted}},
+				Actions: []ActionRule{{Action: action_NotifySubmitted}},
 			},
 			Event_Confirmed: {
-				Actions: []ActionRule{{Action: action_Confirmed}},
+				Actions: []ActionRule{{Action: action_NotifyConfirmed}},
 				Transitions: []Transition{
 					{
 						If: statemachine.GuardNot(guard_HasRevertReason),

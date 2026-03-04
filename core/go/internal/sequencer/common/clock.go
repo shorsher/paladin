@@ -51,7 +51,7 @@ func RealClock() Clock {
 func (c *realClock) HasExpired(start Time, duration Duration) bool {
 	realStart := start.(time.Time)
 	realDuration := duration.(time.Duration)
-	return time.Now().After(realStart.Add(realDuration))
+	return !time.Now().Before(realStart.Add(realDuration))
 }
 
 func (c *realClock) ScheduleTimer(ctx context.Context, duration Duration, f func()) (cancel func()) {
@@ -116,7 +116,6 @@ func (c *FakeClockForTesting) HasExpired(start Time, duration Duration) bool {
 	durationMillis := duration.(*fakeDuration).milliseconds
 	nowMillis := c.currentTime
 	return nowMillis >= startMillis+durationMillis
-
 }
 
 func (c *FakeClockForTesting) ScheduleTimer(_ context.Context, duration Duration, f func()) (cancel func()) {

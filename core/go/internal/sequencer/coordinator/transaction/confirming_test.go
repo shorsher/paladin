@@ -131,7 +131,7 @@ func Test_notifyDependentsOfConfirmation_DependentInMemory(t *testing.T) {
 // TODO: this test can be implemented when there is a way to mock the dependent transaction
 // func Test_notifyDependentsOfConfirmation_DependentHandleEventError(t *testing.T) {}
 
-func Test_action_Confirmed_SetsRevertReasonAndSends(t *testing.T) {
+func Test_action_NotifyConfirmed_SetsRevertReasonAndSends(t *testing.T) {
 	ctx := context.Background()
 	txn, mocks := NewTransactionBuilderForTesting(t, State_Confirmed).
 		UseMockTransportWriter().
@@ -151,7 +151,7 @@ func Test_action_Confirmed_SetsRevertReasonAndSends(t *testing.T) {
 		SendTransactionConfirmed(ctx, txn.pt.ID, txn.originatorNode, &txn.pt.Address, &nonce, revertReason).
 		Return(nil)
 
-	err := action_Confirmed(ctx, txn, event)
+	err := action_NotifyConfirmed(ctx, txn, event)
 	require.NoError(t, err)
 
 	// Assert state: revertReason was set

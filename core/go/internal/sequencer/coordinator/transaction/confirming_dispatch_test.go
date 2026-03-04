@@ -90,53 +90,6 @@ func Test_validator_MatchesPendingPreDispatchRequest_DispatchRequestApproved_Nil
 	assert.False(t, matched)
 }
 
-func Test_validator_MatchesPendingPreDispatchRequest_DispatchRequestRejected_Match(t *testing.T) {
-	ctx := context.Background()
-	txn, _ := NewTransactionBuilderForTesting(t, State_Confirming_Dispatchable).
-		AddPendingPreDispatchRequest().
-		Build()
-	requestID := txn.pendingPreDispatchRequest.IdempotencyKey()
-
-	event := &DispatchRequestRejectedEvent{
-		BaseCoordinatorEvent: BaseCoordinatorEvent{TransactionID: txn.pt.ID},
-		RequestID:            requestID,
-	}
-
-	matched, err := validator_MatchesPendingPreDispatchRequest(ctx, txn, event)
-	require.NoError(t, err)
-	assert.True(t, matched)
-}
-
-func Test_validator_MatchesPendingPreDispatchRequest_DispatchRequestRejected_NoMatch_WrongRequestID(t *testing.T) {
-	ctx := context.Background()
-	txn, _ := NewTransactionBuilderForTesting(t, State_Confirming_Dispatchable).
-		AddPendingPreDispatchRequest().
-		Build()
-
-	event := &DispatchRequestRejectedEvent{
-		BaseCoordinatorEvent: BaseCoordinatorEvent{TransactionID: txn.pt.ID},
-		RequestID:            uuid.New(), // different from pending request
-	}
-
-	matched, err := validator_MatchesPendingPreDispatchRequest(ctx, txn, event)
-	require.NoError(t, err)
-	assert.False(t, matched)
-}
-
-func Test_validator_MatchesPendingPreDispatchRequest_DispatchRequestRejected_NilPendingRequest(t *testing.T) {
-	ctx := context.Background()
-	txn, _ := NewTransactionBuilderForTesting(t, State_Confirming_Dispatchable).Build()
-
-	event := &DispatchRequestRejectedEvent{
-		BaseCoordinatorEvent: BaseCoordinatorEvent{TransactionID: txn.pt.ID},
-		RequestID:            uuid.New(),
-	}
-
-	matched, err := validator_MatchesPendingPreDispatchRequest(ctx, txn, event)
-	require.NoError(t, err)
-	assert.False(t, matched)
-}
-
 func Test_validator_MatchesPendingPreDispatchRequest_OtherEventType_ReturnsFalse(t *testing.T) {
 	ctx := context.Background()
 	txn, _ := NewTransactionBuilderForTesting(t, State_Confirming_Dispatchable).

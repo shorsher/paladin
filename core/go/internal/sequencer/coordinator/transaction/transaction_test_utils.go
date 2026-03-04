@@ -747,15 +747,6 @@ func (b *TransactionBuilderForTesting) BuildDispatchRequestApprovedEvent() *Disp
 	}
 }
 
-func (b *TransactionBuilderForTesting) BuildDispatchRequestRejectedEvent() *DispatchRequestRejectedEvent {
-	return &DispatchRequestRejectedEvent{
-		BaseCoordinatorEvent: BaseCoordinatorEvent{
-			TransactionID: b.txn.GetID(),
-		},
-		RequestID: b.txn.pendingPreDispatchRequest.IdempotencyKey(),
-	}
-}
-
 func (b *TransactionBuilderForTesting) BuildPostAssembly() *components.TransactionPostAssembly {
 	return b.privateTransactionBuilder.BuildPostAssembly()
 }
