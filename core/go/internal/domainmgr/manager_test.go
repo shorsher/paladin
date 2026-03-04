@@ -52,6 +52,7 @@ type mockComponents struct {
 	txManager        *componentsmocks.TXManager
 	privateTxManager *componentsmocks.PrivateTxManager
 	transportMgr     *componentsmocks.TransportManager
+	groupManager     *componentsmocks.GroupManager
 }
 
 func newTestDomainManager(t *testing.T, realDB bool, conf *pldconf.DomainManagerInlineConfig, extraSetup ...func(mc *mockComponents)) (context.Context, *domainManager, *mockComponents, func()) {
@@ -67,6 +68,7 @@ func newTestDomainManager(t *testing.T, realDB bool, conf *pldconf.DomainManager
 		txManager:        componentsmocks.NewTXManager(t),
 		privateTxManager: componentsmocks.NewPrivateTxManager(t),
 		transportMgr:     componentsmocks.NewTransportManager(t),
+		groupManager:     componentsmocks.NewGroupManager(t),
 	}
 
 	// Blockchain stuff is always mocked
@@ -80,6 +82,8 @@ func newTestDomainManager(t *testing.T, realDB bool, conf *pldconf.DomainManager
 	allComponents.On("TxManager").Return(mc.txManager)
 	allComponents.On("PrivateTxManager").Return(mc.privateTxManager)
 	allComponents.On("TransportManager").Return(mc.transportMgr)
+	allComponents.On("GroupManager").Maybe().Return(mc.groupManager)
+	mc.groupManager.On("QueryGroups", mock.Anything, mock.Anything, mock.Anything).Maybe().Return([]*pldapi.PrivacyGroup{}, nil)
 	mc.transportMgr.On("LocalNodeName").Return("node1").Maybe()
 
 	var p persistence.Persistence
@@ -187,6 +191,7 @@ func TestDomainMissingRegistryAddress(t *testing.T) {
 		txManager:        componentsmocks.NewTXManager(t),
 		privateTxManager: componentsmocks.NewPrivateTxManager(t),
 		transportMgr:     componentsmocks.NewTransportManager(t),
+		groupManager:     componentsmocks.NewGroupManager(t),
 	}
 	componentsmocks := componentsmocks.NewAllComponents(t)
 	componentsmocks.On("EthClientFactory").Return(mc.ethClientFactory)
@@ -199,6 +204,7 @@ func TestDomainMissingRegistryAddress(t *testing.T) {
 	componentsmocks.On("TxManager").Return(mc.txManager)
 	componentsmocks.On("PrivateTxManager").Return(mc.privateTxManager)
 	componentsmocks.On("TransportManager").Return(mc.transportMgr)
+	componentsmocks.On("GroupManager").Return(mc.groupManager)
 
 	mp, err := mockpersistence.NewSQLMockProvider()
 	require.NoError(t, err)
@@ -459,8 +465,8 @@ func TestGetSigner(t *testing.T) {
 	assert.Equal(t, dm.domainSigner, signer)
 }
 
-func TestQuerySmartContractsNoLimit(t *testing.T) {
-	ctx, dm, _, done := newTestDomainManager(t, false, &pldconf.DomainManagerInlineConfig{
+func TestQuerySmartContractsLimitNotSet(t *testing.T) {
+	ctx, dm, mc, done := newTestDomainManager(t, false, &pldconf.DomainManagerInlineConfig{
 		Domains: map[string]*pldconf.DomainConfig{
 			"domain1": {
 				RegistryAddress: pldtypes.RandHex(20),
@@ -469,7 +475,13 @@ func TestQuerySmartContractsNoLimit(t *testing.T) {
 	})
 	defer done()
 
-	_, err := dm.querySmartContracts(ctx, &query.QueryJSON{})
+	jq := &query.QueryJSON{}
+	mc.db.ExpectBegin()
+	mc.db.ExpectRollback()
+	err := dm.persistence.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
+		_, err := dm.querySmartContracts(ctx, dbTX, jq)
+		return err
+	})
 	assert.Regexp(t, "PD010721", err)
 }
 
@@ -484,9 +496,12 @@ func TestQuerySmartContractsDBError(t *testing.T) {
 	defer done()
 
 	limit := 50
+	mc.db.ExpectBegin()
 	mc.db.ExpectQuery("SELECT.*private_smart_contracts").WillReturnError(assert.AnError)
-
-	_, err := dm.querySmartContracts(ctx, &query.QueryJSON{Limit: &limit})
+	err := dm.persistence.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
+		_, err := dm.querySmartContracts(ctx, dbTX, &query.QueryJSON{Limit: &limit})
+		return err
+	})
 	assert.Error(t, err)
 }
 
@@ -506,14 +521,20 @@ func TestQuerySmartContractsWithDomainNotConfigured(t *testing.T) {
 
 	limit := 50
 	// Mock DB query that returns a contract from an unconfigured domain
+	mc.db.ExpectBegin()
 	mc.db.ExpectQuery("SELECT.*private_smart_contracts").WillReturnRows(sqlmock.NewRows([]string{
 		"deploy_tx", "domain_address", "address", "config_bytes",
 	}).AddRow(
 		uuid.New(), *unconfiguredDomainAddr, *contractAddr, []byte(`{}`),
 	))
+	mc.db.ExpectCommit()
 
 	// Query smart contracts - should return the contract but without domain info
-	results, err := dm.querySmartContracts(ctx, &query.QueryJSON{Limit: &limit})
+	var results []*pldapi.DomainSmartContract
+	err := dm.persistence.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) (err error) {
+		results, err = dm.querySmartContracts(ctx, dbTX, &query.QueryJSON{Limit: &limit})
+		return err
+	})
 	require.NoError(t, err)
 	require.Len(t, results, 1)
 	assert.Equal(t, "", results[0].DomainName)
