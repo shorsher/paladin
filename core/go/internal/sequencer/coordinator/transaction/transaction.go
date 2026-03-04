@@ -198,73 +198,15 @@ func (t *CoordinatorTransaction) GetErrorCount() int {
 	return t.errorCount
 }
 
-// GetPrivateTransaction returns the private transaction for code where we really cannot do without the whole struct.
-// Where possible, consumers should use the getters for individual values which then become immutable outside of this struct as
-// returning the pointer to the whole struct opens to the door to the possibility of modifications outside of the state machine.
-// TODO: Ideally there would be an interface around *components.PrivateTransaction to allow consumers more complete read only
-// access.
-func (t *CoordinatorTransaction) GetPrivateTransaction() *components.PrivateTransaction {
-	t.RLock()
-	defer t.RUnlock()
-	return t.pt
-}
-
 func (t *CoordinatorTransaction) GetID() uuid.UUID {
 	t.RLock()
 	defer t.RUnlock()
 	return t.pt.ID
 }
 
-func (t *CoordinatorTransaction) GetDomain() string {
+func (t *CoordinatorTransaction) HasDispatchedPublicTransaction() bool {
 	t.RLock()
 	defer t.RUnlock()
-	return t.pt.Domain
-}
-
-func (t *CoordinatorTransaction) GetContractAddress() pldtypes.EthAddress {
-	t.RLock()
-	defer t.RUnlock()
-	return t.pt.Address
-}
-
-func (t *CoordinatorTransaction) GetTransactionSpecification() *prototk.TransactionSpecification {
-	t.RLock()
-	defer t.RUnlock()
-	return t.pt.PreAssembly.TransactionSpecification
-}
-
-func (t *CoordinatorTransaction) GetOriginalSender() string {
-	t.RLock()
-	defer t.RUnlock()
-	return t.pt.PreAssembly.TransactionSpecification.From
-}
-
-func (t *CoordinatorTransaction) GetOutputStateIDs() []pldtypes.HexBytes {
-	t.RLock()
-	defer t.RUnlock()
-	// We use the output states here not the OutputStatesPotential because it is not possible for another transaction
-	// to spend a state unless it has been written to the state store and at that point we have the state ID
-	outputStateIDs := make([]pldtypes.HexBytes, len(t.pt.PostAssembly.OutputStates))
-	for i, outputState := range t.pt.PostAssembly.OutputStates {
-		outputStateIDs[i] = outputState.ID
-	}
-	return outputStateIDs
-}
-
-func (t *CoordinatorTransaction) HasPreparedPrivateTransaction() bool {
-	t.RLock()
-	defer t.RUnlock()
-	return t.pt.PreparedPrivateTransaction != nil
-}
-
-func (t *CoordinatorTransaction) HasPreparedPublicTransaction() bool {
-	t.RLock()
-	defer t.RUnlock()
-	return t.pt.PreparedPublicTransaction != nil
-}
-
-func (t *CoordinatorTransaction) GetSigner() string {
-	t.RLock()
-	defer t.RUnlock()
-	return t.pt.Signer
+	return t.pt.PreparedPublicTransaction != nil &&
+		t.pt.PreAssembly.TransactionSpecification.Intent == prototk.TransactionSpecification_SEND_TRANSACTION
 }

@@ -60,8 +60,8 @@ func (c *coordinator) dispatchLoop(ctx context.Context) {
 				continue
 			}
 
-			// Dispatched transactions that result in a chained private transaction don't count towards max dispatch ahead
-			if !tx.HasPreparedPrivateTransaction() {
+			// Only dispatched transactions that result in a sent public transaction count towards max dispatch ahead
+			if tx.HasDispatchedPublicTransaction() {
 				dispatchedAhead++
 			}
 
@@ -96,8 +96,8 @@ func action_NudgeDispatchLoop(ctx context.Context, c *coordinator, _ common.Even
 	clear(c.inFlightTxns)
 	dispatchingTransactions := c.getTransactionsInStates(ctx, []transaction.State{transaction.State_Dispatched})
 	for _, txn := range dispatchingTransactions {
-		if !txn.HasPreparedPrivateTransaction() {
-			// We don't count transactions that result in new private transactions
+		if txn.HasDispatchedPublicTransaction() {
+			// We don't count transactions that result in new private transactions or prepared transactions
 			c.inFlightTxns[txn.GetID()] = txn
 		}
 	}

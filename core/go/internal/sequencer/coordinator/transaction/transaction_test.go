@@ -279,91 +279,44 @@ func TestTransaction_GetID_ReturnsPrivateTransactionID(t *testing.T) {
 	assert.Equal(t, id, txn.GetID())
 }
 
-func TestTransaction_GetDomain_ReturnsPrivateTransactionDomain(t *testing.T) {
-	txn, _ := NewTransactionBuilderForTesting(t, State_Initial).Domain("test-domain").Build()
-
-	assert.Equal(t, "test-domain", txn.GetDomain())
-}
-
 func TestTransaction_GetCurrentState_ReturnsState(t *testing.T) {
 	txn, _ := NewTransactionBuilderForTesting(t, State_Initial).Build()
 
 	assert.Equal(t, State_Initial, txn.GetCurrentState())
 }
 
-func TestTransaction_GetPrivateTransaction_ReturnsPt(t *testing.T) {
-	txn, _ := NewTransactionBuilderForTesting(t, State_Initial).Build()
-	pt := txn.pt
-
-	assert.Same(t, pt, txn.GetPrivateTransaction())
-}
-
-func TestTransaction_GetContractAddress_ReturnsAddress(t *testing.T) {
-	addr := *pldtypes.RandAddress()
-	txn, _ := NewTransactionBuilderForTesting(t, State_Initial).Address(addr).Build()
-
-	assert.Equal(t, addr, txn.GetContractAddress())
-}
-
-func TestTransaction_GetTransactionSpecification_ReturnsPreAssemblySpec(t *testing.T) {
-	spec := &prototk.TransactionSpecification{}
-	txn, _ := NewTransactionBuilderForTesting(t, State_Initial).
-		PreAssembly(&components.TransactionPreAssembly{TransactionSpecification: spec}).
-		Build()
-
-	assert.Same(t, spec, txn.GetTransactionSpecification())
-}
-
-func TestTransaction_GetOriginalSender_ReturnsFrom(t *testing.T) {
-	txn, _ := NewTransactionBuilderForTesting(t, State_Initial).
-		PreAssembly(&components.TransactionPreAssembly{TransactionSpecification: &prototk.TransactionSpecification{From: "0xSender"}}).
-		Build()
-	assert.Equal(t, "0xSender", txn.GetOriginalSender())
-}
-
-func TestTransaction_GetOutputStateIDs_ReturnsOutputStateIDs(t *testing.T) {
-	id1 := pldtypes.HexBytes("0x01")
-	id2 := pldtypes.HexBytes("0x02")
-	txn, _ := NewTransactionBuilderForTesting(t, State_Initial).
-		PostAssembly(&components.TransactionPostAssembly{OutputStates: []*components.FullState{
-			{ID: id1},
-			{ID: id2},
-		}}).
-		Build()
-
-	ids := txn.GetOutputStateIDs()
-	require.Len(t, ids, 2)
-	assert.Equal(t, id1, ids[0])
-	assert.Equal(t, id2, ids[1])
-}
-
-func TestTransaction_HasPreparedPrivateTransaction_TrueWhenSet(t *testing.T) {
-	txn, _ := NewTransactionBuilderForTesting(t, State_Initial).
-		PreparedPrivateTransaction(&pldapi.TransactionInput{}).
-		Build()
-	assert.True(t, txn.HasPreparedPrivateTransaction())
-}
-
-func TestTransaction_HasPreparedPrivateTransaction_FalseWhenNil(t *testing.T) {
-	txn, _ := NewTransactionBuilderForTesting(t, State_Initial).Build()
-
-	assert.False(t, txn.HasPreparedPrivateTransaction())
-}
-
-func TestTransaction_HasPreparedPublicTransaction_TrueWhenSet(t *testing.T) {
+func TestTransaction_HasDispatchedPublicTransaction_TrueWhenSetAndIntentIsSend(t *testing.T) {
 	txn, _ := NewTransactionBuilderForTesting(t, State_Initial).
 		PreparedPublicTransaction(&pldapi.TransactionInput{}).
+		PreAssembly(&components.TransactionPreAssembly{
+			TransactionSpecification: &prototk.TransactionSpecification{
+				Intent: prototk.TransactionSpecification_SEND_TRANSACTION,
+			},
+		}).
 		Build()
-	assert.True(t, txn.HasPreparedPublicTransaction())
+	assert.True(t, txn.HasDispatchedPublicTransaction())
 }
 
-func TestTransaction_HasPreparedPublicTransaction_FalseWhenNil(t *testing.T) {
-	txn, _ := NewTransactionBuilderForTesting(t, State_Initial).Build()
-
-	assert.False(t, txn.HasPreparedPublicTransaction())
+func TestTransaction_HasDispatchedPublicTransaction_FalseWhenSetAndIntentIsNotSend(t *testing.T) {
+	txn, _ := NewTransactionBuilderForTesting(t, State_Initial).
+		PreparedPublicTransaction(&pldapi.TransactionInput{}).
+		PreAssembly(&components.TransactionPreAssembly{
+			TransactionSpecification: &prototk.TransactionSpecification{
+				Intent: prototk.TransactionSpecification_PREPARE_TRANSACTION,
+			},
+		}).
+		Build()
+	assert.False(t, txn.HasDispatchedPublicTransaction())
 }
 
-func TestTransaction_GetSigner_ReturnsSigner(t *testing.T) {
-	txn, _ := NewTransactionBuilderForTesting(t, State_Initial).Signer("signer-identity").Build()
-	assert.Equal(t, "signer-identity", txn.GetSigner())
+func TestTransaction_HasDispatchedPublicTransaction_FalseWhenNil(t *testing.T) {
+	txn, _ := NewTransactionBuilderForTesting(t, State_Initial).
+		PreAssembly(&components.TransactionPreAssembly{
+			TransactionSpecification: &prototk.TransactionSpecification{
+				Intent: prototk.TransactionSpecification_SEND_TRANSACTION,
+			},
+		}).
+		Build()
+
+	assert.False(t, txn.HasDispatchedPublicTransaction())
 }

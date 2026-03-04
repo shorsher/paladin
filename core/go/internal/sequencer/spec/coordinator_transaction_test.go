@@ -112,7 +112,7 @@ func TestCoordinatorTransaction_Assembling_ToEndorsing_OnAssembleResponse(t *tes
 
 	successEvent := txnBuilder.BuildAssembleSuccessEvent()
 	outputState := successEvent.PostAssembly.OutputStates[0]
-	mocks.EngineIntegration.EXPECT().WriteLockStatesForTransaction(ctx, txn.GetPrivateTransaction()).Run(func(ctx context.Context, txn *components.PrivateTransaction) {
+	mocks.EngineIntegration.EXPECT().WriteLockStatesForTransaction(ctx, mock.Anything).Run(func(ctx context.Context, txn *components.PrivateTransaction) {
 		assert.Equal(t, outputState.ID, txn.PostAssembly.OutputStates[0].ID)
 	}).Return(nil)
 

@@ -94,7 +94,6 @@ type SequencerManager interface {
 
 	WriteReceivedSequencingActivities(ctx context.Context, dbTX persistence.DBTX, sequencingActivities []*pldapi.SequencerActivity) error
 
-	// Only used for test bed
 	BuildStateDistributions(ctx context.Context, tx *PrivateTransaction) (*StateDistributionSet, error)
 	HandleNewTransactions(ctx context.Context, txis []*ValidatedTransaction) error
 }
