@@ -72,15 +72,15 @@ const (
 
 // Type aliases for the generic statemachine types, specialized for Transaction
 type (
-	Action           = statemachine.Action[*CoordinatorTransaction]
-	Guard            = statemachine.Guard[*CoordinatorTransaction]
-	ActionRule       = statemachine.ActionRule[*CoordinatorTransaction]
-	Transition       = statemachine.Transition[State, *CoordinatorTransaction]
-	Validator        = statemachine.Validator[*CoordinatorTransaction]
-	EventHandler     = statemachine.EventHandler[State, *CoordinatorTransaction]
-	StateDefinition  = statemachine.StateDefinition[State, *CoordinatorTransaction]
-	StateDefinitions = statemachine.StateDefinitions[State, *CoordinatorTransaction]
-	StateMachine     = statemachine.StateMachine[State, *CoordinatorTransaction]
+	Action           = statemachine.Action[*coordinatorTransaction]
+	Guard            = statemachine.Guard[*coordinatorTransaction]
+	ActionRule       = statemachine.ActionRule[*coordinatorTransaction]
+	Transition       = statemachine.Transition[State, *coordinatorTransaction]
+	Validator        = statemachine.Validator[*coordinatorTransaction]
+	EventHandler     = statemachine.EventHandler[State, *coordinatorTransaction]
+	StateDefinition  = statemachine.StateDefinition[State, *coordinatorTransaction]
+	StateDefinitions = statemachine.StateDefinitions[State, *coordinatorTransaction]
+	StateMachine     = statemachine.StateMachine[State, *coordinatorTransaction]
 )
 
 var stateDefinitionsMap = StateDefinitions{
@@ -521,10 +521,10 @@ var stateDefinitionsMap = StateDefinitions{
 	},
 }
 
-func (t *CoordinatorTransaction) initializeStateMachine(initialState State) {
+func (t *coordinatorTransaction) initializeStateMachine(initialState State) {
 	t.stateMachine = statemachine.NewStateMachine(initialState, stateDefinitionsMap,
 		fmt.Sprintf("coord-tx-%s", t.pt.ID.String()[0:8]),
-		statemachine.WithTransitionCallback(func(ctx context.Context, t *CoordinatorTransaction, from, to State, event common.Event) {
+		statemachine.WithTransitionCallback(func(ctx context.Context, t *coordinatorTransaction, from, to State, event common.Event) {
 			// Reset heartbeat counter on state change
 			t.heartbeatIntervalsSinceStateChange = 0
 			t.stateEntryTime = t.clock.Now()
@@ -546,12 +546,12 @@ func (t *CoordinatorTransaction) initializeStateMachine(initialState State) {
 	t.stateEntryTime = t.clock.Now()
 }
 
-func (t *CoordinatorTransaction) HandleEvent(ctx context.Context, event common.Event) error {
+func (t *coordinatorTransaction) HandleEvent(ctx context.Context, event common.Event) error {
 	log.L(ctx).Infof("transaction state machine handling new event (TX ID %s, TX originator %s, TX address %+v)", t.pt.ID.String(), t.originator, t.pt.Address.HexString())
 	return t.stateMachine.ProcessEvent(ctx, t, event)
 }
 
-func action_IncrementHeartbeatIntervalsSinceStateChange(ctx context.Context, t *CoordinatorTransaction, _ common.Event) error {
+func action_IncrementHeartbeatIntervalsSinceStateChange(ctx context.Context, t *coordinatorTransaction, _ common.Event) error {
 	log.L(ctx).Tracef("coordinator transaction %s (%s) increasing heartbeatIntervalsSinceStateChange to %d", t.pt.ID.String(), t.stateMachine.CurrentState.String(), t.heartbeatIntervalsSinceStateChange+1)
 	t.heartbeatIntervalsSinceStateChange++
 	return nil

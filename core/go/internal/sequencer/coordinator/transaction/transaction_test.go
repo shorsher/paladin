@@ -207,7 +207,7 @@ func TestNewTransaction_InvalidOriginator_ReturnsError(t *testing.T) {
 	ctx := context.Background()
 	clock := &common.FakeClockForTesting{}
 
-	_, err := NewTransaction(
+	_, err := newTransaction(
 		ctx,
 		"", // invalid: empty originator
 		"node1",

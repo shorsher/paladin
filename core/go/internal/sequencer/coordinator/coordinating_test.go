@@ -434,7 +434,7 @@ func Test_action_SelectTransaction_WhenNotSender_StartsHeartbeatLoop(t *testing.
 	mocks.EngineIntegration.EXPECT().GetStateLocks(mock.Anything).Return([]byte("{}"), nil)
 	mocks.EngineIntegration.EXPECT().GetBlockHeight(mock.Anything).Return(int64(0), nil)
 	c.transactionsByID[txn.GetID()] = txn
-	c.pooledTransactions = []*transaction.CoordinatorTransaction{txn}
+	c.pooledTransactions = []transaction.CoordinatorTransaction{txn}
 
 	err := action_SelectTransaction(ctx, c, nil)
 	require.NoError(t, err)

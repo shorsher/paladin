@@ -125,7 +125,7 @@ func (c *coordinator) selectNextTransactionToAssemble(ctx context.Context) error
 
 }
 
-func (c *coordinator) addTransactionToBackOfPool(txn *transaction.CoordinatorTransaction) {
+func (c *coordinator) addTransactionToBackOfPool(txn transaction.CoordinatorTransaction) {
 	// Check if transaction is already in the pool
 	// This makes the function safe to call multiple times, albeit not strictly idempotently
 	for _, pooledTxn := range c.pooledTransactions {
@@ -136,7 +136,7 @@ func (c *coordinator) addTransactionToBackOfPool(txn *transaction.CoordinatorTra
 	c.pooledTransactions = append(c.pooledTransactions, txn)
 }
 
-func (c *coordinator) popNextPooledTransaction() *transaction.CoordinatorTransaction {
+func (c *coordinator) popNextPooledTransaction() transaction.CoordinatorTransaction {
 	if len(c.pooledTransactions) == 0 {
 		return nil
 	}

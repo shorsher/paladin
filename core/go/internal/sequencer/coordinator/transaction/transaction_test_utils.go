@@ -235,7 +235,7 @@ type TransactionBuilderForTesting struct {
 	state                              State
 	useMockTransportWriter             bool
 	grapher                            Grapher
-	txn                                *CoordinatorTransaction
+	txn                                *coordinatorTransaction
 	requestTimeout                     int
 	stateTimeout                       int
 	finalizingGracePeriod              int
@@ -567,7 +567,7 @@ type transactionDependencyMocks struct {
 	DB                  sqlmock.Sqlmock
 }
 
-func (b *TransactionBuilderForTesting) Build() (*CoordinatorTransaction, *transactionDependencyMocks) {
+func (b *TransactionBuilderForTesting) Build() (*coordinatorTransaction, *transactionDependencyMocks) {
 	ctx := context.Background()
 	if b.grapher == nil {
 		b.grapher = NewGrapher(ctx)
@@ -618,7 +618,7 @@ func (b *TransactionBuilderForTesting) Build() (*CoordinatorTransaction, *transa
 		transportWriter = mocks.SentMessageRecorder
 	}
 
-	txn, err := NewTransaction(
+	txn, err := newTransaction(
 		ctx,
 		b.originator,
 		b.nodeName,
