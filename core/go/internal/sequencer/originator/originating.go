@@ -66,7 +66,8 @@ func sendDelegationRequest(ctx context.Context, o *originator, includeAlreadyDel
 	privateTransactions := make([]*components.PrivateTransaction, 0)
 	transactionsToDelegate := make([]*transaction.OriginatorTransaction, 0)
 	for _, txn := range o.transactionsOrdered {
-		if includeAlreadyDelegated && txn.GetCurrentState() == transaction.State_Delegated && (ignoreDelegateTimeout || (txn.GetLastDelegatedTime() != nil && common.RealClock().HasExpired(*txn.GetLastDelegatedTime(), o.delegateTimeout))) {
+		if includeAlreadyDelegated && txn.GetCurrentState() == transaction.State_Delegated &&
+			(ignoreDelegateTimeout || (txn.GetLastDelegatedTime() != nil && o.clock.HasExpired(*txn.GetLastDelegatedTime(), o.delegateTimeout))) {
 			// only re-delegate after the delegate timeout
 			privateTransactions = append(privateTransactions, txn.GetPrivateTransaction())
 			transactionsToDelegate = append(transactionsToDelegate, txn)

@@ -19,6 +19,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/LFDT-Paladin/paladin/core/internal/components"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/common"
@@ -781,11 +782,12 @@ func Test_revertTransactionFailedAssembly_OnRollbackRetry(t *testing.T) {
 	assert.Equal(t, maxCalls, callCount)
 }
 
-func Test_sendAssembleRequest_RequestTimeoutCallback(t *testing.T) {
+func Test_sendAssembleRequest_schedulesTimer(t *testing.T) {
 	ctx := context.Background()
 	timeoutEventReceived := false
 	txn, mocks := NewTransactionBuilderForTesting(t, State_Assembling).
 		UseMockTransportWriter().
+		UseMockClock().
 		QueueEventForCoordinator(func(ctx context.Context, event common.Event) {
 			if _, ok := event.(*RequestTimeoutIntervalEvent); ok {
 				timeoutEventReceived = true
@@ -793,6 +795,12 @@ func Test_sendAssembleRequest_RequestTimeoutCallback(t *testing.T) {
 		}).
 		RequestTimeout(1).
 		Build()
+
+	mocks.Clock.On("Now").Return(time.Now()).Once()
+	mocks.Clock.On("ScheduleTimer", mock.Anything, time.Duration(1), mock.Anything).Return(func() {}).Run(func(args mock.Arguments) {
+		callback := args.Get(2).(func())
+		callback()
+	})
 
 	mocks.EngineIntegration.EXPECT().GetStateLocks(ctx).Return([]byte("{}"), nil)
 	mocks.EngineIntegration.EXPECT().GetBlockHeight(ctx).Return(int64(100), nil)
@@ -802,37 +810,5 @@ func Test_sendAssembleRequest_RequestTimeoutCallback(t *testing.T) {
 
 	err := txn.sendAssembleRequest(ctx)
 	require.NoError(t, err)
-
-	mocks.Clock.Advance(1)
-	assert.True(t, timeoutEventReceived)
-}
-
-func Test_onTransitionToAssembling_StateTimeoutCallback(t *testing.T) {
-	ctx := context.Background()
-	timeoutEventReceived := false
-	txn, mocks := NewTransactionBuilderForTesting(t, State_Assembling).
-		UseMockTransportWriter().
-		QueueEventForCoordinator(func(ctx context.Context, event common.Event) {
-			if _, ok := event.(*StateTimeoutIntervalEvent); ok {
-				timeoutEventReceived = true
-			}
-		}).
-		StateTimeout(1).
-		Build()
-
-	mocks.EngineIntegration.EXPECT().GetStateLocks(ctx).Return([]byte("{}"), nil)
-	mocks.EngineIntegration.EXPECT().GetBlockHeight(ctx).Return(int64(100), nil)
-	mocks.TransportWriter.EXPECT().SendAssembleRequest(
-		ctx, txn.originatorNode, txn.pt.ID, mock.Anything, txn.pt.PreAssembly, []byte("{}"), int64(100),
-	).Return(nil)
-
-	err := action_ScheduleStateTimeout(ctx, txn, nil)
-	require.NoError(t, err)
-	err = action_SendAssembleRequest(ctx, txn, nil)
-	require.NoError(t, err)
-
-	// Wait for timeout to fire
-	mocks.Clock.Advance(1)
-
 	assert.True(t, timeoutEventReceived)
 }

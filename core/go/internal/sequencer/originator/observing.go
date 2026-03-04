@@ -32,7 +32,8 @@ func action_HeartbeatReceived(ctx context.Context, o *originator, event common.E
 }
 
 func (o *originator) applyHeartbeatReceived(ctx context.Context, event *HeartbeatReceivedEvent) error {
-	o.timeOfMostRecentHeartbeat = o.clock.Now()
+	now := o.clock.Now()
+	o.timeOfMostRecentHeartbeat = &now
 	o.activeCoordinatorNode = event.From
 	o.latestCoordinatorSnapshot = &event.CoordinatorSnapshot
 	for _, dispatchedTransaction := range event.DispatchedTransactions {
@@ -90,7 +91,7 @@ func guard_HeartbeatThresholdExceeded(ctx context.Context, o *originator) bool {
 		//we have never seen a heartbeat so that was a really long time ago, certainly longer than any threshold
 		return true
 	}
-	if o.clock.HasExpired(o.timeOfMostRecentHeartbeat, o.heartbeatThresholdMs) {
+	if o.clock.HasExpired(*o.timeOfMostRecentHeartbeat, o.heartbeatThreshold) {
 		return true
 	}
 	return false

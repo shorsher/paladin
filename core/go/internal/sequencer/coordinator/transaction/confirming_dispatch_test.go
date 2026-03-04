@@ -17,6 +17,7 @@ package transaction
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/common"
 	"github.com/google/uuid"
@@ -136,7 +137,6 @@ func Test_ConfirmingDispatch_Timeout_TransitionsToPooled_AndClearsPendingRequest
 	require.NotNil(t, txn.pendingPreDispatchRequest)
 	mocks.EngineIntegration.EXPECT().ResetTransactions(ctx, txn.pt.ID).Return()
 
-	mocks.Clock.Advance(builder.GetStateTimeout() + 1)
 	err := txn.HandleEvent(ctx, &StateTimeoutIntervalEvent{
 		BaseCoordinatorEvent: BaseCoordinatorEvent{
 			TransactionID: txn.pt.ID,
@@ -165,6 +165,7 @@ func Test_sendPreDispatchRequest_RequestTimeoutSchedulesTimer_QueueEventCalled(t
 
 	txn, mocks := NewTransactionBuilderForTesting(t, State_Confirming_Dispatchable).
 		UseMockTransportWriter().
+		UseMockClock().
 		QueueEventForCoordinator(func(ctx context.Context, event common.Event) {
 			if _, ok := event.(*RequestTimeoutIntervalEvent); ok {
 				timeoutEventReceived = true
@@ -177,11 +178,14 @@ func Test_sendPreDispatchRequest_RequestTimeoutSchedulesTimer_QueueEventCalled(t
 		ctx, txn.originatorNode, mock.Anything, txn.pt.PreAssembly.TransactionSpecification, mock.Anything,
 	).Return(nil)
 
+	mocks.Clock.On("Now").Return(time.Now()).Once()
+	mocks.Clock.On("ScheduleTimer", mock.Anything, time.Duration(1), mock.Anything).Return(func() {}).Run(func(args mock.Arguments) {
+		callback := args.Get(2).(func())
+		callback()
+	})
+
 	err := txn.sendPreDispatchRequest(ctx)
 	require.NoError(t, err)
-
-	// Wait for the request timeout timer to fire (scheduled with 1ms duration)
-	mocks.Clock.Advance(1)
 
 	assert.True(t, timeoutEventReceived, "queueEventForCoordinator should have been called with RequestTimeoutIntervalEvent")
 }

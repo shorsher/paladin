@@ -102,7 +102,6 @@ type CoordinatorBuilderForTesting struct {
 
 type CoordinatorDependencyMocks struct {
 	SentMessageRecorder *SentMessageRecorder
-	Clock               *common.FakeClockForTesting
 	EngineIntegration   *common.FakeEngineIntegrationForTesting
 	SyncPoints          syncpoints.SyncPoints
 	emittedEvents       []common.Event
@@ -303,7 +302,6 @@ func (b *CoordinatorBuilderForTesting) Build(ctx context.Context) (*coordinator,
 	}
 	mocks := &CoordinatorDependencyMocks{
 		SentMessageRecorder: NewSentMessageRecorder(),
-		Clock:               &common.FakeClockForTesting{},
 		EngineIntegration:   &common.FakeEngineIntegrationForTesting{},
 		SyncPoints:          &syncpoints.MockSyncPoints{},
 	}
@@ -339,7 +337,7 @@ func (b *CoordinatorBuilderForTesting) Build(ctx context.Context) (*coordinator,
 		nil,
 		nil,
 		mocks.SentMessageRecorder,
-		mocks.Clock,
+		common.RealClock(),
 		mocks.EngineIntegration,
 		mocks.SyncPoints,
 		b.originatorIdentityPool,
