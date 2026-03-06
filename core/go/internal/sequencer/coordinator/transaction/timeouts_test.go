@@ -15,9 +15,14 @@
 package transaction
 
 import (
+	"context"
 	"testing"
+	"time"
 
+	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/common"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 )
 
 func Test_clearTimeoutSchedules_BothNil(t *testing.T) {
@@ -48,4 +53,28 @@ func Test_clearTimeoutSchedules_BothSet(t *testing.T) {
 	assert.True(t, called2)
 	assert.Nil(t, txn.cancelRequestTimeoutSchedule)
 	assert.Nil(t, txn.cancelStateTimeoutSchedule)
+}
+
+func Test_action_ScheduleStateTimeout_schedulesTimer(t *testing.T) {
+	ctx := context.Background()
+	timeoutEventReceived := false
+	txn, mocks := NewTransactionBuilderForTesting(t, State_Assembling).
+		UseMockClock().
+		StateTimeout(1).
+		QueueEventForCoordinator(func(ctx context.Context, event common.Event) {
+			if _, ok := event.(*StateTimeoutIntervalEvent); ok {
+				timeoutEventReceived = true
+			}
+		}).
+		Build()
+
+	mocks.Clock.On("ScheduleTimer", mock.Anything, time.Duration(1), mock.Anything).Return(func() {}).
+		Run(func(args mock.Arguments) {
+			callback := args.Get(2).(func())
+			callback()
+		})
+
+	err := action_ScheduleStateTimeout(ctx, txn, nil)
+	require.NoError(t, err)
+	assert.True(t, timeoutEventReceived)
 }

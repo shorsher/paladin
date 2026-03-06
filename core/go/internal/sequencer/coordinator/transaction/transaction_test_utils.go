@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"math/rand/v2"
 	"testing"
+	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/LFDT-Paladin/paladin/core/internal/components"
@@ -234,6 +235,7 @@ type TransactionBuilderForTesting struct {
 	dependencies                       *pldapi.TransactionDependencies
 	state                              State
 	useMockTransportWriter             bool
+	useMockClock                       bool
 	grapher                            Grapher
 	txn                                *coordinatorTransaction
 	requestTimeout                     int
@@ -296,6 +298,11 @@ func NewTransactionBuilderForTesting(t *testing.T, state State) *TransactionBuil
 
 func (b *TransactionBuilderForTesting) UseMockTransportWriter() *TransactionBuilderForTesting {
 	b.useMockTransportWriter = true
+	return b
+}
+
+func (b *TransactionBuilderForTesting) UseMockClock() *TransactionBuilderForTesting {
+	b.useMockClock = true
 	return b
 }
 
@@ -552,7 +559,7 @@ func (b *TransactionBuilderForTesting) GetEndorsers() []string {
 
 type transactionDependencyMocks struct {
 	TransportWriter     *transport.MockTransportWriter
-	Clock               *common.FakeClockForTesting
+	Clock               *common.MockClock
 	EngineIntegration   *common.MockEngineIntegration
 	SentMessageRecorder *SentMessageRecorder
 	SyncPoints          *syncpoints.MockSyncPoints
@@ -578,7 +585,7 @@ func (b *TransactionBuilderForTesting) Build() (*coordinatorTransaction, *transa
 
 	mocks := &transactionDependencyMocks{
 		TransportWriter:     transport.NewMockTransportWriter(b.t),
-		Clock:               &common.FakeClockForTesting{},
+		Clock:               common.NewMockClock(b.t),
 		EngineIntegration:   common.NewMockEngineIntegration(b.t),
 		SentMessageRecorder: NewSentMessageRecorder(),
 		SyncPoints:          syncpoints.NewMockSyncPoints(b.t),
@@ -618,6 +625,15 @@ func (b *TransactionBuilderForTesting) Build() (*coordinatorTransaction, *transa
 		transportWriter = mocks.SentMessageRecorder
 	}
 
+	var clock common.Clock
+	if b.useMockClock {
+		clock = mocks.Clock
+		// newTransaction results in a call to clock.Now(), so we need to mock that once
+		mocks.Clock.On("Now").Return(time.Now()).Once()
+	} else {
+		clock = common.RealClock()
+	}
+
 	txn, err := newTransaction(
 		ctx,
 		b.originator,
@@ -625,15 +641,15 @@ func (b *TransactionBuilderForTesting) Build() (*coordinatorTransaction, *transa
 		privateTransaction,
 		b.coordinatorSigningIdentity,
 		transportWriter,
-		mocks.Clock,
+		clock,
 		b.queueEventForCoordinator,
 		mocks.EngineIntegration,
 		mocks.SyncPoints,
 		mocks.AllComponents,
 		mocks.DomainAPI,
 		mocks.DomainContext,
-		mocks.Clock.Duration(b.requestTimeout),
-		mocks.Clock.Duration(b.stateTimeout),
+		time.Duration(b.requestTimeout),
+		time.Duration(b.stateTimeout),
 		b.finalizingGracePeriod,
 		b.confirmedLockRetentionGracePeriod,
 		b.grapher,

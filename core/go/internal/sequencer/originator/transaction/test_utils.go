@@ -164,7 +164,6 @@ type TransactionBuilderForTesting struct {
 	currentDelegate           string
 	txn                       *OriginatorTransaction
 	sentMessageRecorder       *SentMessageRecorder
-	fakeClock                 *common.FakeClockForTesting
 	fakeEngineIntegration     *common.FakeEngineIntegrationForTesting
 	queueEventForOriginator   func(ctx context.Context, event common.Event)
 
@@ -188,7 +187,6 @@ func NewTransactionBuilderForTesting(t *testing.T, state State) *TransactionBuil
 		state:                     state,
 		currentDelegate:           uuid.New().String(),
 		privateTransactionBuilder: testutil.NewPrivateTransactionBuilderForTesting(),
-		fakeClock:                 &common.FakeClockForTesting{},
 		fakeEngineIntegration:     &common.FakeEngineIntegrationForTesting{},
 		sentMessageRecorder:       NewSentMessageRecorder(),
 		metrics:                   metrics.InitMetrics(context.Background(), prometheus.NewRegistry()),
@@ -241,7 +239,6 @@ func (b *TransactionBuilderForTesting) GetBuiltTransaction() *OriginatorTransact
 
 type TransactionDependencyFakes struct {
 	SentMessageRecorder *SentMessageRecorder
-	Clock               *common.FakeClockForTesting
 	EngineIntegration   *common.FakeEngineIntegrationForTesting
 	transactionBuilder  *TransactionBuilderForTesting
 	emittedEvents       []common.Event
@@ -250,7 +247,6 @@ type TransactionDependencyFakes struct {
 func (b *TransactionBuilderForTesting) BuildWithMocks() (*OriginatorTransaction, *TransactionDependencyFakes) {
 	mocks := &TransactionDependencyFakes{
 		SentMessageRecorder: b.sentMessageRecorder,
-		Clock:               b.fakeClock,
 		EngineIntegration:   b.fakeEngineIntegration,
 		transactionBuilder:  b,
 	}

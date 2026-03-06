@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"slices"
 	"sync"
+	"time"
 
 	"github.com/LFDT-Paladin/paladin/config/pkg/confutil"
 	"github.com/LFDT-Paladin/paladin/config/pkg/pldconf"
@@ -70,7 +71,7 @@ type coordinator struct {
 	activeCoordinatorNode                      string
 	activeCoordinatorBlockHeight               uint64
 	heartbeatIntervalsSinceStateChange         int
-	heartbeatInterval                          common.Duration
+	heartbeatInterval                          time.Duration
 	transactionsByID                           map[uuid.UUID]transaction.CoordinatorTransaction
 	pooledTransactions                         []transaction.CoordinatorTransaction
 	currentBlockHeight                         uint64
@@ -83,8 +84,8 @@ type coordinator struct {
 	blockHeightTolerance              uint64
 	closingGracePeriod                int // expressed as a multiple of heartbeat intervals
 	confirmedLockRetentionGracePeriod int // expressed as a multiple of heartbeat intervals
-	requestTimeout                    common.Duration
-	stateTimeout                      common.Duration
+	requestTimeout                    time.Duration
+	stateTimeout                      time.Duration
 	nodeName                          string
 	coordinatorSelectionBlockRange    uint64
 	maxInflightTransactions           int

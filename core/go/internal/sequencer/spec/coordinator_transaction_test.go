@@ -166,8 +166,6 @@ func TestCoordinatorTransaction_Assembling_ToPooled_OnStateTimeout_IfStateTimeou
 		Build()
 	mocks.EngineIntegration.EXPECT().ResetTransactions(ctx, txn.GetID()).Return()
 
-	mocks.Clock.Advance(1)
-
 	err := txn.HandleEvent(ctx, &transaction.StateTimeoutIntervalEvent{
 		BaseCoordinatorEvent: transaction.BaseCoordinatorEvent{
 			TransactionID: txn.GetID(),

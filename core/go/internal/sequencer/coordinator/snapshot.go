@@ -41,7 +41,7 @@ func (c *coordinator) heartbeatLoop(ctx context.Context) {
 		}
 
 		// Then every N seconds
-		ticker := time.NewTicker(c.heartbeatInterval.(time.Duration))
+		ticker := time.NewTicker(c.heartbeatInterval)
 		defer ticker.Stop()
 		for {
 			select {

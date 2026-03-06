@@ -17,6 +17,7 @@ package transaction
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/LFDT-Paladin/paladin/core/internal/components"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/common"
@@ -69,6 +70,7 @@ func Test_sendEndorsementRequests_WhenPendingNil_SchedulesTimerAndQueueEventOnFi
 	ctx := context.Background()
 	var timeoutEventReceived bool
 	txn, mocks := NewTransactionBuilderForTesting(t, State_Endorsement_Gathering).
+		UseMockClock().
 		QueueEventForCoordinator(func(ctx context.Context, event common.Event) {
 			if _, ok := event.(*RequestTimeoutIntervalEvent); ok {
 				timeoutEventReceived = true
@@ -77,10 +79,15 @@ func Test_sendEndorsementRequests_WhenPendingNil_SchedulesTimerAndQueueEventOnFi
 		RequestTimeout(1).
 		Build()
 
+	mocks.Clock.On("Now").Return(time.Now())
+	mocks.Clock.On("ScheduleTimer", mock.Anything, time.Duration(1), mock.Anything).Return(func() {}).Run(func(args mock.Arguments) {
+		callback := args.Get(2).(func())
+		callback()
+	})
+
 	err := txn.sendEndorsementRequests(ctx)
 	require.NoError(t, err)
 
-	mocks.Clock.Advance(1)
 	assert.True(t, timeoutEventReceived, "queueEventForCoordinator should have been called with RequestTimeoutIntervalEvent")
 }
 

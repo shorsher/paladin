@@ -26,6 +26,7 @@ import (
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/statemachine"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/testutil"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
 
@@ -123,8 +124,14 @@ func TestStateMachine_Sending_NoTransition_OnTransactionConfirmed_IfHasTransacti
 
 func TestStateMachine_Observing_ToIdle_OnHeartbeatInterval_IfHeartbeatThresholdExpired(t *testing.T) {
 	ctx := context.Background()
-	builder := originator.NewOriginatorBuilderForTesting(originator.State_Observing)
-	o, mocks, cleanup := builder.Build(ctx)
+
+	clock := common.NewMockClock(t)
+	clock.On("Now").Return(time.Now()).Once()
+	clock.On("HasExpired", mock.Anything, mock.Anything).Return(true).Once()
+
+	builder := originator.NewOriginatorBuilderForTesting(originator.State_Observing).
+		Clock(clock)
+	o, _, cleanup := builder.Build(ctx)
 	defer cleanup()
 
 	heartbeatEvent := &originator.HeartbeatReceivedEvent{}
@@ -135,8 +142,6 @@ func TestStateMachine_Observing_ToIdle_OnHeartbeatInterval_IfHeartbeatThresholdE
 	sync := statemachine.NewSyncEvent()
 	o.QueueEvent(ctx, sync)
 	<-sync.Done
-
-	mocks.Clock.Advance(builder.GetCoordinatorHeartbeatThresholdMs() + 1)
 
 	o.QueueEvent(ctx, &originator.HeartbeatIntervalEvent{})
 	assert.Eventually(t, func() bool { return o.GetCurrentState() == originator.State_Idle }, 100*time.Millisecond, 1*time.Millisecond, "current state is %s", o.GetCurrentState().String())
@@ -144,8 +149,14 @@ func TestStateMachine_Observing_ToIdle_OnHeartbeatInterval_IfHeartbeatThresholdE
 
 func TestStateMachine_Observing_NoTransition_OnHeartbeatInterval_IfHeartbeatThresholdNotExpired(t *testing.T) {
 	ctx := context.Background()
-	builder := originator.NewOriginatorBuilderForTesting(originator.State_Observing)
-	o, mocks, cleanup := builder.Build(ctx)
+
+	clock := common.NewMockClock(t)
+	clock.On("Now").Return(time.Now()).Once()
+	clock.On("HasExpired", mock.Anything, mock.Anything).Return(false).Once()
+
+	builder := originator.NewOriginatorBuilderForTesting(originator.State_Observing).
+		Clock(clock)
+	o, _, cleanup := builder.Build(ctx)
 	defer cleanup()
 
 	heartbeatEvent := &originator.HeartbeatReceivedEvent{}
@@ -156,8 +167,6 @@ func TestStateMachine_Observing_NoTransition_OnHeartbeatInterval_IfHeartbeatThre
 	sync := statemachine.NewSyncEvent()
 	o.QueueEvent(ctx, sync)
 	<-sync.Done
-
-	mocks.Clock.Advance(builder.GetCoordinatorHeartbeatThresholdMs() - 1)
 
 	o.QueueEvent(ctx, &originator.HeartbeatIntervalEvent{})
 	sync2 := statemachine.NewSyncEvent()

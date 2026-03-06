@@ -17,6 +17,7 @@ package transaction
 import (
 	"context"
 	"sync"
+	"time"
 
 	"github.com/LFDT-Paladin/paladin/common/go/pkg/log"
 	"github.com/LFDT-Paladin/paladin/core/internal/components"
@@ -61,7 +62,7 @@ type coordinatorTransaction struct {
 
 	//TODO move the fields that are really just fine grained state info.  Move them into the stateMachine struct ( consider separate structs for each concrete state)
 	heartbeatIntervalsSinceStateChange int
-	stateEntryTime                     common.Time
+	stateEntryTime                     time.Time
 	pendingAssembleRequest             *common.IdempotentRequest
 	cancelRequestTimeoutSchedule       func()                                          // Short timeout for retry e.g. network blip
 	cancelStateTimeoutSchedule         func()                                          // Timeout for state completion before repooling
@@ -73,8 +74,8 @@ type coordinatorTransaction struct {
 	dependencies                       *pldapi.TransactionDependencies
 
 	//Configuration
-	requestTimeout                    common.Duration
-	stateTimeout                      common.Duration
+	requestTimeout                    time.Duration
+	stateTimeout                      time.Duration
 	finalizingGracePeriod             int // number of heartbeat intervals that the transaction will remain in one of the terminal states ( Reverted or Confirmed) before it is removed from memory and no longer reported in heartbeats
 	confirmedLockRetentionGracePeriod int // number of heartbeat intervals after confirmation before we clear in-memory state locks
 	confirmedLocksReleased            bool
@@ -106,7 +107,7 @@ func NewTransaction(ctx context.Context,
 	domainAPI components.DomainSmartContract,
 	dCtx components.DomainContext,
 	requestTimeout,
-	stateTimeout common.Duration,
+	stateTimeout time.Duration,
 	finalizingGracePeriod int,
 	confirmedLockRetentionGracePeriod int,
 	grapher Grapher,
@@ -150,7 +151,7 @@ func newTransaction(
 	domainAPI components.DomainSmartContract,
 	dCtx components.DomainContext,
 	requestTimeout,
-	stateTimeout common.Duration,
+	stateTimeout time.Duration,
 	finalizingGracePeriod int,
 	confirmedLockRetentionGracePeriod int,
 	grapher Grapher,

@@ -17,6 +17,7 @@ package transaction
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/LFDT-Paladin/paladin/core/internal/components"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/common"
@@ -205,7 +206,6 @@ func TestTransaction_AddsItselfToGrapher(t *testing.T) {
 
 func TestNewTransaction_InvalidOriginator_ReturnsError(t *testing.T) {
 	ctx := context.Background()
-	clock := &common.FakeClockForTesting{}
 
 	_, err := newTransaction(
 		ctx,
@@ -214,15 +214,15 @@ func TestNewTransaction_InvalidOriginator_ReturnsError(t *testing.T) {
 		&components.PrivateTransaction{ID: uuid.New()},
 		"coordinator-signer",
 		transport.NewMockTransportWriter(t),
-		clock,
+		common.NewMockClock(t),
 		func(ctx context.Context, event common.Event) {},
 		common.NewMockEngineIntegration(t),
 		&syncpoints.MockSyncPoints{},
 		componentsmocks.NewAllComponents(t),
 		componentsmocks.NewDomainSmartContract(t),
 		nil,
-		clock.Duration(1000),
-		clock.Duration(5000),
+		time.Duration(1000),
+		time.Duration(5000),
 		5,
 		0,
 		NewGrapher(ctx),

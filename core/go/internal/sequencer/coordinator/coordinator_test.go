@@ -47,7 +47,7 @@ func NewCoordinatorForUnitTest(t *testing.T, ctx context.Context, originatorIden
 	metrics := metrics.InitMetrics(context.Background(), prometheus.NewRegistry())
 	mocks := &coordinatorDependencyMocks{
 		transportWriter:   transport.NewMockTransportWriter(t),
-		clock:             &common.FakeClockForTesting{},
+		clock:             common.NewMockClock(t),
 		engineIntegration: common.NewMockEngineIntegration(t),
 		syncPoints:        &syncpoints.MockSyncPoints{},
 		emit:              func(event common.Event) {},
@@ -106,7 +106,7 @@ func NewCoordinatorForUnitTest(t *testing.T, ctx context.Context, originatorIden
 
 type coordinatorDependencyMocks struct {
 	transportWriter   *transport.MockTransportWriter
-	clock             *common.FakeClockForTesting
+	clock             *common.MockClock
 	engineIntegration *common.MockEngineIntegration
 	emit              common.EmitEvent
 	syncPoints        syncpoints.SyncPoints
