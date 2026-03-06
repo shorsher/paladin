@@ -27,6 +27,7 @@ import (
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/metrics"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/syncpoints"
 	"github.com/LFDT-Paladin/paladin/core/mocks/componentsmocks"
+	"github.com/LFDT-Paladin/paladin/core/pkg/persistence/mockpersistence"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldtypes"
 	"github.com/LFDT-Paladin/paladin/toolkit/pkg/prototk"
 	"github.com/google/uuid"
@@ -78,10 +79,12 @@ func (r *SentMessageRecorder) HasSentHeartbeat() bool {
 }
 
 type CoordinatorBuilderForTesting struct {
+	t                                        *testing.T
 	state                                    State
 	originatorIdentityPool                   []string
 	domainAPI                                *componentsmocks.DomainSmartContract
 	txManager                                *componentsmocks.TXManager
+	sequencerManager                         *componentsmocks.SequencerManager
 	contractAddress                          *pldtypes.EthAddress
 	currentBlockHeight                       *uint64
 	activeCoordinatorBlockHeight             *uint64
@@ -91,7 +94,7 @@ type CoordinatorBuilderForTesting struct {
 	flushPointNonce                          *uint64
 	flushPointSignerAddress                  *pldtypes.EthAddress
 	emitFunction                             func(event common.Event)
-	transactions                             []*transaction.CoordinatorTransaction
+	transactions                             []transaction.CoordinatorTransaction
 	heartbeatsUntilClosingGracePeriodExpires *int
 	metrics                                  metrics.DistributedSequencerMetrics
 	sequencerConfig                          *pldconf.SequencerConfig
@@ -199,12 +202,15 @@ func NewCoordinatorBuilderForTesting(t *testing.T, state State) *CoordinatorBuil
 
 	domainAPI := componentsmocks.NewDomainSmartContract(t)
 	txManager := componentsmocks.NewTXManager(t)
+	sequencerManager := componentsmocks.NewSequencerManager(t)
 	return &CoordinatorBuilderForTesting{
-		state:           state,
-		domainAPI:       domainAPI,
-		txManager:       txManager,
-		metrics:         metrics.InitMetrics(context.Background(), prometheus.NewRegistry()),
-		sequencerConfig: copySequencerDefaultsForTest(),
+		t:                t,
+		state:            state,
+		domainAPI:        domainAPI,
+		txManager:        txManager,
+		sequencerManager: sequencerManager,
+		metrics:          metrics.InitMetrics(context.Background(), prometheus.NewRegistry()),
+		sequencerConfig:  copySequencerDefaultsForTest(),
 	}
 }
 
@@ -232,7 +238,7 @@ func (b *CoordinatorBuilderForTesting) ActiveCoordinatorBlockHeight(activeCoordi
 	return b
 }
 
-func (b *CoordinatorBuilderForTesting) Transactions(transactions ...*transaction.CoordinatorTransaction) *CoordinatorBuilderForTesting {
+func (b *CoordinatorBuilderForTesting) Transactions(transactions ...transaction.CoordinatorTransaction) *CoordinatorBuilderForTesting {
 	b.transactions = transactions
 	return b
 }
@@ -260,6 +266,10 @@ func (b *CoordinatorBuilderForTesting) GetDomainAPI() *componentsmocks.DomainSma
 
 func (b *CoordinatorBuilderForTesting) GetTXManager() *componentsmocks.TXManager {
 	return b.txManager
+}
+
+func (b *CoordinatorBuilderForTesting) GetSequencerManager() *componentsmocks.SequencerManager {
+	return b.sequencerManager
 }
 
 func (b *CoordinatorBuilderForTesting) GetSequencerConfig() *pldconf.SequencerConfig {
@@ -306,11 +316,28 @@ func (b *CoordinatorBuilderForTesting) Build(ctx context.Context) (*coordinator,
 		CoordinatorSelection: prototk.ContractConfig_COORDINATOR_SENDER,
 	}).Maybe()
 	buildCtx, cancel := context.WithCancel(ctx)
+
+	allComponents := componentsmocks.NewAllComponents(b.t)
+	mp, err := mockpersistence.NewSQLMockProvider()
+	if err != nil {
+		panic(err)
+	}
+
+	transportManager := componentsmocks.NewTransportManager(b.t)
+	transportManager.On("LocalNodeName").Return("node1").Maybe()
+	allComponents.On("TransportManager").Return(transportManager).Maybe()
+	allComponents.On("TxManager").Return(b.txManager).Maybe()
+	allComponents.On("SequencerManager").Return(b.sequencerManager).Maybe()
+	allComponents.On("Persistence").Return(mp.P).Maybe()
+
 	coordinator, err := NewCoordinator(
 		buildCtx,
 		b.contractAddress, // Contract address,
 		b.domainAPI,
-		b.txManager,
+		nil,
+		allComponents,
+		nil,
+		nil,
 		mocks.SentMessageRecorder,
 		mocks.Clock,
 		mocks.EngineIntegration,
@@ -319,7 +346,6 @@ func (b *CoordinatorBuilderForTesting) Build(ctx context.Context) (*coordinator,
 		b.sequencerConfig,
 		"node1",
 		b.metrics,
-		func(context.Context, *transaction.CoordinatorTransaction) {},         // onReadyForDispatch function, not used in tests
 		func(contractAddress *pldtypes.EthAddress, coordinatorNode string) {}, // coordinatorStarted function, not used in tests
 		func(contractAddress *pldtypes.EthAddress) {},                         // coordinatorIdle function, not used in tests
 	)
@@ -366,7 +392,7 @@ func (b *CoordinatorBuilderForTesting) Build(ctx context.Context) (*coordinator,
 			b.flushPointSignerAddress = pldtypes.RandAddress()
 		}
 
-		coordinator.activeCoordinatorsFlushPointsBySignerNonce = map[string]*common.FlushPoint{
+		coordinator.activeCoordinatorsFlushPointsBySignerNonce = map[string]*common.SnapshotFlushPoint{
 			fmt.Sprintf("%s:%d", b.flushPointSignerAddress.String(), *b.flushPointNonce): {
 				TransactionID: *b.flushPointTransactionID,
 				Hash:          *b.flushPointHash,
@@ -384,7 +410,7 @@ func (b *CoordinatorBuilderForTesting) Build(ctx context.Context) (*coordinator,
 
 	// Actions like action_HeartbeatReceived write to this map; ensure it is never nil
 	if coordinator.activeCoordinatorsFlushPointsBySignerNonce == nil {
-		coordinator.activeCoordinatorsFlushPointsBySignerNonce = make(map[string]*common.FlushPoint)
+		coordinator.activeCoordinatorsFlushPointsBySignerNonce = make(map[string]*common.SnapshotFlushPoint)
 	}
 
 	done := func() {

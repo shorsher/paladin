@@ -72,15 +72,15 @@ const (
 
 // Type aliases for the generic statemachine types, specialized for Transaction
 type (
-	Action           = statemachine.Action[*CoordinatorTransaction]
-	Guard            = statemachine.Guard[*CoordinatorTransaction]
-	ActionRule       = statemachine.ActionRule[*CoordinatorTransaction]
-	Transition       = statemachine.Transition[State, *CoordinatorTransaction]
-	Validator        = statemachine.Validator[*CoordinatorTransaction]
-	EventHandler     = statemachine.EventHandler[State, *CoordinatorTransaction]
-	StateDefinition  = statemachine.StateDefinition[State, *CoordinatorTransaction]
-	StateDefinitions = statemachine.StateDefinitions[State, *CoordinatorTransaction]
-	StateMachine     = statemachine.StateMachine[State, *CoordinatorTransaction]
+	Action           = statemachine.Action[*coordinatorTransaction]
+	Guard            = statemachine.Guard[*coordinatorTransaction]
+	ActionRule       = statemachine.ActionRule[*coordinatorTransaction]
+	Transition       = statemachine.Transition[State, *coordinatorTransaction]
+	Validator        = statemachine.Validator[*coordinatorTransaction]
+	EventHandler     = statemachine.EventHandler[State, *coordinatorTransaction]
+	StateDefinition  = statemachine.StateDefinition[State, *coordinatorTransaction]
+	StateDefinitions = statemachine.StateDefinitions[State, *coordinatorTransaction]
+	StateMachine     = statemachine.StateMachine[State, *coordinatorTransaction]
 )
 
 var stateDefinitionsMap = StateDefinitions{
@@ -94,11 +94,11 @@ var stateDefinitionsMap = StateDefinitions{
 					},
 					{
 						To: State_Pooled,
-						If: statemachine.And(statemachine.Not(guard_HasUnassembledDependencies), statemachine.Not(guard_HasUnknownDependencies)),
+						If: statemachine.GuardAnd(statemachine.GuardNot(guard_HasUnassembledDependencies), statemachine.GuardNot(guard_HasUnknownDependencies)),
 					},
 					{
 						To: State_PreAssembly_Blocked,
-						If: statemachine.Or(guard_HasUnassembledDependencies, guard_HasUnknownDependencies),
+						If: statemachine.GuardOr(guard_HasUnassembledDependencies, guard_HasUnknownDependencies),
 					},
 				},
 			},
@@ -106,10 +106,13 @@ var stateDefinitionsMap = StateDefinitions{
 			// At initial state if we've reverted (e.g. a submission from a previous coordinator),
 			// we don't do anything else other than tell the originator.
 			Event_Confirmed: {
-				Actions: []ActionRule{{Action: action_Confirmed}},
+				Actions: []ActionRule{
+					{Action: action_RecordConfirmationDetails},
+					{Action: action_NotifyConfirmed},
+				},
 				Transitions: []Transition{
 					{
-						If: statemachine.Not(guard_HasRevertReason),
+						If: statemachine.GuardNot(guard_HasRevertReason),
 						To: State_Confirmed,
 					},
 				},
@@ -127,23 +130,26 @@ var stateDefinitionsMap = StateDefinitions{
 			Event_DependencyAssembled: {
 				Transitions: []Transition{{
 					To: State_Pooled,
-					If: statemachine.Not(guard_HasUnassembledDependencies),
+					If: statemachine.GuardNot(guard_HasUnassembledDependencies),
 				}},
 			},
 			Event_DependencyReverted: {
 				Transitions: []Transition{{
 					To: State_Pooled,
-					If: statemachine.Not(guard_HasUnassembledDependencies),
+					If: statemachine.GuardNot(guard_HasUnassembledDependencies),
 				}},
 			},
 			// We handle a confirmed event in every state so that work can stop if we've been confirmed on the base ledger.
 			// In this state if we've reverted we've likely rolled back because a dependency reverted earlier,
 			// so we don't do anything else other than tell the originator.
 			Event_Confirmed: {
-				Actions: []ActionRule{{Action: action_Confirmed}},
+				Actions: []ActionRule{
+					{Action: action_RecordConfirmationDetails},
+					{Action: action_NotifyConfirmed},
+				},
 				Transitions: []Transition{
 					{
-						If: statemachine.Not(guard_HasRevertReason),
+						If: statemachine.GuardNot(guard_HasRevertReason),
 						To: State_Confirmed,
 					},
 				},
@@ -151,7 +157,10 @@ var stateDefinitionsMap = StateDefinitions{
 		},
 	},
 	State_Pooled: {
-		OnTransitionTo: action_onTransitionToPooled,
+		OnTransitionTo: []ActionRule{
+			{Action: action_NotifyDependentsOfRepool},
+			{Action: action_InitializeForNewAssembly},
+		},
 		Events: map[EventType]EventHandler{
 			Event_Selected: {
 				Transitions: []Transition{
@@ -168,10 +177,13 @@ var stateDefinitionsMap = StateDefinitions{
 			// In this state if we've reverted we've likely rolled back because a dependency reverted earlier,
 			// so we don't do anything else other than tell the originator.
 			Event_Confirmed: {
-				Actions: []ActionRule{{Action: action_Confirmed}},
+				Actions: []ActionRule{
+					{Action: action_RecordConfirmationDetails},
+					{Action: action_NotifyConfirmed},
+				},
 				Transitions: []Transition{
 					{
-						If: statemachine.Not(guard_HasRevertReason),
+						If: statemachine.GuardNot(guard_HasRevertReason),
 						To: State_Confirmed,
 					},
 				},
@@ -179,7 +191,10 @@ var stateDefinitionsMap = StateDefinitions{
 		},
 	},
 	State_Assembling: {
-		OnTransitionTo: action_OnTransitionToAssembling,
+		OnTransitionTo: []ActionRule{
+			{Action: action_ScheduleStateTimeout},
+			{Action: action_SendAssembleRequest},
+		},
 		Events: map[EventType]EventHandler{
 			Event_Assemble_Success: {
 				Validator: validator_MatchesPendingAssembleRequest,
@@ -189,30 +204,28 @@ var stateDefinitionsMap = StateDefinitions{
 					},
 					{
 						Action: action_UpdateSigningIdentity,
-						If:     statemachine.And(guard_AttestationPlanFulfilled, statemachine.Not(guard_HasSigner)),
+						If:     statemachine.GuardAnd(guard_AttestationPlanFulfilled, statemachine.GuardNot(guard_HasSigner)),
 					},
 				},
 				Transitions: []Transition{
 					{
-						To:     State_Endorsement_Gathering,
-						Action: action_NotifyDependentsOfAssembled,
-						If:     statemachine.Not(guard_AttestationPlanFulfilled),
+						To:      State_Endorsement_Gathering,
+						Actions: []ActionRule{{Action: action_NotifyDependentsOfAssembled}},
+						If:      statemachine.GuardNot(guard_AttestationPlanFulfilled),
 					},
 					{
 						To: State_Confirming_Dispatchable,
-						If: statemachine.And(guard_AttestationPlanFulfilled, statemachine.Not(guard_HasDependenciesNotReady)),
+						If: statemachine.GuardAnd(guard_AttestationPlanFulfilled, statemachine.GuardNot(guard_HasDependenciesNotReady)),
 					}},
 			},
 			Event_RequestTimeoutInterval: {
 				Actions: []ActionRule{{
 					Action: action_NudgeAssembleRequest,
-					If:     statemachine.Not(guard_AssembleStateTimeoutExceeded),
 				}},
 			},
 			Event_StateTimeoutInterval: {
 				Transitions: []Transition{{
-					To:     State_Pooled,
-					Action: action_IncrementErrors,
+					To: State_Pooled,
 				}},
 			},
 			Event_Assemble_Revert_Response: {
@@ -228,18 +241,21 @@ var stateDefinitionsMap = StateDefinitions{
 			// from memory on the originator after cleanup. The coordinator should clean up this transaction.
 			Event_TransactionUnknownByOriginator: {
 				Transitions: []Transition{{
-					To:     State_Final,
-					Action: action_FinalizeAsUnknownByOriginator,
+					To:      State_Final,
+					Actions: []ActionRule{{Action: action_FinalizeAsUnknownByOriginator}},
 				}},
 			},
 			// We handle a confirmed event in every state so that work can stop if we've been confirmed on the base ledger.
 			// In this state if we've reverted we've likely rolled back because a dependency reverted earlier,
 			// so we don't do anything else other than tell the originator.
 			Event_Confirmed: {
-				Actions: []ActionRule{{Action: action_Confirmed}},
+				Actions: []ActionRule{
+					{Action: action_RecordConfirmationDetails},
+					{Action: action_NotifyConfirmed},
+				},
 				Transitions: []Transition{
 					{
-						If: statemachine.Not(guard_HasRevertReason),
+						If: statemachine.GuardNot(guard_HasRevertReason),
 						To: State_Confirmed,
 					},
 				},
@@ -247,7 +263,10 @@ var stateDefinitionsMap = StateDefinitions{
 		},
 	},
 	State_Endorsement_Gathering: {
-		OnTransitionTo: action_OnTransitionToEndorsementGathering,
+		OnTransitionTo: []ActionRule{
+			{Action: action_ScheduleStateTimeout},
+			{Action: action_SendEndorsementRequests},
+		},
 		Events: map[EventType]EventHandler{
 			Event_Endorsed: {
 				Actions: []ActionRule{
@@ -260,39 +279,35 @@ var stateDefinitionsMap = StateDefinitions{
 					},
 					{
 						Action: action_UpdateSigningIdentity,
-						If:     statemachine.And(guard_AttestationPlanFulfilled, statemachine.Not(guard_HasSigner)),
+						If:     statemachine.GuardAnd(guard_AttestationPlanFulfilled, statemachine.GuardNot(guard_HasSigner)),
 					}},
 				Transitions: []Transition{
 					{
 						To: State_Confirming_Dispatchable,
-						If: statemachine.And(guard_AttestationPlanFulfilled, statemachine.Not(guard_HasDependenciesNotReady)),
+						If: statemachine.GuardAnd(guard_AttestationPlanFulfilled, statemachine.GuardNot(guard_HasDependenciesNotReady)),
 					},
 					{
 						To: State_Blocked,
-						If: statemachine.And(guard_AttestationPlanFulfilled, guard_HasDependenciesNotReady),
+						If: statemachine.GuardAnd(guard_AttestationPlanFulfilled, guard_HasDependenciesNotReady),
 					},
 				},
 			},
 			Event_EndorsedRejected: {
-				Actions: []ActionRule{{Action: action_EndorsedRejected}},
 				Transitions: []Transition{
 					{
-						To:     State_Pooled,
-						Action: action_IncrementErrors,
+						To: State_Pooled,
 					},
 				},
 			},
 			Event_RequestTimeoutInterval: {
 				Actions: []ActionRule{{
 					Action: action_NudgeEndorsementRequests,
-					If:     statemachine.Not(guard_EndorsementStateTimeoutExceeded),
 				}},
 			},
 			Event_StateTimeoutInterval: {
 				Transitions: []Transition{
 					{
-						To:     State_Pooled,
-						Action: action_IncrementErrors,
+						To: State_Pooled,
 					},
 				},
 			},
@@ -305,10 +320,13 @@ var stateDefinitionsMap = StateDefinitions{
 			// In this state if we've reverted we've likely rolled back because a dependency reverted earlier,
 			// so we don't do anything else other than tell the originator.
 			Event_Confirmed: {
-				Actions: []ActionRule{{Action: action_Confirmed}},
+				Actions: []ActionRule{
+					{Action: action_RecordConfirmationDetails},
+					{Action: action_NotifyConfirmed},
+				},
 				Transitions: []Transition{
 					{
-						If: statemachine.Not(guard_HasRevertReason),
+						If: statemachine.GuardNot(guard_HasRevertReason),
 						To: State_Confirmed,
 					},
 				},
@@ -321,11 +339,11 @@ var stateDefinitionsMap = StateDefinitions{
 				Actions: []ActionRule{
 					{
 						Action: action_UpdateSigningIdentity,
-						If:     statemachine.And(guard_AttestationPlanFulfilled, statemachine.Not(guard_HasSigner)),
+						If:     statemachine.GuardAnd(guard_AttestationPlanFulfilled, statemachine.GuardNot(guard_HasSigner)),
 					}},
 				Transitions: []Transition{{
 					To: State_Confirming_Dispatchable,
-					If: statemachine.And(guard_AttestationPlanFulfilled, statemachine.Not(guard_HasDependenciesNotReady)),
+					If: statemachine.GuardAnd(guard_AttestationPlanFulfilled, statemachine.GuardNot(guard_HasDependenciesNotReady)),
 				}},
 			},
 			Event_DependencyRepooled: {
@@ -337,10 +355,13 @@ var stateDefinitionsMap = StateDefinitions{
 			// In this state if we've reverted we've likely rolled back because a dependency reverted earlier,
 			// so we don't do anything else other than tell the originator.
 			Event_Confirmed: {
-				Actions: []ActionRule{{Action: action_Confirmed}},
+				Actions: []ActionRule{
+					{Action: action_RecordConfirmationDetails},
+					{Action: action_NotifyConfirmed},
+				},
 				Transitions: []Transition{
 					{
-						If: statemachine.Not(guard_HasRevertReason),
+						If: statemachine.GuardNot(guard_HasRevertReason),
 						To: State_Confirmed,
 					},
 				},
@@ -348,7 +369,10 @@ var stateDefinitionsMap = StateDefinitions{
 		},
 	},
 	State_Confirming_Dispatchable: {
-		OnTransitionTo: action_OnTransitionToConfirmingDispatchable,
+		OnTransitionTo: []ActionRule{
+			{Action: action_ScheduleStateTimeout},
+			{Action: action_SendPreDispatchRequest},
+		},
 		Events: map[EventType]EventHandler{
 			Event_DispatchRequestApproved: {
 				Validator: validator_MatchesPendingPreDispatchRequest,
@@ -359,25 +383,24 @@ var stateDefinitionsMap = StateDefinitions{
 					}},
 			},
 			Event_DispatchRequestRejected: {
-				Actions: []ActionRule{{Action: action_DispatchRequestRejected}},
+				Validator: validator_MatchesPendingPreDispatchRequest,
+				Actions:   []ActionRule{{Action: action_DispatchRequestRejected}},
 				Transitions: []Transition{
 					{
-						To:     State_Pooled,
-						Action: action_IncrementErrors,
+						To: State_Pooled,
 					},
 				},
 			},
 			Event_RequestTimeoutInterval: {
 				Actions: []ActionRule{{
 					Action: action_NudgePreDispatchRequest,
-					If:     statemachine.Not(guard_DispatchConfirmationStateTimeoutExceeded),
 				}},
 			},
 			Event_StateTimeoutInterval: {
 				Transitions: []Transition{
 					{
-						To:     State_Pooled,
-						Action: action_DispatchRequestRejected,
+						To:      State_Pooled,
+						Actions: []ActionRule{{Action: action_DispatchRequestRejected}},
 					},
 				},
 			},
@@ -390,10 +413,13 @@ var stateDefinitionsMap = StateDefinitions{
 			// In this state if we've reverted we've likely rolled back because a dependency reverted earlier,
 			// so we don't do anything else other than tell the originator.
 			Event_Confirmed: {
-				Actions: []ActionRule{{Action: action_Confirmed}},
+				Actions: []ActionRule{
+					{Action: action_RecordConfirmationDetails},
+					{Action: action_NotifyConfirmed},
+				},
 				Transitions: []Transition{
 					{
-						If: statemachine.Not(guard_HasRevertReason),
+						If: statemachine.GuardNot(guard_HasRevertReason),
 						To: State_Confirmed,
 					},
 				},
@@ -401,13 +427,22 @@ var stateDefinitionsMap = StateDefinitions{
 		},
 	},
 	State_Ready_For_Dispatch: {
-		OnTransitionTo: action_NotifyDependentsOfReadiness,
+		OnTransitionTo: []ActionRule{
+			{Action: action_AllocateSigningIdentity},
+			{Action: action_NotifyDependentsOfReadiness},
+		},
 		Events: map[EventType]EventHandler{
 			Event_Dispatched: {
+				Actions: []ActionRule{
+					{
+						Action: action_Dispatch,
+					},
+				},
 				Transitions: []Transition{
 					{
 						To: State_Dispatched,
-					}},
+					},
+				},
 			},
 			Event_DependencyRepooled: {
 				Transitions: []Transition{{
@@ -418,10 +453,13 @@ var stateDefinitionsMap = StateDefinitions{
 			// In this state if we've reverted we've likely rolled back because a dependency reverted earlier,
 			// so we don't do anything else other than tell the originator.
 			Event_Confirmed: {
-				Actions: []ActionRule{{Action: action_Confirmed}},
+				Actions: []ActionRule{
+					{Action: action_RecordConfirmationDetails},
+					{Action: action_NotifyConfirmed},
+				},
 				Transitions: []Transition{
 					{
-						If: statemachine.Not(guard_HasRevertReason),
+						If: statemachine.GuardNot(guard_HasRevertReason),
 						To: State_Confirmed,
 					},
 				},
@@ -429,26 +467,32 @@ var stateDefinitionsMap = StateDefinitions{
 		},
 	},
 	State_Dispatched: {
+		OnTransitionTo: []ActionRule{
+			{Action: action_NotifyDispatched},
+		},
 		Events: map[EventType]EventHandler{
 			Event_Collected: {
-				Actions: []ActionRule{{Action: action_Collected}},
+				Actions: []ActionRule{{Action: action_NotifyCollected}},
 			},
 			Event_NonceAllocated: {
-				Actions: []ActionRule{{Action: action_NonceAllocated}},
+				Actions: []ActionRule{{Action: action_NotifyNonceAllocated}},
 			},
 			Event_Submitted: {
-				Actions: []ActionRule{{Action: action_Submitted}},
+				Actions: []ActionRule{{Action: action_NotifySubmitted}},
 			},
 			Event_Confirmed: {
-				Actions: []ActionRule{{Action: action_Confirmed}},
+				Actions: []ActionRule{
+					{Action: action_RecordConfirmationDetails},
+					{Action: action_NotifyConfirmed},
+				},
 				Transitions: []Transition{
 					{
-						If: statemachine.Not(guard_HasRevertReason),
+						If: statemachine.GuardNot(guard_HasRevertReason),
 						To: State_Confirmed,
 					},
 					{
 						If: guard_HasRevertReason,
-						To:     State_Pooled,
+						To: State_Pooled,
 					},
 				},
 			},
@@ -475,7 +519,7 @@ var stateDefinitionsMap = StateDefinitions{
 		},
 	},
 	State_Confirmed: {
-		OnTransitionTo: action_NotifyDependantsOfConfirmation,
+		OnTransitionTo: []ActionRule{{Action: action_NotifyDependantsOfConfirmation}},
 		Events: map[EventType]EventHandler{
 			common.Event_HeartbeatInterval: {
 				Actions: []ActionRule{
@@ -504,10 +548,10 @@ var stateDefinitionsMap = StateDefinitions{
 	},
 }
 
-func (t *CoordinatorTransaction) initializeStateMachine(initialState State) {
+func (t *coordinatorTransaction) initializeStateMachine(initialState State) {
 	t.stateMachine = statemachine.NewStateMachine(initialState, stateDefinitionsMap,
 		fmt.Sprintf("coord-tx-%s", t.pt.ID.String()[0:8]),
-		statemachine.WithTransitionCallback(func(ctx context.Context, t *CoordinatorTransaction, from, to State, event common.Event) {
+		statemachine.WithTransitionCallback(func(ctx context.Context, t *coordinatorTransaction, from, to State, event common.Event) {
 			// Reset heartbeat counter on state change
 			t.heartbeatIntervalsSinceStateChange = 0
 			t.stateEntryTime = t.clock.Now()
@@ -529,12 +573,12 @@ func (t *CoordinatorTransaction) initializeStateMachine(initialState State) {
 	t.stateEntryTime = t.clock.Now()
 }
 
-func (t *CoordinatorTransaction) HandleEvent(ctx context.Context, event common.Event) error {
+func (t *coordinatorTransaction) HandleEvent(ctx context.Context, event common.Event) error {
 	log.L(ctx).Infof("transaction state machine handling new event (TX ID %s, TX originator %s, TX address %+v)", t.pt.ID.String(), t.originator, t.pt.Address.HexString())
 	return t.stateMachine.ProcessEvent(ctx, t, event)
 }
 
-func action_IncrementHeartbeatIntervalsSinceStateChange(ctx context.Context, t *CoordinatorTransaction, _ common.Event) error {
+func action_IncrementHeartbeatIntervalsSinceStateChange(ctx context.Context, t *coordinatorTransaction, _ common.Event) error {
 	log.L(ctx).Tracef("coordinator transaction %s (%s) increasing heartbeatIntervalsSinceStateChange to %d", t.pt.ID.String(), t.stateMachine.CurrentState.String(), t.heartbeatIntervalsSinceStateChange+1)
 	t.heartbeatIntervalsSinceStateChange++
 	return nil

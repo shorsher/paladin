@@ -47,33 +47,23 @@ func (c *coordinator) dispatchLoop(ctx context.Context) {
 				}
 			}
 
-			// A transaction might have been queued while ready, then moved back to pooled
-			// before the dispatch loop processed it. Skip stale queue entries.
-			if tx.GetCurrentState() != transaction.State_Ready_For_Dispatch {
-				log.L(ctx).Debugf(
-					"skipping stale transaction %s from dispatch queue. current state: %s",
-					tx.GetID().String(),
-					tx.GetCurrentState(),
-				)
-				c.inFlightMutex.L.Unlock()
-				continue
-			}
-
-			// Dispatch and then asynchronously update the state machine to State_Dispatched
+			// Ask the transaction state machine to handle dispatch.
 			log.L(ctx).Debugf("submitting transaction %s for dispatch", tx.GetID().String())
-			c.readyForDispatch(ctx, tx)
-
-			// Dispatched transactions that result in a chained private transaction don't count towards max dispatch ahead
-			if !tx.HasPreparedPrivateTransaction() {
-				dispatchedAhead++
-			}
-
-			// Update the TX state machine
-			c.queueEventInternal(ctx, &transaction.DispatchedEvent{
+			err := tx.HandleEvent(ctx, &transaction.DispatchedEvent{
 				BaseCoordinatorEvent: transaction.BaseCoordinatorEvent{
 					TransactionID: tx.GetID(),
 				},
 			})
+			if err != nil {
+				log.L(ctx).Errorf("error dispatching transaction %s: %v", tx.GetID().String(), err)
+				c.inFlightMutex.L.Unlock()
+				continue
+			}
+
+			// Only dispatched transactions that result in a sent public transaction count towards max dispatch ahead
+			if tx.HasDispatchedPublicTransaction() {
+				dispatchedAhead++
+			}
 
 			// We almost never need to wait for the state machine's event loop to process the update to State_Dispatched
 			// but if we hit the max dispatch ahead limit after dispatching this transaction we do, because we can't be sure
@@ -106,8 +96,8 @@ func action_NudgeDispatchLoop(ctx context.Context, c *coordinator, _ common.Even
 	clear(c.inFlightTxns)
 	dispatchingTransactions := c.getTransactionsInStates(ctx, []transaction.State{transaction.State_Dispatched})
 	for _, txn := range dispatchingTransactions {
-		if !txn.HasPreparedPrivateTransaction() {
-			// We don't count transactions that result in new private transactions
+		if txn.HasDispatchedPublicTransaction() {
+			// We don't count transactions that result in new private transactions or prepared transactions
 			c.inFlightTxns[txn.GetID()] = txn
 		}
 	}

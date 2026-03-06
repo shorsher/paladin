@@ -72,9 +72,9 @@ func Test_applyHeartbeatReceived_DispatchedTransactionNotFoundLogsAndContinues(t
 
 	// Create a dispatched transaction that doesn't exist in memory
 	unknownTxID := uuid.New()
-	heartbeatEvent.DispatchedTransactions = []*common.DispatchedTransaction{
+	heartbeatEvent.DispatchedTransactions = []*common.SnapshotDispatchedTransaction{
 		{
-			Transaction: common.Transaction{
+			SnapshotPooledTransaction: common.SnapshotPooledTransaction{
 				ID:         unknownTxID,
 				Originator: originatorLocator,
 			},
@@ -114,9 +114,9 @@ func Test_applyHeartbeatReceived_DispatchedTransactionWithHashUpdatesSubmitted(t
 	heartbeatEvent.From = coordinatorLocator
 	contractAddress := builder.GetContractAddress()
 	heartbeatEvent.ContractAddress = &contractAddress
-	heartbeatEvent.DispatchedTransactions = []*common.DispatchedTransaction{
+	heartbeatEvent.DispatchedTransactions = []*common.SnapshotDispatchedTransaction{
 		{
-			Transaction: common.Transaction{
+			SnapshotPooledTransaction: common.SnapshotPooledTransaction{
 				ID:         txn.ID,
 				Originator: originatorLocator,
 			},
@@ -128,14 +128,6 @@ func Test_applyHeartbeatReceived_DispatchedTransactionWithHashUpdatesSubmitted(t
 
 	err = o.applyHeartbeatReceived(ctx, heartbeatEvent)
 	assert.NoError(t, err)
-
-	// Verify the transaction hash was added to submittedTransactionsByHash
-	// Note: The hash is only added if HandleEvent succeeds, which depends on the transaction's state
-	txIDPtr, exists := o.submittedTransactionsByHash[submissionHash]
-	if exists {
-		assert.Equal(t, txn.ID, *txIDPtr)
-	}
-	// If it doesn't exist, it means HandleEvent didn't process the event (transaction might be in wrong state)
 }
 
 func Test_applyHeartbeatReceived_DispatchedTransactionWithNonceOnlySendsNonceAssigned(t *testing.T) {
@@ -164,9 +156,9 @@ func Test_applyHeartbeatReceived_DispatchedTransactionWithNonceOnlySendsNonceAss
 	heartbeatEvent.From = coordinatorLocator
 	contractAddress := builder.GetContractAddress()
 	heartbeatEvent.ContractAddress = &contractAddress
-	heartbeatEvent.DispatchedTransactions = []*common.DispatchedTransaction{
+	heartbeatEvent.DispatchedTransactions = []*common.SnapshotDispatchedTransaction{
 		{
-			Transaction: common.Transaction{
+			SnapshotPooledTransaction: common.SnapshotPooledTransaction{
 				ID:         txn.ID,
 				Originator: originatorLocator,
 			},
@@ -192,9 +184,9 @@ func Test_applyHeartbeatReceived_DispatchedTransactionFromDifferentOriginatorIgn
 	heartbeatEvent.From = coordinatorLocator
 	contractAddress := builder.GetContractAddress()
 	heartbeatEvent.ContractAddress = &contractAddress
-	heartbeatEvent.DispatchedTransactions = []*common.DispatchedTransaction{
+	heartbeatEvent.DispatchedTransactions = []*common.SnapshotDispatchedTransaction{
 		{
-			Transaction: common.Transaction{
+			SnapshotPooledTransaction: common.SnapshotPooledTransaction{
 				ID:         uuid.New(),
 				Originator: otherOriginatorLocator, // Different originator
 			},
@@ -231,9 +223,9 @@ func Test_applyHeartbeatReceived_DispatchedTransactionWithHashAndNonceSucceeds(t
 	heartbeatEvent.From = coordinatorLocator
 	contractAddress := builder.GetContractAddress()
 	heartbeatEvent.ContractAddress = &contractAddress
-	heartbeatEvent.DispatchedTransactions = []*common.DispatchedTransaction{
+	heartbeatEvent.DispatchedTransactions = []*common.SnapshotDispatchedTransaction{
 		{
-			Transaction: common.Transaction{
+			SnapshotPooledTransaction: common.SnapshotPooledTransaction{
 				ID:         txn.ID,
 				Originator: originatorLocator,
 			},
@@ -273,9 +265,9 @@ func Test_applyHeartbeatReceived_DispatchedTransactionNonceOnlySucceeds(t *testi
 	heartbeatEvent.From = coordinatorLocator
 	contractAddress := builder.GetContractAddress()
 	heartbeatEvent.ContractAddress = &contractAddress
-	heartbeatEvent.DispatchedTransactions = []*common.DispatchedTransaction{
+	heartbeatEvent.DispatchedTransactions = []*common.SnapshotDispatchedTransaction{
 		{
-			Transaction: common.Transaction{
+			SnapshotPooledTransaction: common.SnapshotPooledTransaction{
 				ID:         txn.ID,
 				Originator: originatorLocator,
 			},

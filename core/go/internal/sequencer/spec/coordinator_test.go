@@ -220,7 +220,7 @@ func TestCoordinator_PreparedNoTransition_OnHeartbeatReceived_WhenFlushPointsSti
 			ContractAddress: &contractAddr,
 			CoordinatorSnapshot: common.CoordinatorSnapshot{
 				BlockHeight: 200,
-				FlushPoints: []*common.FlushPoint{
+				FlushPoints: []*common.SnapshotFlushPoint{
 					{
 						From:          *builder.GetFlushPointSignerAddress(),
 						Nonce:         builder.GetFlushPointNonce(),
@@ -258,7 +258,7 @@ func TestCoordinator_Prepared_ToActive_OnHeartbeatReceived_WhenFlushPointsAllCon
 			ContractAddress: &contractAddr,
 			CoordinatorSnapshot: common.CoordinatorSnapshot{
 				BlockHeight: 200,
-				FlushPoints: []*common.FlushPoint{
+				FlushPoints: []*common.SnapshotFlushPoint{
 					{
 						From:          *builder.GetFlushPointSignerAddress(),
 						Nonce:         builder.GetFlushPointNonce(),
@@ -293,19 +293,26 @@ func TestCoordinator_Active_ToIdle_NoTransactionsInFlight(t *testing.T) {
 func TestCoordinator_ActiveNoTransition_OnTransactionConfirmed_IfNotTransactionsEmpty(t *testing.T) {
 	ctx := context.Background()
 
-	delegation1 := transaction.NewTransactionBuilderForTesting(t, transaction.State_Dispatched).Build()
-	delegation2 := transaction.NewTransactionBuilderForTesting(t, transaction.State_Dispatched).Build()
+	nonce := uint64(1)
+	signerAddress := pldtypes.RandAddress()
+	hash := pldtypes.Bytes32(pldtypes.RandBytes(32))
+	delegation1, _ := transaction.NewTransactionBuilderForTesting(t, transaction.State_Dispatched).
+		Nonce(&nonce).
+		SignerAddress(signerAddress).
+		SubmissionHash(hash).
+		Build()
+	delegation2, _ := transaction.NewTransactionBuilderForTesting(t, transaction.State_Dispatched).Build()
 
 	c, _, done := coordinator.NewCoordinatorBuilderForTesting(t, coordinator.State_Active).
 		Transactions(delegation1, delegation2).
 		Build(ctx)
 	defer done()
 
-	delegation1Nonce := pldtypes.HexUint64(*delegation1.GetNonce())
+	delegation1Nonce := pldtypes.HexUint64(nonce)
 	c.QueueEvent(ctx, &coordinator.TransactionConfirmedEvent{
-		From:  delegation1.GetSignerAddress(),
+		From:  signerAddress,
 		Nonce: &delegation1Nonce,
-		Hash:  *delegation1.GetLatestSubmissionHash(),
+		Hash:  hash,
 	})
 
 	// Queue a sync event to ensure the previous event has been processed
@@ -319,8 +326,8 @@ func TestCoordinator_ActiveNoTransition_OnTransactionConfirmed_IfNotTransactions
 func TestCoordinator_Active_ToFlush_OnHandoverRequest(t *testing.T) {
 	ctx := context.Background()
 
-	delegation1 := transaction.NewTransactionBuilderForTesting(t, transaction.State_Dispatched).Build()
-	delegation2 := transaction.NewTransactionBuilderForTesting(t, transaction.State_Dispatched).Build()
+	delegation1, _ := transaction.NewTransactionBuilderForTesting(t, transaction.State_Dispatched).Build()
+	delegation2, _ := transaction.NewTransactionBuilderForTesting(t, transaction.State_Dispatched).Build()
 
 	c, _, done := coordinator.NewCoordinatorBuilderForTesting(t, coordinator.State_Active).
 		Transactions(delegation1, delegation2).
@@ -342,20 +349,27 @@ func TestCoordinator_Flush_ToClosing_OnTransactionConfirmed_IfFlushComplete(t *t
 
 	//We have 2 transactions in flight but only one of them has passed the point of no return so we
 	// should consider the flush complete when that one is confirmed
-	delegation1 := transaction.NewTransactionBuilderForTesting(t, transaction.State_Dispatched).Build()
-	delegation2 := transaction.NewTransactionBuilderForTesting(t, transaction.State_Confirming_Dispatchable).Build()
+	nonce := uint64(1)
+	signerAddress := pldtypes.RandAddress()
+	hash := pldtypes.Bytes32(pldtypes.RandBytes(32))
+	delegation1, _ := transaction.NewTransactionBuilderForTesting(t, transaction.State_Dispatched).
+		Nonce(&nonce).
+		SignerAddress(signerAddress).
+		SubmissionHash(hash).
+		Build()
+	delegation2, _ := transaction.NewTransactionBuilderForTesting(t, transaction.State_Confirming_Dispatchable).Build()
 
 	c, _, done := coordinator.NewCoordinatorBuilderForTesting(t, coordinator.State_Flush).
 		Transactions(delegation1, delegation2).
 		Build(ctx)
 	defer done()
 
-	delegation1Nonce := pldtypes.HexUint64(*delegation1.GetNonce())
+	delegation1Nonce := pldtypes.HexUint64(nonce)
 	c.QueueEvent(ctx, &coordinator.TransactionConfirmedEvent{
 		TxID:  delegation1.GetID(),
-		From:  delegation1.GetSignerAddress(),
+		From:  signerAddress,
 		Nonce: &delegation1Nonce,
-		Hash:  *delegation1.GetLatestSubmissionHash(),
+		Hash:  hash,
 	})
 
 	assert.Eventually(t, func() bool {
@@ -369,20 +383,28 @@ func TestCoordinator_FlushNoTransition_OnTransactionConfirmed_IfNotFlushComplete
 
 	//We have 2 transactions in flight and passed the point of no return but only one of them will be confirmed so we should not
 	// consider the flush complete
-
-	delegation1 := transaction.NewTransactionBuilderForTesting(t, transaction.State_Dispatched).Build()
-	delegation2 := transaction.NewTransactionBuilderForTesting(t, transaction.State_Dispatched).Build()
+	nonce := uint64(1)
+	signerAddress := pldtypes.RandAddress()
+	hash := pldtypes.Bytes32(pldtypes.RandBytes(32))
+	delegation1, _ := transaction.NewTransactionBuilderForTesting(t, transaction.State_Dispatched).
+		Nonce(&nonce).
+		SignerAddress(signerAddress).
+		SubmissionHash(hash).
+		Build()
+	delegation2, _ := transaction.NewTransactionBuilderForTesting(t, transaction.State_Dispatched).
+		Nonce(&nonce).
+		Build()
 
 	c, _, done := coordinator.NewCoordinatorBuilderForTesting(t, coordinator.State_Flush).
 		Transactions(delegation1, delegation2).
 		Build(ctx)
 	defer done()
 
-	delegation1Nonce := pldtypes.HexUint64(*delegation1.GetNonce())
+	delegation1Nonce := pldtypes.HexUint64(nonce)
 	c.QueueEvent(ctx, &coordinator.TransactionConfirmedEvent{
-		From:  delegation1.GetSignerAddress(),
+		From:  signerAddress,
 		Nonce: &delegation1Nonce,
-		Hash:  *delegation1.GetLatestSubmissionHash(),
+		Hash:  hash,
 	})
 
 	// Queue a sync event to ensure the previous event has been processed
@@ -397,7 +419,7 @@ func TestCoordinator_FlushNoTransition_OnTransactionConfirmed_IfNotFlushComplete
 func TestCoordinator_Closing_ToIdle_OnHeartbeatInterval_IfClosingGracePeriodExpired(t *testing.T) {
 	ctx := context.Background()
 
-	d := transaction.NewTransactionBuilderForTesting(t, transaction.State_Dispatched).Build()
+	d, _ := transaction.NewTransactionBuilderForTesting(t, transaction.State_Dispatched).Build()
 
 	builder := coordinator.NewCoordinatorBuilderForTesting(t, coordinator.State_Closing).
 		HeartbeatsUntilClosingGracePeriodExpires(1).
@@ -420,7 +442,7 @@ func TestCoordinator_Closing_ToIdle_OnHeartbeatInterval_IfClosingGracePeriodExpi
 func TestCoordinator_ClosingNoTransition_OnHeartbeatInterval_IfNotClosingGracePeriodExpired(t *testing.T) {
 	ctx := context.Background()
 
-	d := transaction.NewTransactionBuilderForTesting(t, transaction.State_Dispatched).Build()
+	d, _ := transaction.NewTransactionBuilderForTesting(t, transaction.State_Dispatched).Build()
 
 	builder := coordinator.NewCoordinatorBuilderForTesting(t, coordinator.State_Closing).
 		HeartbeatsUntilClosingGracePeriodExpires(2).

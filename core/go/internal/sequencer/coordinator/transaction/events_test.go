@@ -342,26 +342,6 @@ func TestDispatchRequestApprovedEvent_Fields(t *testing.T) {
 	assert.Equal(t, requestID, event.RequestID)
 }
 
-func TestDispatchRequestRejectedEvent_Type(t *testing.T) {
-	event := &DispatchRequestRejectedEvent{}
-	assert.Equal(t, Event_DispatchRequestRejected, event.Type())
-}
-
-func TestDispatchRequestRejectedEvent_TypeString(t *testing.T) {
-	event := &DispatchRequestRejectedEvent{}
-	assert.Equal(t, "Event_DispatchRequestRejected", event.TypeString())
-}
-
-func TestDispatchRequestRejectedEvent_GetTransactionID(t *testing.T) {
-	txID := uuid.New()
-	event := &DispatchRequestRejectedEvent{
-		BaseCoordinatorEvent: BaseCoordinatorEvent{
-			TransactionID: txID,
-		},
-	}
-	assert.Equal(t, txID, event.GetTransactionID())
-}
-
 func TestCollectedEvent_Type(t *testing.T) {
 	event := &CollectedEvent{}
 	assert.Equal(t, Event_Collected, event.Type())
@@ -787,11 +767,6 @@ func TestEvent_InterfaceCompliance(t *testing.T) {
 			},
 		},
 		&DispatchRequestApprovedEvent{
-			BaseCoordinatorEvent: BaseCoordinatorEvent{
-				TransactionID: txID,
-			},
-		},
-		&DispatchRequestRejectedEvent{
 			BaseCoordinatorEvent: BaseCoordinatorEvent{
 				TransactionID: txID,
 			},

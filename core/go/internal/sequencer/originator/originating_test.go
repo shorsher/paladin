@@ -59,7 +59,7 @@ func Test_guard_HasDroppedTransactions_TrueWhenDelegatedTxnNotInSnapshot(t *test
 	require.NotNil(t, txn)
 
 	o.latestCoordinatorSnapshot = &common.CoordinatorSnapshot{
-		PooledTransactions: []*common.Transaction{},
+		PooledTransactions: []*common.SnapshotPooledTransaction{},
 	}
 
 	assert.True(t, guard_HasDroppedTransactions(ctx, o))
@@ -77,7 +77,7 @@ func Test_guard_HasDroppedTransactions_FalseWhenDelegatedTxnInSnapshot(t *testin
 	require.NotNil(t, txn)
 
 	o.latestCoordinatorSnapshot = &common.CoordinatorSnapshot{
-		PooledTransactions: []*common.Transaction{
+		PooledTransactions: []*common.SnapshotPooledTransaction{
 			{ID: txn.GetID(), Originator: originatorLocator},
 		},
 	}
@@ -149,4 +149,37 @@ func Test_validator_TransactionDoesNotExist_NewTransactionReturnsTrue(t *testing
 	valid, err := validator_TransactionDoesNotExist(ctx, o, &TransactionCreatedEvent{Transaction: pt})
 	assert.NoError(t, err)
 	assert.True(t, valid)
+}
+
+func Test_validator_OriginatorTransactionStateTransitionToFinal(t *testing.T) {
+	ctx := context.Background()
+	valid, err := validator_OriginatorTransactionStateTransitionToFinal(ctx, nil, &common.TransactionStateTransitionEvent[transaction.State]{To: transaction.State_Final})
+	require.NoError(t, err)
+	assert.True(t, valid)
+
+	valid, err = validator_OriginatorTransactionStateTransitionToFinal(ctx, nil, &common.TransactionStateTransitionEvent[transaction.State]{To: transaction.State_Confirmed})
+	require.NoError(t, err)
+	assert.False(t, valid)
+}
+
+func Test_validator_OriginatorTransactionStateTransitionToConfirmed(t *testing.T) {
+	ctx := context.Background()
+	valid, err := validator_OriginatorTransactionStateTransitionToConfirmed(ctx, nil, &common.TransactionStateTransitionEvent[transaction.State]{To: transaction.State_Confirmed})
+	require.NoError(t, err)
+	assert.True(t, valid)
+
+	valid, err = validator_OriginatorTransactionStateTransitionToConfirmed(ctx, nil, &common.TransactionStateTransitionEvent[transaction.State]{To: transaction.State_Reverted})
+	require.NoError(t, err)
+	assert.False(t, valid)
+}
+
+func Test_validator_OriginatorTransactionStateTransitionToReverted(t *testing.T) {
+	ctx := context.Background()
+	valid, err := validator_OriginatorTransactionStateTransitionToReverted(ctx, nil, &common.TransactionStateTransitionEvent[transaction.State]{To: transaction.State_Reverted})
+	require.NoError(t, err)
+	assert.True(t, valid)
+
+	valid, err = validator_OriginatorTransactionStateTransitionToReverted(ctx, nil, &common.TransactionStateTransitionEvent[transaction.State]{To: transaction.State_Final})
+	require.NoError(t, err)
+	assert.False(t, valid)
 }

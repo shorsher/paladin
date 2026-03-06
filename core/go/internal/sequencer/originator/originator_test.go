@@ -97,11 +97,11 @@ func TestOriginator_SingleTransactionLifecycle(t *testing.T) {
 	// Simulate the coordinator sending a heartbeat after the transaction was submitted
 	submissionHash := pldtypes.RandBytes32()
 	nonce := uint64(42)
-	// Originator must match the originator's nodeName so the heartbeat is applied and
-	// submittedTransactionsByHash is populated (builder defaults nodeName to "member1@node1").
-	heartbeatEvent.DispatchedTransactions = []*common.DispatchedTransaction{
+	// Originator must match the originator's nodeName so the heartbeat is applied
+	// (builder defaults nodeName to "member1@node1").
+	heartbeatEvent.DispatchedTransactions = []*common.SnapshotDispatchedTransaction{
 		{
-			Transaction: common.Transaction{
+			SnapshotPooledTransaction: common.SnapshotPooledTransaction{
 				ID:         txn.ID,
 				Originator: "member1@node1",
 			},
@@ -164,7 +164,7 @@ func TestOriginator_DelegateDroppedTransactions(t *testing.T) {
 	heartbeatWithPooled := &HeartbeatReceivedEvent{}
 	heartbeatWithPooled.From = coordinatorLocator
 	heartbeatWithPooled.ContractAddress = &contractAddress
-	heartbeatWithPooled.PooledTransactions = []*common.Transaction{
+	heartbeatWithPooled.PooledTransactions = []*common.SnapshotPooledTransaction{
 		{
 			ID:         txn1.ID,
 			Originator: originatorLocator,
@@ -202,11 +202,6 @@ func TestOriginator_TransactionConfirmedViaTransactionEvent_AllStates(t *testing
 			txn := txBuilder.GetBuiltTransaction()
 			require.NotNil(t, txn)
 
-			submissionHash := txn.GetLatestSubmissionHash()
-			require.NotNil(t, submissionHash)
-			_, exists := s.submittedTransactionsByHash[*submissionHash]
-			require.True(t, exists)
-
 			s.QueueEvent(ctx, &transaction.ConfirmedSuccessEvent{
 				BaseEvent: transaction.BaseEvent{
 					BaseEvent:     common.BaseEvent{EventTime: time.Now()},
@@ -218,8 +213,6 @@ func TestOriginator_TransactionConfirmedViaTransactionEvent_AllStates(t *testing
 				state := txn.GetCurrentState()
 				return state == transaction.State_Confirmed || state == transaction.State_Final
 			}, 100*time.Millisecond, 1*time.Millisecond)
-			_, exists = s.submittedTransactionsByHash[*submissionHash]
-			assert.False(t, exists)
 			require.Eventually(t, func() bool { return s.GetCurrentState() == tc.expectedState }, 100*time.Millisecond, 1*time.Millisecond)
 		})
 	}
