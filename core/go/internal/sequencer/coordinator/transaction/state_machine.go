@@ -491,8 +491,9 @@ var stateDefinitionsMap = StateDefinitions{
 						To: State_Confirmed,
 					},
 					{
-						If: guard_HasRevertReason,
-						To: State_Pooled,
+						If:      guard_HasRevertReason,
+						Actions: []ActionRule{{Action: action_ResetAssembleRequests}}, // TODO - temporary coarse approach to force re-assembly without stale state
+						To:      State_Pooled,
 					},
 				},
 			},
