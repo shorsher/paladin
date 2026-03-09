@@ -57,13 +57,15 @@ const (
 	Event_DependencyAssembled                                                                  // another transaction, for which this transaction has a dependency on, has been assembled
 	Event_DependencyReverted                                                                   // another transaction, for which this transaction has a dependency on, has been reverted
 	Event_DependencyRepooled                                                                   // another transaction, for which this transaction has a dependency on, has been put back in the pool
+	Event_DependencyConfirmedReverted                                                          // another transaction, for which this transaction has a dependency on, has been confirmed as reverted
 	Event_DispatchRequestApproved                                                              // dispatch confirmation received from the originator
 	Event_DispatchRequestRejected                                                              // dispatch confirmation response received from the originator with a rejection
 	Event_Dispatched                                                                           // dispatched to the public TX manager
 	Event_Collected                                                                            // collected by the public TX manager
 	Event_NonceAllocated                                                                       // nonce allocated by the dispatcher thread
 	Event_Submitted                                                                            // submission made to the blockchain.  Each time this event is received, the submission hash is updated
-	Event_Confirmed                                                                            // confirmation received from the blockchain of either a successful or reverted transaction
+	Event_ConfirmedSuccess                                                                     // confirmation received from the blockchain of a successful transaction
+	Event_ConfirmedReverted                                                                    // confirmation received from the blockchain of a reverted transaction
 	Event_RequestTimeoutInterval                                                               // event emitted by the state machine on a regular period while we have pending requests
 	Event_StateTimeoutInterval                                                                 // event emitted when a state has exceeded its maximum allowed duration
 	Event_StateTransition                                                                      // event emitted by the state machine when a state transition occurs.  TODO should this be a separate enum?
@@ -105,14 +107,21 @@ var stateDefinitionsMap = StateDefinitions{
 			// We handle a confirmed event in every state so that work can stop if we've been confirmed on the base ledger.
 			// At initial state if we've reverted (e.g. a submission from a previous coordinator),
 			// we don't do anything else other than tell the originator.
-			Event_Confirmed: {
+			Event_ConfirmedSuccess: {
 				Actions: []ActionRule{
-					{Action: action_RecordConfirmationDetails},
-					{Action: action_NotifyConfirmed},
+					{Action: action_RecordConfirmation},
+					{Action: action_NotifyOriginatorOfConfirmation},
+				},
+				Transitions: []Transition{{To: State_Confirmed}},
+			},
+			Event_ConfirmedReverted: {
+				Actions: []ActionRule{
+					{Action: action_RecordConfirmation},
+					{Action: action_NotifyOriginatorOfConfirmation},
 				},
 				Transitions: []Transition{
 					{
-						If: statemachine.GuardNot(guard_HasRevertReason),
+						If: statemachine.GuardNot(guard_CanRetryRevert),
 						To: State_Confirmed,
 					},
 				},
@@ -142,14 +151,21 @@ var stateDefinitionsMap = StateDefinitions{
 			// We handle a confirmed event in every state so that work can stop if we've been confirmed on the base ledger.
 			// In this state if we've reverted we've likely rolled back because a dependency reverted earlier,
 			// so we don't do anything else other than tell the originator.
-			Event_Confirmed: {
+			Event_ConfirmedSuccess: {
 				Actions: []ActionRule{
-					{Action: action_RecordConfirmationDetails},
-					{Action: action_NotifyConfirmed},
+					{Action: action_RecordConfirmation},
+					{Action: action_NotifyOriginatorOfConfirmation},
+				},
+				Transitions: []Transition{{To: State_Confirmed}},
+			},
+			Event_ConfirmedReverted: {
+				Actions: []ActionRule{
+					{Action: action_RecordConfirmation},
+					{Action: action_NotifyOriginatorOfConfirmation},
 				},
 				Transitions: []Transition{
 					{
-						If: statemachine.GuardNot(guard_HasRevertReason),
+						If: statemachine.GuardNot(guard_CanRetryRevert),
 						To: State_Confirmed,
 					},
 				},
@@ -176,14 +192,21 @@ var stateDefinitionsMap = StateDefinitions{
 			// We handle a confirmed event in every state so that work can stop if we've been confirmed on the base ledger.
 			// In this state if we've reverted we've likely rolled back because a dependency reverted earlier,
 			// so we don't do anything else other than tell the originator.
-			Event_Confirmed: {
+			Event_ConfirmedSuccess: {
 				Actions: []ActionRule{
-					{Action: action_RecordConfirmationDetails},
-					{Action: action_NotifyConfirmed},
+					{Action: action_RecordConfirmation},
+					{Action: action_NotifyOriginatorOfConfirmation},
+				},
+				Transitions: []Transition{{To: State_Confirmed}},
+			},
+			Event_ConfirmedReverted: {
+				Actions: []ActionRule{
+					{Action: action_RecordConfirmation},
+					{Action: action_NotifyOriginatorOfConfirmation},
 				},
 				Transitions: []Transition{
 					{
-						If: statemachine.GuardNot(guard_HasRevertReason),
+						If: statemachine.GuardNot(guard_CanRetryRevert),
 						To: State_Confirmed,
 					},
 				},
@@ -253,14 +276,21 @@ var stateDefinitionsMap = StateDefinitions{
 			// We handle a confirmed event in every state so that work can stop if we've been confirmed on the base ledger.
 			// In this state if we've reverted we've likely rolled back because a dependency reverted earlier,
 			// so we don't do anything else other than tell the originator.
-			Event_Confirmed: {
+			Event_ConfirmedSuccess: {
 				Actions: []ActionRule{
-					{Action: action_RecordConfirmationDetails},
-					{Action: action_NotifyConfirmed},
+					{Action: action_RecordConfirmation},
+					{Action: action_NotifyOriginatorOfConfirmation},
+				},
+				Transitions: []Transition{{To: State_Confirmed}},
+			},
+			Event_ConfirmedReverted: {
+				Actions: []ActionRule{
+					{Action: action_RecordConfirmation},
+					{Action: action_NotifyOriginatorOfConfirmation},
 				},
 				Transitions: []Transition{
 					{
-						If: statemachine.GuardNot(guard_HasRevertReason),
+						If: statemachine.GuardNot(guard_CanRetryRevert),
 						To: State_Confirmed,
 					},
 				},
@@ -321,17 +351,29 @@ var stateDefinitionsMap = StateDefinitions{
 					To: State_Pooled,
 				}},
 			},
+			Event_DependencyConfirmedReverted: {
+				Transitions: []Transition{{
+					To: State_Pooled,
+				}},
+			},
 			// We handle a confirmed event in every state so that work can stop if we've been confirmed on the base ledger.
 			// In this state if we've reverted we've likely rolled back because a dependency reverted earlier,
 			// so we don't do anything else other than tell the originator.
-			Event_Confirmed: {
+			Event_ConfirmedSuccess: {
 				Actions: []ActionRule{
-					{Action: action_RecordConfirmationDetails},
-					{Action: action_NotifyConfirmed},
+					{Action: action_RecordConfirmation},
+					{Action: action_NotifyOriginatorOfConfirmation},
+				},
+				Transitions: []Transition{{To: State_Confirmed}},
+			},
+			Event_ConfirmedReverted: {
+				Actions: []ActionRule{
+					{Action: action_RecordConfirmation},
+					{Action: action_NotifyOriginatorOfConfirmation},
 				},
 				Transitions: []Transition{
 					{
-						If: statemachine.GuardNot(guard_HasRevertReason),
+						If: statemachine.GuardNot(guard_CanRetryRevert),
 						To: State_Confirmed,
 					},
 				},
@@ -356,17 +398,29 @@ var stateDefinitionsMap = StateDefinitions{
 					To: State_Pooled,
 				}},
 			},
+			Event_DependencyConfirmedReverted: {
+				Transitions: []Transition{{
+					To: State_Pooled,
+				}},
+			},
 			// We handle a confirmed event in every state so that work can stop if we've been confirmed on the base ledger.
 			// In this state if we've reverted we've likely rolled back because a dependency reverted earlier,
 			// so we don't do anything else other than tell the originator.
-			Event_Confirmed: {
+			Event_ConfirmedSuccess: {
 				Actions: []ActionRule{
-					{Action: action_RecordConfirmationDetails},
-					{Action: action_NotifyConfirmed},
+					{Action: action_RecordConfirmation},
+					{Action: action_NotifyOriginatorOfConfirmation},
+				},
+				Transitions: []Transition{{To: State_Confirmed}},
+			},
+			Event_ConfirmedReverted: {
+				Actions: []ActionRule{
+					{Action: action_RecordConfirmation},
+					{Action: action_NotifyOriginatorOfConfirmation},
 				},
 				Transitions: []Transition{
 					{
-						If: statemachine.GuardNot(guard_HasRevertReason),
+						If: statemachine.GuardNot(guard_CanRetryRevert),
 						To: State_Confirmed,
 					},
 				},
@@ -414,17 +468,29 @@ var stateDefinitionsMap = StateDefinitions{
 					To: State_Pooled,
 				}},
 			},
+			Event_DependencyConfirmedReverted: {
+				Transitions: []Transition{{
+					To: State_Pooled,
+				}},
+			},
 			// We handle a confirmed event in every state so that work can stop if we've been confirmed on the base ledger.
 			// In this state if we've reverted we've likely rolled back because a dependency reverted earlier,
 			// so we don't do anything else other than tell the originator.
-			Event_Confirmed: {
+			Event_ConfirmedSuccess: {
 				Actions: []ActionRule{
-					{Action: action_RecordConfirmationDetails},
-					{Action: action_NotifyConfirmed},
+					{Action: action_RecordConfirmation},
+					{Action: action_NotifyOriginatorOfConfirmation},
+				},
+				Transitions: []Transition{{To: State_Confirmed}},
+			},
+			Event_ConfirmedReverted: {
+				Actions: []ActionRule{
+					{Action: action_RecordConfirmation},
+					{Action: action_NotifyOriginatorOfConfirmation},
 				},
 				Transitions: []Transition{
 					{
-						If: statemachine.GuardNot(guard_HasRevertReason),
+						If: statemachine.GuardNot(guard_CanRetryRevert),
 						To: State_Confirmed,
 					},
 				},
@@ -454,17 +520,29 @@ var stateDefinitionsMap = StateDefinitions{
 					To: State_Pooled,
 				}},
 			},
+			Event_DependencyConfirmedReverted: {
+				Transitions: []Transition{{
+					To: State_Pooled,
+				}},
+			},
 			// We handle a confirmed event in every state so that work can stop if we've been confirmed on the base ledger.
 			// In this state if we've reverted we've likely rolled back because a dependency reverted earlier,
 			// so we don't do anything else other than tell the originator.
-			Event_Confirmed: {
+			Event_ConfirmedSuccess: {
 				Actions: []ActionRule{
-					{Action: action_RecordConfirmationDetails},
-					{Action: action_NotifyConfirmed},
+					{Action: action_RecordConfirmation},
+					{Action: action_NotifyOriginatorOfConfirmation},
+				},
+				Transitions: []Transition{{To: State_Confirmed}},
+			},
+			Event_ConfirmedReverted: {
+				Actions: []ActionRule{
+					{Action: action_RecordConfirmation},
+					{Action: action_NotifyOriginatorOfConfirmation},
 				},
 				Transitions: []Transition{
 					{
-						If: statemachine.GuardNot(guard_HasRevertReason),
+						If: statemachine.GuardNot(guard_CanRetryRevert),
 						To: State_Confirmed,
 					},
 				},
@@ -485,23 +563,35 @@ var stateDefinitionsMap = StateDefinitions{
 			Event_Submitted: {
 				Actions: []ActionRule{{Action: action_NotifySubmitted}},
 			},
-			Event_Confirmed: {
+			Event_ConfirmedSuccess: {
 				Actions: []ActionRule{
-					{Action: action_RecordConfirmationDetails},
-					{Action: action_NotifyConfirmed},
+					{Action: action_RecordConfirmation},
+					{Action: action_NotifyOriginatorOfConfirmation},
+				},
+				Transitions: []Transition{{To: State_Confirmed}},
+			},
+			Event_ConfirmedReverted: {
+				Actions: []ActionRule{
+					{Action: action_RecordConfirmation},
+					{Action: action_NotifyOriginatorOfConfirmation},
 				},
 				Transitions: []Transition{
 					{
-						If: statemachine.GuardNot(guard_HasRevertReason),
-						To: State_Confirmed,
+						If: guard_CanRetryRevert,
+						To: State_Pooled,
 					},
 					{
-						If: guard_HasRevertReason,
-						To: State_Pooled,
+						If: statemachine.GuardNot(guard_CanRetryRevert),
+						To: State_Confirmed,
 					},
 				},
 			},
 			Event_DependencyRepooled: {
+				Transitions: []Transition{{
+					To: State_Pooled,
+				}},
+			},
+			Event_DependencyConfirmedReverted: {
 				Transitions: []Transition{{
 					To: State_Pooled,
 				}},
@@ -524,7 +614,20 @@ var stateDefinitionsMap = StateDefinitions{
 		},
 	},
 	State_Confirmed: {
-		OnTransitionTo: []ActionRule{{Action: action_NotifyDependantsOfConfirmation}},
+		OnTransitionTo: []ActionRule{
+			{
+				Action: action_NotifyDependantsOfSuccessfulConfirmation,
+				If:     statemachine.GuardNot(guard_HasRevertReason),
+			},
+			{
+				Action: action_NotifyDependantsOfRevertedConfirmation,
+				If:     guard_HasRevertReason,
+			},
+			{
+				Action: action_FinalizeNonRetryableRevert,
+				If:     guard_HasRevertReason,
+			},
+		},
 		Events: map[EventType]EventHandler{
 			common.Event_HeartbeatInterval: {
 				Actions: []ActionRule{

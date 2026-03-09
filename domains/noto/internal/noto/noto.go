@@ -16,6 +16,7 @@
 package noto
 
 import (
+	"bytes"
 	"context"
 	_ "embed"
 	"encoding/json"
@@ -1326,6 +1327,23 @@ func (n *Noto) encodeNotoDelegateOperation(ctx context.Context, notoDelegateOp *
 		encoded, err = types.NotoDelegateOperationABI.EncodeABIDataJSONCtx(ctx, lockOptionsJSON)
 	}
 	return encoded, err
+}
+
+func (n *Noto) IsBaseLedgerRevertRetryable(_ context.Context, req *prototk.IsBaseLedgerRevertRetryableRequest) (*prototk.IsBaseLedgerRevertRetryableResponse, error) {
+	if len(req.RevertData) < 4 {
+		return &prototk.IsBaseLedgerRevertRetryableResponse{Retryable: true}, nil
+	}
+	notoInvalidInputSelector := pldtypes.Bytes32Keccak([]byte("NotoInvalidInput(bytes32)"))
+	if bytes.Equal(req.RevertData[:4], notoInvalidInputSelector[:4]) {
+		return &prototk.IsBaseLedgerRevertRetryableResponse{
+			Retryable:     true,
+			DecodedReason: fmt.Sprintf("NotoInvalidInput(%x)", req.RevertData[4:]),
+		}, nil
+	}
+	return &prototk.IsBaseLedgerRevertRetryableResponse{
+		Retryable:     false,
+		DecodedReason: fmt.Sprintf("0x%x", req.RevertData),
+	}, nil
 }
 
 func (n *Noto) computeLockIDForLockTX(ctx context.Context, tx *types.ParsedTransaction, notaryID *identityPair) (pldtypes.Bytes32, error) {

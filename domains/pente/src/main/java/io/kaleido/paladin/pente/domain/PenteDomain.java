@@ -41,6 +41,7 @@
  import java.nio.charset.StandardCharsets;
  import java.util.*;
  import java.util.concurrent.CompletableFuture;
+import java.util.HexFormat;
 import java.util.concurrent.ExecutionException;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -860,6 +861,41 @@ import com.fasterxml.jackson.core.JsonProcessingException;
              res.setNextMissingStateId(request.getUnavailableStates().getFirstUnavailableId());
          }
          return CompletableFuture.completedFuture(res.build());
+     }
+
+     @Override
+     protected CompletableFuture<IsBaseLedgerRevertRetryableResponse> isBaseLedgerRevertRetryable(IsBaseLedgerRevertRetryableRequest request) {
+         byte[] revertData = request.getRevertData().toByteArray();
+         if (revertData.length < 4) {
+             return CompletableFuture.completedFuture(
+                 IsBaseLedgerRevertRetryableResponse.newBuilder().setRetryable(true).build()
+             );
+         }
+         String decodedReason = decodeRevertSelector(revertData);
+         boolean retryable = matchesSelector(revertData, (byte)0xa8, (byte)0x0f, (byte)0x89, (byte)0xf4) ||
+                     matchesSelector(revertData, (byte)0xa7, (byte)0xa3, (byte)0xac, (byte)0xe3) ||
+                     matchesSelector(revertData, (byte)0xf6, (byte)0xb3, (byte)0x93, (byte)0x1c);
+         return CompletableFuture.completedFuture(
+             IsBaseLedgerRevertRetryableResponse.newBuilder().setRetryable(retryable).setDecodedReason(decodedReason).build()
+         );
+     }
+
+     private static boolean matchesSelector(byte[] data, byte b0, byte b1, byte b2, byte b3) {
+         return data[0] == b0 && data[1] == b1 && data[2] == b2 && data[3] == b3;
+     }
+
+     private static String decodeRevertSelector(byte[] revertData) {
+         String params = HexFormat.of().formatHex(revertData, 4, revertData.length);
+         if (matchesSelector(revertData, (byte)0xa8, (byte)0x0f, (byte)0x89, (byte)0xf4)) {
+             return "PenteInputNotAvailable(" + params + ")";
+         }
+         if (matchesSelector(revertData, (byte)0xa7, (byte)0xa3, (byte)0xac, (byte)0xe3)) {
+             return "PenteReadNotAvailable(" + params + ")";
+         }
+         if (matchesSelector(revertData, (byte)0xf6, (byte)0xb3, (byte)0x93, (byte)0x1c)) {
+             return "PenteOutputAlreadyUnspent(" + params + ")";
+         }
+         return "0x" + HexFormat.of().formatHex(revertData);
      }
 
      @NotNull

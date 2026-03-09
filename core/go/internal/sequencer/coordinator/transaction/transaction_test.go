@@ -225,6 +225,7 @@ func TestNewTransaction_InvalidOriginator_ReturnsError(t *testing.T) {
 		time.Duration(5000),
 		5,
 		0,
+		3,
 		NewGrapher(ctx),
 		nil,
 	)

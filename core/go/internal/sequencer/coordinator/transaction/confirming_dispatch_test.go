@@ -97,8 +97,7 @@ func Test_validator_MatchesPendingPreDispatchRequest_OtherEventType_ReturnsFalse
 		AddPendingPreDispatchRequest().
 		Build()
 
-	// Pass a different event type (e.g. ConfirmedEvent)
-	event := &ConfirmedEvent{
+	event := &ConfirmedSuccessEvent{
 		BaseCoordinatorEvent: BaseCoordinatorEvent{TransactionID: txn.pt.ID},
 	}
 

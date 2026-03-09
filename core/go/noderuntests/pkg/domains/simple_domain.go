@@ -15,6 +15,7 @@
 package domains
 
 import (
+	"bytes"
 	"context"
 	_ "embed"
 	"encoding/json"
@@ -54,6 +55,7 @@ var simpleTokenBuild []byte // comes from Hardhat build
 
 // The simple domain can be used to test reverts but only once, then they need discarding for the next revert test
 var revertedOnce = make(map[string]bool)
+var baseLedgerRevertTriggeredOnce = make(map[string]bool)
 
 const (
 	SimpleDomainInsufficientFundsError = "SDE0001"
@@ -1156,6 +1158,24 @@ func SimpleTokenDomain(t *testing.T, ctx context.Context) plugintk.PluginBase {
 						args["originTxId"] = params.OriginTxId
 					}
 
+					amount := params.Amount.BigInt()
+					// 1004: retryable error on first attempt, then succeed
+					// 1005: retryable error every time (will exceed retry threshold)
+					// 1006: non-retryable error (fails immediately)
+					if amount.Cmp(big.NewInt(1004)) == 0 {
+						if !baseLedgerRevertTriggeredOnce[req.Transaction.TransactionId] {
+							baseLedgerRevertTriggeredOnce[req.Transaction.TransactionId] = true
+							smartContractFunction = "executeNotarizedWithErrorMode"
+							args["errorMode"] = big.NewInt(1) // retryable
+						}
+					} else if amount.Cmp(big.NewInt(1005)) == 0 {
+						smartContractFunction = "executeNotarizedWithErrorMode"
+						args["errorMode"] = big.NewInt(1) // retryable
+					} else if amount.Cmp(big.NewInt(1006)) == 0 {
+						smartContractFunction = "executeNotarizedWithErrorMode"
+						args["errorMode"] = big.NewInt(2) // non-retryable
+					}
+
 					transactionType := prototk.PreparedTransaction_PUBLIC
 					return &prototk.PrepareTransactionResponse{
 						Transaction: &prototk.PreparedTransaction{
@@ -1206,6 +1226,30 @@ func SimpleTokenDomain(t *testing.T, ctx context.Context) plugintk.PluginBase {
 					}
 				}
 				return &res, nil
+			},
+			IsBaseLedgerRevertRetryable: func(ctx context.Context, req *prototk.IsBaseLedgerRevertRetryableRequest) (*prototk.IsBaseLedgerRevertRetryableResponse, error) {
+				if len(req.RevertData) < 4 {
+					return &prototk.IsBaseLedgerRevertRetryableResponse{Retryable: false}, nil
+				}
+				params := fmt.Sprintf("%x", req.RevertData[4:])
+				// SimpleTokenRetryableError(bytes32) selector = 0x88b57ed9
+				if bytes.Equal(req.RevertData[:4], []byte{0x88, 0xb5, 0x7e, 0xd9}) {
+					return &prototk.IsBaseLedgerRevertRetryableResponse{
+						Retryable:     true,
+						DecodedReason: fmt.Sprintf("SimpleTokenRetryableError(%s)", params),
+					}, nil
+				}
+				// SimpleTokenNonRetryableError(bytes32) selector = 0x246682a2
+				if bytes.Equal(req.RevertData[:4], []byte{0x24, 0x66, 0x82, 0xa2}) {
+					return &prototk.IsBaseLedgerRevertRetryableResponse{
+						Retryable:     false,
+						DecodedReason: fmt.Sprintf("SimpleTokenNonRetryableError(%s)", params),
+					}, nil
+				}
+				return &prototk.IsBaseLedgerRevertRetryableResponse{
+					Retryable:     false,
+					DecodedReason: fmt.Sprintf("0x%x", req.RevertData),
+				}, nil
 			},
 		}}
 	})

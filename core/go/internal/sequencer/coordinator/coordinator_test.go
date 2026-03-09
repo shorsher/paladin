@@ -304,7 +304,7 @@ func TestCoordinator_SingleTransactionLifecycle(t *testing.T) {
 
 	// Simulate the block indexer confirming the transaction
 	nonce42 := pldtypes.HexUint64(42)
-	c.QueueEvent(ctx, &transaction.ConfirmedEvent{
+	c.QueueEvent(ctx, &transaction.ConfirmedSuccessEvent{
 		BaseCoordinatorEvent: transaction.BaseCoordinatorEvent{
 			TransactionID: txn.ID,
 		},
@@ -613,7 +613,7 @@ func Test_propagateEventToTransaction_UnknownTransaction_ReturnsNil(t *testing.T
 	c, _, done := builder.Build(ctx)
 	defer done()
 
-	event := &transaction.ConfirmedEvent{
+	event := &transaction.ConfirmedSuccessEvent{
 		BaseCoordinatorEvent: transaction.BaseCoordinatorEvent{TransactionID: uuid.New()},
 		Hash:                 pldtypes.Bytes32(pldtypes.RandBytes(32)),
 	}

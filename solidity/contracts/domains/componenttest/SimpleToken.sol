@@ -15,6 +15,8 @@ contract SimpleToken {
     uint256 public storedAmount = 0;
 
     error BadNotary(address sender);
+    error SimpleTokenRetryableError(bytes32 id);
+    error SimpleTokenNonRetryableError(bytes32 id);
     bytes32 public constant SINGLE_FUNCTION_SELECTOR = keccak256("SimpleToken()");
     
     constructor() {
@@ -43,6 +45,16 @@ contract SimpleToken {
             revert("tx arrived out of order, amount not expected");
         }
         storedAmount = amount;
+        emit UTXOTransfer(txId, inputs, outputs, abi.encodePacked(signature));
+    }
+
+    function executeNotarizedWithErrorMode(bytes32 txId, bytes32[] calldata inputs, bytes32[] calldata outputs, bytes calldata signature, uint256 errorMode) public {
+        if (errorMode == 1) {
+            revert SimpleTokenRetryableError(outputs.length > 0 ? outputs[0] : bytes32(0));
+        }
+        if (errorMode == 2) {
+            revert SimpleTokenNonRetryableError(outputs.length > 0 ? outputs[0] : bytes32(0));
+        }
         emit UTXOTransfer(txId, inputs, outputs, abi.encodePacked(signature));
     }
 

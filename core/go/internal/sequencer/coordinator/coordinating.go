@@ -70,6 +70,7 @@ func (c *coordinator) addToDelegatedTransactions(ctx context.Context, originator
 			c.stateTimeout,
 			c.closingGracePeriod,
 			c.confirmedLockRetentionGracePeriod,
+			c.baseLedgerRevertRetryThreshold,
 			c.grapher,
 			c.metrics,
 		)
@@ -167,18 +168,30 @@ func action_TransactionConfirmed(ctx context.Context, c *coordinator, event comm
 		return nil
 	}
 
-	txEvent := &transaction.ConfirmedEvent{
-		Hash:         e.Hash,
-		RevertReason: e.RevertReason,
-		Nonce:        e.Nonce,
+	var txEvent transaction.Event
+	if len(e.RevertReason) > 0 {
+		revertEvent := &transaction.ConfirmedRevertedEvent{
+			Hash:         e.Hash,
+			RevertReason: e.RevertReason,
+			Nonce:        e.Nonce,
+		}
+		revertEvent.TransactionID = e.TxID
+		revertEvent.EventTime = time.Now()
+		txEvent = revertEvent
+	} else {
+		successEvent := &transaction.ConfirmedSuccessEvent{
+			Hash:  e.Hash,
+			Nonce: e.Nonce,
+		}
+		successEvent.TransactionID = e.TxID
+		successEvent.EventTime = time.Now()
+		txEvent = successEvent
 	}
-	txEvent.TransactionID = e.TxID
-	txEvent.EventTime = time.Now()
 
 	log.L(ctx).Debugf("Confirming dispatched TX %s", e.TxID.String())
 	err := dispatchedTransaction.HandleEvent(ctx, txEvent)
 	if err != nil {
-		log.L(ctx).Errorf("error handling ConfirmedEvent for transaction %s: %v", dispatchedTransaction.GetID().String(), err)
+		log.L(ctx).Errorf("error handling confirmed event for transaction %s: %v", dispatchedTransaction.GetID().String(), err)
 		return err
 	}
 	return nil
