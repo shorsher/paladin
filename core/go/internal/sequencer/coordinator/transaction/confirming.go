@@ -31,7 +31,7 @@ func guard_HasRevertReason(ctx context.Context, txn *coordinatorTransaction) boo
 func guard_CanRetryRevert(ctx context.Context, txn *coordinatorTransaction) bool {
 	retryable, decodedReason, err := txn.domainAPI.IsBaseLedgerRevertRetryable(ctx, txn.revertReason)
 	if err != nil {
-		log.L(ctx).Warnf("error checking if revert is retryable for transaction %s, treating as non-retryable: %s", txn.pt.ID.String(), err)
+		log.L(ctx).Errorf("error checking if revert is retryable for transaction %s, treating as non-retryable: %s", txn.pt.ID.String(), err)
 		return false
 	}
 	txn.decodedRevertReason = decodedReason
@@ -46,6 +46,7 @@ func action_RecordConfirmation(ctx context.Context, t *coordinatorTransaction, e
 	switch e := event.(type) {
 	case *ConfirmedSuccessEvent:
 		hash = e.Hash
+		// we might have had a previous revert that we've been reporting in snapshots so unset these values
 		t.revertReason = nil
 		t.decodedRevertReason = ""
 	case *ConfirmedRevertedEvent:

@@ -26,6 +26,7 @@ import (
 	"github.com/LFDT-Paladin/paladin/config/pkg/pldconf"
 	"github.com/LFDT-Paladin/paladin/core/internal/components"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/coordinator"
+	coordinatorTx "github.com/LFDT-Paladin/paladin/core/internal/sequencer/coordinator/transaction"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/metrics"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/originator"
 	originatorTx "github.com/LFDT-Paladin/paladin/core/internal/sequencer/originator/transaction"
@@ -494,8 +495,8 @@ func TestSequencerManager_handleTransactionConfirmedByChainedTransaction_LoadedQ
 	}
 
 	mocks.coordinator.EXPECT().QueueEvent(ctx, mock.MatchedBy(func(e interface{}) bool {
-		event, ok := e.(*coordinator.TransactionConfirmedEvent)
-		return ok && event.TxID == txID && event.Hash == txHash
+		event, ok := e.(*coordinatorTx.ConfirmedSuccessEvent)
+		return ok && event.TransactionID == txID && event.Hash == txHash
 	})).Once()
 	mocks.originator.EXPECT().QueueEvent(ctx, mock.MatchedBy(func(e interface{}) bool {
 		event, ok := e.(*originatorTx.ConfirmedSuccessEvent)
@@ -537,12 +538,10 @@ func TestSequencerManager_handleTransactionConfirmedDirect_LoadedQueuesCoordinat
 	}
 
 	mocks.coordinator.EXPECT().QueueEvent(ctx, mock.MatchedBy(func(e interface{}) bool {
-		event, ok := e.(*coordinator.TransactionConfirmedEvent)
+		event, ok := e.(*coordinatorTx.ConfirmedRevertedEvent)
 		return ok &&
-			event.TxID == txID &&
+			event.TransactionID == txID &&
 			event.Hash == txHash &&
-			event.From != nil &&
-			event.From.Equals(from) &&
 			event.Nonce != nil &&
 			*event.Nonce == nonce &&
 			event.RevertReason.Equals(revertReason)
@@ -585,8 +584,8 @@ func TestSequencerManager_handleTransactionConfirmedByChainedTransaction_LoadedQ
 	}
 
 	mocks.coordinator.EXPECT().QueueEvent(ctx, mock.MatchedBy(func(e interface{}) bool {
-		event, ok := e.(*coordinator.TransactionConfirmedEvent)
-		return ok && event.TxID == txID && event.Hash == txHash && event.RevertReason.Equals(revertReason)
+		event, ok := e.(*coordinatorTx.ConfirmedRevertedEvent)
+		return ok && event.TransactionID == txID && event.Hash == txHash && event.RevertReason.Equals(revertReason)
 	})).Once()
 	mocks.originator.EXPECT().QueueEvent(ctx, mock.MatchedBy(func(e interface{}) bool {
 		event, ok := e.(*originatorTx.ConfirmedRevertedEvent)
@@ -618,14 +617,13 @@ func TestSequencerManager_HandleTransactionFailed_LoadedQueuesCoordinatorAndOrig
 
 	mocks.metrics.EXPECT().IncRevertedTransactions().Once()
 	mocks.coordinator.EXPECT().QueueEvent(ctx, mock.MatchedBy(func(e interface{}) bool {
-		event, ok := e.(*coordinator.TransactionConfirmedEvent)
+		event, ok := e.(*coordinatorTx.ConfirmedRevertedEvent)
 		if !ok {
 			return false
 		}
-		return event.TxID == txID &&
+		return event.TransactionID == txID &&
 			event.Hash == txHash &&
 			event.RevertReason.Equals(revertReason) &&
-			event.From != nil && event.From.Equals(from) &&
 			event.Nonce != nil && uint64(*event.Nonce) == nonce
 	})).Once()
 	mocks.originator.EXPECT().QueueEvent(ctx, mock.MatchedBy(func(e interface{}) bool {

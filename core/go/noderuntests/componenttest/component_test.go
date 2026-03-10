@@ -1632,7 +1632,7 @@ func TestBaseLedgerRevertRetryable_ThenSucceeds(t *testing.T) {
 	require.NoError(t, deployTx.Error())
 	contractAddress := deployTx.Receipt().ContractAddress
 
-	// Amount 1004: retryable error on first attempt, succeeds on retry
+	// Amount 1003: retryable error on first attempt, succeeds on retry
 	tx := client.ForABI(ctx, *domains.SimpleTokenTransferABI()).
 		Private().
 		Domain("domain1").
@@ -1642,7 +1642,7 @@ func TestBaseLedgerRevertRetryable_ThenSucceeds(t *testing.T) {
 		Inputs(pldtypes.RawJSON(`{
 			"from": "",
 			"to": "wallets.org1.aaaaaa",
-			"amount": "1004"
+			"amount": "1003"
 		}`)).
 		Send().Wait(transactionLatencyThreshold(t))
 	require.NoError(t, tx.Error())
@@ -1682,7 +1682,7 @@ func TestBaseLedgerRevertRetryable_ExceedsThreshold(t *testing.T) {
 	require.NoError(t, deployTx.Error())
 	contractAddress := deployTx.Receipt().ContractAddress
 
-	// Amount 1005: retryable error every time - will exceed the threshold of 1
+	// Amount 1004: retryable error every time - will exceed the threshold of 1
 	tx := client.ForABI(ctx, *domains.SimpleTokenTransferABI()).
 		Private().
 		Domain("domain1").
@@ -1692,7 +1692,7 @@ func TestBaseLedgerRevertRetryable_ExceedsThreshold(t *testing.T) {
 		Inputs(pldtypes.RawJSON(`{
 			"from": "",
 			"to": "` + party.GetIdentity() + `",
-			"amount": "1005"
+			"amount": "1004"
 		}`)).
 		Send().Wait(transactionLatencyThreshold(t))
 	require.Error(t, tx.Error())
@@ -1722,7 +1722,7 @@ func TestBaseLedgerRevertNonRetryable_FailsImmediately(t *testing.T) {
 	require.NoError(t, deployTx.Error())
 	contractAddress := deployTx.Receipt().ContractAddress
 
-	// Amount 1006: non-retryable error - fails immediately
+	// Amount 1005: non-retryable error - fails immediately
 	tx := client.ForABI(ctx, *domains.SimpleTokenTransferABI()).
 		Private().
 		Domain("domain1").
@@ -1732,7 +1732,7 @@ func TestBaseLedgerRevertNonRetryable_FailsImmediately(t *testing.T) {
 		Inputs(pldtypes.RawJSON(`{
 			"from": "",
 			"to": "wallets.org1.aaaaaa",
-			"amount": "1006"
+			"amount": "1005"
 		}`)).
 		Send().Wait(transactionLatencyThreshold(t))
 	require.Error(t, tx.Error())

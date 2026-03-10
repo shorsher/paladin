@@ -49,6 +49,14 @@ import com.fasterxml.jackson.core.JsonProcessingException;
  public class PenteDomain extends DomainInstance {
      private static final Logger LOGGER = PaladinLogging.getLogger(PenteDomain.class);
 
+     // Error selectors for retryable base ledger reverts (all take a single bytes32 parameter)
+     // PenteInputNotAvailable(bytes32 input)
+     private static final byte[] SELECTOR_INPUT_NOT_AVAILABLE = new byte[]{(byte)0xa8, (byte)0x0f, (byte)0x89, (byte)0xf4};
+     // PenteReadNotAvailable(bytes32 read)
+     private static final byte[] SELECTOR_READ_NOT_AVAILABLE = new byte[]{(byte)0xa7, (byte)0xa3, (byte)0xac, (byte)0xe3};
+     // PenteOutputAlreadyUnspent(bytes32 output)
+     private static final byte[] SELECTOR_OUTPUT_ALREADY_UNSPENT = new byte[]{(byte)0xf6, (byte)0xb3, (byte)0x93, (byte)0x1c};
+
      private final PenteConfiguration config = new PenteConfiguration();
 
      PenteDomain(String grpcTarget, String instanceId) {
@@ -871,29 +879,35 @@ import com.fasterxml.jackson.core.JsonProcessingException;
                  IsBaseLedgerRevertRetryableResponse.newBuilder().setRetryable(true).build()
              );
          }
-         String decodedReason = decodeRevertSelector(revertData);
-         boolean retryable = matchesSelector(revertData, (byte)0xa8, (byte)0x0f, (byte)0x89, (byte)0xf4) ||
-                     matchesSelector(revertData, (byte)0xa7, (byte)0xa3, (byte)0xac, (byte)0xe3) ||
-                     matchesSelector(revertData, (byte)0xf6, (byte)0xb3, (byte)0x93, (byte)0x1c);
+         boolean retryable = matchesSelector(revertData, SELECTOR_INPUT_NOT_AVAILABLE) ||
+                     matchesSelector(revertData, SELECTOR_READ_NOT_AVAILABLE) ||
+                     matchesSelector(revertData, SELECTOR_OUTPUT_ALREADY_UNSPENT);
+         String decodedReason = decodeRevertReason(revertData);
          return CompletableFuture.completedFuture(
              IsBaseLedgerRevertRetryableResponse.newBuilder().setRetryable(retryable).setDecodedReason(decodedReason).build()
          );
      }
 
-     private static boolean matchesSelector(byte[] data, byte b0, byte b1, byte b2, byte b3) {
-         return data[0] == b0 && data[1] == b1 && data[2] == b2 && data[3] == b3;
+     private static boolean matchesSelector(byte[] data, byte[] selector) {
+         return data[0] == selector[0] && data[1] == selector[1] && data[2] == selector[2] && data[3] == selector[3];
      }
 
-     private static String decodeRevertSelector(byte[] revertData) {
-         String params = HexFormat.of().formatHex(revertData, 4, revertData.length);
-         if (matchesSelector(revertData, (byte)0xa8, (byte)0x0f, (byte)0x89, (byte)0xf4)) {
-             return "PenteInputNotAvailable(" + params + ")";
+     private static String decodeBytes32Param(byte[] revertData) {
+         if (revertData.length >= 36) {
+             return "0x" + HexFormat.of().formatHex(revertData, 4, 36);
          }
-         if (matchesSelector(revertData, (byte)0xa7, (byte)0xa3, (byte)0xac, (byte)0xe3)) {
-             return "PenteReadNotAvailable(" + params + ")";
+         return "0x" + HexFormat.of().formatHex(revertData, 4, revertData.length);
+     }
+
+     private static String decodeRevertReason(byte[] revertData) {
+         if (matchesSelector(revertData, SELECTOR_INPUT_NOT_AVAILABLE)) {
+             return "PenteInputNotAvailable(input=" + decodeBytes32Param(revertData) + ")";
          }
-         if (matchesSelector(revertData, (byte)0xf6, (byte)0xb3, (byte)0x93, (byte)0x1c)) {
-             return "PenteOutputAlreadyUnspent(" + params + ")";
+         if (matchesSelector(revertData, SELECTOR_READ_NOT_AVAILABLE)) {
+             return "PenteReadNotAvailable(read=" + decodeBytes32Param(revertData) + ")";
+         }
+         if (matchesSelector(revertData, SELECTOR_OUTPUT_ALREADY_UNSPENT)) {
+             return "PenteOutputAlreadyUnspent(output=" + decodeBytes32Param(revertData) + ")";
          }
          return "0x" + HexFormat.of().formatHex(revertData);
      }

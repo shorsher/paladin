@@ -84,7 +84,7 @@ type coordinator struct {
 	blockHeightTolerance              uint64
 	closingGracePeriod                int // expressed as a multiple of heartbeat intervals
 	confirmedLockRetentionGracePeriod int // expressed as a multiple of heartbeat intervals
-	baseLedgerRevertRetryThreshold   int
+	baseLedgerRevertRetryThreshold    int
 	requestTimeout                    time.Duration
 	stateTimeout                      time.Duration
 	nodeName                          string
@@ -265,7 +265,7 @@ func (c *coordinator) propagateEventToTransaction(ctx context.Context, event tra
 	if txn := c.transactionsByID[event.GetTransactionID()]; txn != nil {
 		return txn.HandleEvent(ctx, event)
 	} else {
-		log.L(ctx).Debugf("ignoring event because transaction not known to this coordinator %s", event.GetTransactionID().String())
+		log.L(ctx).Debugf("ignoring event %s because transaction %s not known to this coordinator", event.TypeString(), event.GetTransactionID().String())
 	}
 	return nil
 }

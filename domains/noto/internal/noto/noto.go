@@ -16,7 +16,6 @@
 package noto
 
 import (
-	"bytes"
 	"context"
 	_ "embed"
 	"encoding/json"
@@ -127,6 +126,10 @@ var allSchemas = []*abi.Parameter{
 }
 
 var schemasJSON = mustParseSchemas(allSchemas)
+
+var retryableNotoErrors = map[string]bool{
+	"NotoInvalidInput": true,
+}
 
 type Noto struct {
 	Callbacks plugintk.DomainCallbacks
@@ -1329,20 +1332,20 @@ func (n *Noto) encodeNotoDelegateOperation(ctx context.Context, notoDelegateOp *
 	return encoded, err
 }
 
-func (n *Noto) IsBaseLedgerRevertRetryable(_ context.Context, req *prototk.IsBaseLedgerRevertRetryableRequest) (*prototk.IsBaseLedgerRevertRetryableResponse, error) {
+func (n *Noto) IsBaseLedgerRevertRetryable(ctx context.Context, req *prototk.IsBaseLedgerRevertRetryableRequest) (*prototk.IsBaseLedgerRevertRetryableResponse, error) {
 	if len(req.RevertData) < 4 {
 		return &prototk.IsBaseLedgerRevertRetryableResponse{Retryable: true}, nil
 	}
-	notoInvalidInputSelector := pldtypes.Bytes32Keccak([]byte("NotoInvalidInput(bytes32)"))
-	if bytes.Equal(req.RevertData[:4], notoInvalidInputSelector[:4]) {
+	entry, cv, ok := errorsBuild.ABI.ParseErrorCtx(ctx, req.RevertData)
+	if ok {
 		return &prototk.IsBaseLedgerRevertRetryableResponse{
-			Retryable:     true,
-			DecodedReason: fmt.Sprintf("NotoInvalidInput(%x)", req.RevertData[4:]),
+			Retryable:     retryableNotoErrors[entry.Name],
+			DecodedReason: abi.FormatErrorStringCtx(ctx, entry, cv),
 		}, nil
 	}
 	return &prototk.IsBaseLedgerRevertRetryableResponse{
 		Retryable:     false,
-		DecodedReason: fmt.Sprintf("0x%x", req.RevertData),
+		DecodedReason: pldtypes.HexBytes(req.RevertData).String(),
 	}, nil
 }
 

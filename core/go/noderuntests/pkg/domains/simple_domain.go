@@ -55,7 +55,6 @@ var simpleTokenBuild []byte // comes from Hardhat build
 
 // The simple domain can be used to test reverts but only once, then they need discarding for the next revert test
 var revertedOnce = make(map[string]bool)
-var baseLedgerRevertTriggeredOnce = make(map[string]bool)
 
 const (
 	SimpleDomainInsufficientFundsError = "SDE0001"
@@ -828,7 +827,9 @@ func SimpleTokenDomain(t *testing.T, ctx context.Context) plugintk.PluginBase {
 				// Basic special case for revert testing:
 				// If the amount is set to 1001 we will revert in the domain at assembly time
 				// If the amount is set to 1002 we will use a fixed, known salt and revert the domain at endorsement time (see EndorseTransaction)
-				// If the amount is set to 1003 we will use a fixed, known salt and the baseledger contract will check for the known input UTXO and revert
+				// If the amount is set to 1003 we will trigger a retryable base ledger error on the first attempt, then succeed on retry
+				// If the amount is set to 1004 we will trigger a retryable base ledger error every time (will exceed retry threshold)
+				// If the amount is set to 1005 we will trigger a non-retryable base ledger error (fails immediately)
 				if config.HookAddress == "" {
 					if amount.Cmp(big.NewInt(1001)) == 0 {
 						revertMessage := "simple domain revert - special transfer amount 1001 intentionally rejected"
@@ -836,11 +837,6 @@ func SimpleTokenDomain(t *testing.T, ctx context.Context) plugintk.PluginBase {
 							AssemblyResult: prototk.AssembleTransactionResponse_REVERT,
 							RevertReason:   &revertMessage,
 						}, nil
-					}
-					if amount.Cmp(big.NewInt(1003)) == 0 && !revertedOnce[req.Transaction.TransactionId] {
-						// Don't revert, but set the UTXO to a special value that will cause revert on the base ledger
-						salt = pldtypes.MustParseHexBytes("0x1212121212121212121212121212121212121212121212121212121212121212")
-						revertedOnce[req.Transaction.TransactionId] = true
 					}
 				}
 				toKeep := new(big.Int)
@@ -1138,6 +1134,7 @@ func SimpleTokenDomain(t *testing.T, ctx context.Context) plugintk.PluginBase {
 						"inputs":    spentStateIds,
 						"outputs":   newStateIds,
 						"signature": signerSignature,
+						"errorMode": big.NewInt(0),
 					}
 
 					if config.AmountVisible {
@@ -1159,20 +1156,14 @@ func SimpleTokenDomain(t *testing.T, ctx context.Context) plugintk.PluginBase {
 					}
 
 					amount := params.Amount.BigInt()
-					// 1004: retryable error on first attempt, then succeed
-					// 1005: retryable error every time (will exceed retry threshold)
-					// 1006: non-retryable error (fails immediately)
-					if amount.Cmp(big.NewInt(1004)) == 0 {
-						if !baseLedgerRevertTriggeredOnce[req.Transaction.TransactionId] {
-							baseLedgerRevertTriggeredOnce[req.Transaction.TransactionId] = true
-							smartContractFunction = "executeNotarizedWithErrorMode"
+					if amount.Cmp(big.NewInt(1003)) == 0 {
+						if !revertedOnce[req.Transaction.TransactionId] {
+							revertedOnce[req.Transaction.TransactionId] = true
 							args["errorMode"] = big.NewInt(1) // retryable
 						}
-					} else if amount.Cmp(big.NewInt(1005)) == 0 {
-						smartContractFunction = "executeNotarizedWithErrorMode"
+					} else if amount.Cmp(big.NewInt(1004)) == 0 {
 						args["errorMode"] = big.NewInt(1) // retryable
-					} else if amount.Cmp(big.NewInt(1006)) == 0 {
-						smartContractFunction = "executeNotarizedWithErrorMode"
+					} else if amount.Cmp(big.NewInt(1005)) == 0 {
 						args["errorMode"] = big.NewInt(2) // non-retryable
 					}
 

@@ -354,8 +354,8 @@ func TestTransactionSuccessIfOneRequiredVerifierStoppedDuringSubmission(t *testi
 	bob := testutils.NewPartyForTesting(t, "bob", domainRegistryAddress)
 
 	sequencerConfig := pldconf.SequencerDefaults
-	sequencerConfig.StateTimeout = confutil.P("60s") // In this test we don't want to hit this
-	sequencerConfig.RequestTimeout = confutil.P("10s")  // Extend this enough to give the bob node enough time to restart
+	sequencerConfig.StateTimeout = confutil.P("60s")   // In this test we don't want to hit this
+	sequencerConfig.RequestTimeout = confutil.P("10s") // Extend this enough to give the bob node enough time to restart
 	alice.OverrideSequencerConfig(&sequencerConfig)
 
 	alice.AddPeer(bob.GetNodeConfig())
@@ -446,8 +446,8 @@ func TestTransactionSuccessIfOneRequiredVerifierStoppedLongerThanRequestTimeout(
 	bob := testutils.NewPartyForTesting(t, "bob", domainRegistryAddress)
 
 	sequencerConfig := pldconf.SequencerDefaults
-	sequencerConfig.RequestTimeout = confutil.P("1s")   // In this test we don't want to rely on request timeout so make sure it fires before the bob node is restarted
-	sequencerConfig.StateTimeout = confutil.P("10s") // In this test we want to ensure state timeout causes the transaction to be re-pooled and re-assembled
+	sequencerConfig.RequestTimeout = confutil.P("1s") // In this test we don't want to rely on request timeout so make sure it fires before the bob node is restarted
+	sequencerConfig.StateTimeout = confutil.P("10s")  // In this test we want to ensure state timeout causes the transaction to be re-pooled and re-assembled
 	alice.OverrideSequencerConfig(&sequencerConfig)
 
 	alice.AddPeer(bob.GetNodeConfig())
@@ -1118,7 +1118,7 @@ func TestTransactionRevertOnBaseLedger(t *testing.T) {
 			"from": "",
 			"to": "` + bob.GetIdentityLocator() + `",
 			"amount": "1003"
-		}`)). // Special value 1003 in the simple domain causes revert once on the base ledger, then subsequently be successful
+		}`)). // Special value 1003 in the simple domain causes retryable revert once on the base ledger, then subsequently be successful
 		Send().Wait(transactionLatencyThresholdCustom(t, &customDuration))
 	require.NoError(t, aliceTx.Error())
 

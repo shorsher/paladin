@@ -29,11 +29,13 @@ contract SimpleToken {
         emit UTXOTransfer(txId, inputs, outputs, abi.encodePacked(signature));
     }
 
-    function executeNotarized(bytes32 txId, bytes32[] calldata inputs, bytes32[] calldata outputs, bytes calldata signature) public {
+    function executeNotarized(bytes32 txId, bytes32[] calldata inputs, bytes32[] calldata outputs, bytes calldata signature, uint256 errorMode) public {
 
-        // Special value which the simple domain can pass to cause a revert, by fixing to a known salt & owner
-        if (outputs.length > 0 && outputs[0] == hex"1e7d508a2dd3e97c760b48f999658e0a55f47e825e00e1599725d366ccf31d01") {
-            revert("simple domain revert");
+        if (errorMode == 1) {
+            revert SimpleTokenRetryableError(outputs.length > 0 ? outputs[0] : bytes32(0));
+        }
+        if (errorMode == 2) {
+            revert SimpleTokenNonRetryableError(outputs.length > 0 ? outputs[0] : bytes32(0));
         }
         emit UTXOTransfer(txId, inputs, outputs, abi.encodePacked(signature));
     }
@@ -45,16 +47,6 @@ contract SimpleToken {
             revert("tx arrived out of order, amount not expected");
         }
         storedAmount = amount;
-        emit UTXOTransfer(txId, inputs, outputs, abi.encodePacked(signature));
-    }
-
-    function executeNotarizedWithErrorMode(bytes32 txId, bytes32[] calldata inputs, bytes32[] calldata outputs, bytes calldata signature, uint256 errorMode) public {
-        if (errorMode == 1) {
-            revert SimpleTokenRetryableError(outputs.length > 0 ? outputs[0] : bytes32(0));
-        }
-        if (errorMode == 2) {
-            revert SimpleTokenNonRetryableError(outputs.length > 0 ? outputs[0] : bytes32(0));
-        }
         emit UTXOTransfer(txId, inputs, outputs, abi.encodePacked(signature));
     }
 
