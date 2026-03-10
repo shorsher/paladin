@@ -111,6 +111,7 @@ title: QueryJSON
 | `nin` | Not in | [`OpMultiVal[]`](#opmultival) |
 | `null` | Null | [`Op[]`](#op) |
 | `limit` | Query limit | `int` |
+| `offset` | Query offset | `int` |
 | `sort` | Query sort order | `string[]` |
 
 ## Statements

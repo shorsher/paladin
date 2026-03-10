@@ -203,6 +203,7 @@ var (
 var (
 	QueryJSONStatements         = pdm("QueryJSON.statements", "Query statements")
 	QueryJSONLimit              = pdm("QueryJSON.limit", "Query limit")
+	QueryJSONOffset             = pdm("QueryJSON.offset", "Query offset")
 	QueryJSONSort               = pdm("QueryJSON.sort", "Query sort order")
 	FilterResultsWithCountCount = pdm("FilterResultsWithCount.count", "Number of items returned")
 	FilterResultsWithCountTotal = pdm("FilterResultsWithCount.total", "Total number of items available")
@@ -733,6 +734,8 @@ var (
 	SequencerConfigTargetActiveCoordinators          = pdm("SequencerConfig.targetActiveCoordinators", "Target number of active coordinators")
 	SequencerConfigTargetActiveSequencers            = pdm("SequencerConfig.targetActiveSequencers", "Target number of active sequencers")
 	SequencerConfigTransactionResumePollInterval     = pdm("SequencerConfig.transactionResumePollInterval", "Poll interval for resuming transactions")
+	SequencerConfigTransactionResumePageSize         = pdm("SequencerConfig.transactionResumePageSize", "Page size for reading pending transactions to resume")
+	SequencerConfigTransactionResumeMaxTransactions  = pdm("SequencerConfig.transactionResumeMaxTransactions", "Maximum number of pending transactions to resume")
 	SequencerConfigWriter                            = pdm("SequencerConfig.writer", "Writer configuration")
 
 	// PublicTxManagerConfig field descriptions
