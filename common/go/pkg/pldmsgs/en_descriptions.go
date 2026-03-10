@@ -203,7 +203,6 @@ var (
 var (
 	QueryJSONStatements         = pdm("QueryJSON.statements", "Query statements")
 	QueryJSONLimit              = pdm("QueryJSON.limit", "Query limit")
-	QueryJSONOffset             = pdm("QueryJSON.offset", "Query offset")
 	QueryJSONSort               = pdm("QueryJSON.sort", "Query sort order")
 	FilterResultsWithCountCount = pdm("FilterResultsWithCount.count", "Number of items returned")
 	FilterResultsWithCountTotal = pdm("FilterResultsWithCount.total", "Total number of items available")

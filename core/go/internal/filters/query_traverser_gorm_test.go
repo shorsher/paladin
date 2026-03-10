@@ -464,54 +464,6 @@ func TestBuildQueryJSONLessThanOrEqual(t *testing.T) {
 	assert.Equal(t, "SELECT count(*) FROM \"test\" WHERE sequence <= 12345 LIMIT 10", generatedSQL)
 }
 
-func TestBuildQueryJSONOffset(t *testing.T) {
-	// Test that Offset in the query is applied in the generated SQL (covers query_traverser.go Offset branch)
-	qf := query.NewQueryBuilder().
-		Limit(10).
-		Offset(5).
-		Sort("tag").
-		Query()
-
-	p, err := mockpersistence.NewSQLMockProvider()
-	require.NoError(t, err)
-	generatedSQL := p.P.DB().ToSQL(func(tx *gorm.DB) *gorm.DB {
-		var count int64
-		db := BuildGORM(context.Background(), qf, tx.Table("test"), FieldMap{
-			"tag": StringField("tag"),
-		}).Count(&count)
-		require.NoError(t, db.Error)
-		return db
-	})
-	assert.Contains(t, generatedSQL, "LIMIT 10")
-	assert.Contains(t, generatedSQL, "OFFSET 5")
-}
-
-func TestBuildQueryJSONOffsetFromJSON(t *testing.T) {
-	// Test that offset deserialized from JSON is applied via BuildGORM, exercising gorm.DB.Offset (chainable_api.go)
-	var qf query.QueryJSON
-	err := json.Unmarshal([]byte(`{
-		"limit": 20,
-		"offset": 10,
-		"sort": ["tag"],
-		"equal": [{"field": "tag", "value": "a"}]
-	}`), &qf)
-	require.NoError(t, err)
-
-	p, err := mockpersistence.NewSQLMockProvider()
-	require.NoError(t, err)
-	generatedSQL := p.P.DB().ToSQL(func(tx *gorm.DB) *gorm.DB {
-		var count int64
-		db := BuildGORM(context.Background(), &qf, tx.Table("test"), FieldMap{
-			"tag": StringField("tag"),
-		}).Count(&count)
-		require.NoError(t, db.Error)
-		return db
-	})
-	assert.Contains(t, generatedSQL, "LIMIT 20")
-	assert.Contains(t, generatedSQL, "OFFSET 10")
-	assert.Contains(t, generatedSQL, "tag = 'a'")
-}
-
 func TestBuildQueryJSONIn(t *testing.T) {
 
 	var qf query.QueryJSON

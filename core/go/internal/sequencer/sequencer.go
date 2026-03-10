@@ -157,7 +157,7 @@ func (sMgr *sequencerManager) pollForIncompleteTransactions(ctx context.Context,
 			}
 
 			resumedTransactions := 0
-			offset := 0
+			var lastCreatedTime int64
 
 			// Originators are responsible for resuming and re-delegating their own transactions.
 			// Paginate through all pending transactions with configurable page size and optional upper limit.
@@ -166,11 +166,18 @@ func (sMgr *sequencerManager) pollForIncompleteTransactions(ctx context.Context,
 				if maxTransactions > 0 && resumedTransactions+limit > maxTransactions {
 					limit = maxTransactions - resumedTransactions
 				}
-				log.L(sMgr.ctx).Debugf("Retrieving the next %d incomplete transactions to resume", limit)
-				q := query.NewQueryBuilder().
+
+				query := query.NewQueryBuilder().
 					Limit(limit).
-					Offset(offset).
-					Query()
+					Sort("created")
+				if lastCreatedTime > 0 {
+					log.L(sMgr.ctx).Debugf("Retrieving the next %d incomplete transactions to resume from timestamp %d", limit, lastCreatedTime)
+					query.GreaterThan("created", lastCreatedTime)
+				} else {
+					log.L(sMgr.ctx).Debugf("Retrieving the next %d incomplete transactions to resume", limit)
+				}
+				q := query.Query()
+
 				pendingTx, err := sMgr.components.TxManager().QueryTransactionsResolved(sMgr.ctx, q, sMgr.components.Persistence().NOTX(), true)
 				if err != nil {
 					log.L(sMgr.ctx).Errorf("Error querying pending transactions to resume incomplete ones: %s", err)
@@ -178,7 +185,7 @@ func (sMgr *sequencerManager) pollForIncompleteTransactions(ctx context.Context,
 				}
 
 				resumedTransactions += len(pendingTx)
-				log.L(sMgr.ctx).Debugf("Resuming %d transactions (%d to %d)", len(pendingTx), offset, len(pendingTx)+offset)
+				log.L(sMgr.ctx).Tracef("Resuming %d transactions", len(pendingTx))
 				for _, tx := range pendingTx {
 					err = sMgr.HandleTxResume(sMgr.ctx, &components.ValidatedTransaction{
 						ResolvedTransaction: *tx,
@@ -187,10 +194,12 @@ func (sMgr *sequencerManager) pollForIncompleteTransactions(ctx context.Context,
 						log.L(sMgr.ctx).Errorf("Error resuming pending transaction %s: %s", tx.Transaction.ID, err)
 					}
 				}
+				if len(pendingTx) > 0 {
+					lastCreatedTime = int64(pendingTx[len(pendingTx)-1].Transaction.Created)
+				}
 				if len(pendingTx) < pageSize {
 					break
 				}
-				offset += len(pendingTx)
 			}
 
 			// Repeat DB poll every N minutes to check for incomplete transactions to resume

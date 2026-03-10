@@ -113,11 +113,6 @@ func (t *inlineEval) Limit(l int) Traverser[*inlineEval] {
 	return t
 }
 
-func (t *inlineEval) Offset(o int) Traverser[*inlineEval] {
-	// N/A
-	return t
-}
-
 func (t *inlineEval) Order(order string) Traverser[*inlineEval] {
 	// N/A
 	return t
