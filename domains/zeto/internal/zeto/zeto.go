@@ -738,6 +738,6 @@ func (z *Zeto) CheckStateCompletion(ctx context.Context, req *prototk.CheckState
 }
 
 func (z *Zeto) IsBaseLedgerRevertRetryable(_ context.Context, _ *prototk.IsBaseLedgerRevertRetryableRequest) (*prototk.IsBaseLedgerRevertRetryableResponse, error) {
-	// TODO: what should the behaviour be here
+	// TODO: this is just defaulting to the sequencer retry threshold and could be customized by the domain
 	return &prototk.IsBaseLedgerRevertRetryableResponse{Retryable: true}, nil
 }
