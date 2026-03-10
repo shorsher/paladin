@@ -55,8 +55,8 @@ func action_RecordConfirmation(ctx context.Context, t *coordinatorTransaction, e
 		}
 		t.decodedRevertReason = decodedReason
 		t.lastCanRetryRevert = retryable && t.revertCount <= t.baseLedgerRevertRetryThreshold
-		log.L(ctx).Infof("transaction %s base ledger revert (count=%d, retryable=%t, threshold=%d, canRetry=%t)",
-			t.pt.ID.String(), t.revertCount, retryable, t.baseLedgerRevertRetryThreshold, t.lastCanRetryRevert)
+		log.L(ctx).Debugf("transaction %s base ledger reverted with \"%s\" (%s) (count=%d, retryable=%t, threshold=%d, canRetry=%t)",
+			t.pt.ID.String(), t.decodedRevertReason, t.revertReason.String(), t.revertCount, retryable, t.baseLedgerRevertRetryThreshold, t.lastCanRetryRevert)
 	}
 
 	if t.latestSubmissionHash == nil {
