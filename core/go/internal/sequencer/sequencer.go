@@ -929,6 +929,13 @@ func (sMgr *sequencerManager) WriteOrDistributeReceiptsPostSubmit(ctx context.Co
 	return sMgr.syncPoints.WriteOrDistributeReceipts(ctx, dbTX, assemblyReverts)
 }
 
+// If we have a receipt for a chained transaction it is definitely finalised, regardless of result and we can persist and distribute it.
+// TODO: does this really need to be completely separate function to skip the filtering of on chain reverts. With care and some rework
+// we could probably collapse this behaviour into WriteOrDistributeReceiptsPostSubmit
+func (sMgr *sequencerManager) WriteOrDistributeChainedTransactionReceipts(ctx context.Context, dbTX persistence.DBTX, receipts []*components.ReceiptInputWithOriginator) error {
+	return sMgr.syncPoints.WriteOrDistributeReceipts(ctx, dbTX, receipts)
+}
+
 func (sMgr *sequencerManager) BuildStateDistributions(ctx context.Context, tx *components.PrivateTransaction) (*components.StateDistributionSet, error) {
 	return common.NewStateDistributionBuilder(sMgr.nodeName, tx).Build(ctx)
 }

@@ -379,6 +379,12 @@ type SimpleDomainConfig struct {
 	SubmitMode string `json:"submitMode"`
 }
 
+type SimpleDomainPairConfig struct {
+	SubmitMode              string
+	Domain1RegistryAddress  string
+	Domain2RegistryAddress  string
+}
+
 // ABI for the config field in the PaladinRegisterSmartContract_V0 event
 // this must match the type and order of arguments passed to the abi.encode function call in the solidity contract
 var contractDataABI = &abi.ParameterArray{
@@ -590,7 +596,6 @@ func SimpleTokenDomain(t *testing.T, ctx context.Context) plugintk.PluginBase {
 		return &plugintk.DomainAPIBase{Functions: &plugintk.DomainAPIFunctions{
 
 			ConfigureDomain: func(ctx context.Context, req *prototk.ConfigureDomainRequest) (*prototk.ConfigureDomainResponse, error) {
-				assert.Equal(t, "domain1", req.Name)
 				domainConfig := &SimpleDomainConfig{}
 				err := json.Unmarshal([]byte(req.ConfigJson), domainConfig)
 				require.NoError(t, err)

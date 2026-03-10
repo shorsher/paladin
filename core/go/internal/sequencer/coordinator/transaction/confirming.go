@@ -92,15 +92,16 @@ func action_FinalizeNonRetryableRevert(ctx context.Context, t *coordinatorTransa
 		failureMessage = t.revertReason.String()
 	}
 	log.L(ctx).Infof("finalizing transaction %s as reverted (revertCount=%d): %s", t.pt.ID.String(), t.revertCount, failureMessage)
-	t.syncPoints.QueueTransactionFinalize(ctx, &syncpoints.TransactionFinalizeRequest{
-		Domain:          t.pt.Domain,
-		ContractAddress: pldtypes.EthAddress{},
-		Originator:      t.originator,
-		TransactionID:   t.pt.ID,
-		FailureMessage:  failureMessage,
-		RevertData:      t.revertReason,
-		OnChain:         t.revertOnChain,
-	},
+	t.syncPoints.QueueTransactionFinalize(ctx,
+		&syncpoints.TransactionFinalizeRequest{
+			Domain:          t.pt.Domain,
+			ContractAddress: pldtypes.EthAddress{},
+			Originator:      t.originator,
+			TransactionID:   t.pt.ID,
+			FailureMessage:  failureMessage,
+			RevertData:      t.revertReason,
+			OnChain:         t.revertOnChain,
+		},
 		func(ctx context.Context) {
 			log.L(ctx).Debugf("finalized non-retryable revert for transaction %s", t.pt.ID)
 		},
