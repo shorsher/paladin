@@ -90,7 +90,7 @@ var SequencerDefaults = SequencerConfig{
 	TargetActiveSequencers:            confutil.P(50),
 	TransactionResumePollInterval:     confutil.P("5m"),
 	TransactionResumePageSize:         confutil.P(1000),
-	TransactionResumeMaxTransactions:  confutil.P(0),
+	TransactionResumeMaxTransactions:  confutil.P(100000),
 }
 
 var SequencerMinimum = SequencerMinimumConfig{

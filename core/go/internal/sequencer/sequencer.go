@@ -161,14 +161,12 @@ func (sMgr *sequencerManager) pollForIncompleteTransactions(ctx context.Context,
 
 			// Originators are responsible for resuming and re-delegating their own transactions.
 			// Paginate through all pending transactions with configurable page size and optional upper limit.
-			for {
-				if maxTransactions > 0 && resumedTransactions >= maxTransactions {
-					break
-				}
+			for maxTransactions > 0 && resumedTransactions < maxTransactions {
 				limit := pageSize
 				if maxTransactions > 0 && resumedTransactions+limit > maxTransactions {
 					limit = maxTransactions - resumedTransactions
 				}
+				log.L(sMgr.ctx).Debugf("Retrieving the next %d incomplete transactions to resume", limit)
 				q := query.NewQueryBuilder().
 					Limit(limit).
 					Offset(offset).
@@ -178,9 +176,10 @@ func (sMgr *sequencerManager) pollForIncompleteTransactions(ctx context.Context,
 					log.L(sMgr.ctx).Errorf("Error querying pending transactions to resume incomplete ones: %s", err)
 					break
 				}
+
 				resumedTransactions += len(pendingTx)
+				log.L(sMgr.ctx).Debugf("Resuming %d transactions (%d to %d)", len(pendingTx), offset, len(pendingTx)+offset)
 				for _, tx := range pendingTx {
-					log.L(sMgr.ctx).Tracef("Resuming pending transaction %s", tx.Transaction.ID)
 					err = sMgr.HandleTxResume(sMgr.ctx, &components.ValidatedTransaction{
 						ResolvedTransaction: *tx,
 					})
@@ -193,7 +192,6 @@ func (sMgr *sequencerManager) pollForIncompleteTransactions(ctx context.Context,
 				}
 				offset += len(pendingTx)
 			}
-			log.L(sMgr.ctx).Infof("Resuming %d transactions (%d to %d)", resumedTransactions, offset, offset+resumedTransactions)
 
 			// Repeat DB poll every N minutes to check for incomplete transactions to resume
 			timeoutCtx, cancel := context.WithTimeout(sMgr.ctx, rePollInterval)

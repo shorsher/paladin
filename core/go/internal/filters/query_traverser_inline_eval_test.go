@@ -132,6 +132,27 @@ func TestEvalQueryEquals(t *testing.T) {
 	assert.False(t, match)
 }
 
+func TestEvalQueryWithOffset(t *testing.T) {
+	// Query with offset exercises inlineEval.Offset (N/A for inline evaluation; ensures the branch is covered)
+	qf := query.NewQueryBuilder().
+		Limit(10).
+		Offset(5).
+		Equal("stringField", "test1").
+		Query()
+
+	match, err := EvalQuery(context.Background(), qf, allTypesFieldMap, ResolvingValueSet{
+		"stringField": pldtypes.RawJSON(`"test1"`),
+	})
+	require.NoError(t, err)
+	assert.True(t, match)
+
+	match, err = EvalQuery(context.Background(), qf, allTypesFieldMap, ResolvingValueSet{
+		"stringField": pldtypes.RawJSON(`"other"`),
+	})
+	require.NoError(t, err)
+	assert.False(t, match)
+}
+
 func TestEvalQueryNull(t *testing.T) {
 
 	var qf *query.QueryJSON
