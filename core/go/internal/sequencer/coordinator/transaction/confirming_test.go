@@ -147,14 +147,14 @@ func Test_action_NotifyOriginatorOfConfirmation_Success(t *testing.T) {
 	}
 
 	mocks.TransportWriter.EXPECT().
-		SendTransactionConfirmed(ctx, txn.pt.ID, txn.originatorNode, &txn.pt.Address, &nonce, pldtypes.HexBytes(nil)).
+		SendTransactionConfirmed(ctx, txn.pt.ID, txn.originatorNode, &txn.pt.Address, &nonce, pldtypes.HexBytes(nil), false).
 		Return(nil)
 
 	err := action_NotifyOriginatorOfConfirmation(ctx, txn, event)
 	require.NoError(t, err)
 }
 
-func Test_action_NotifyOriginatorOfConfirmation_Revert(t *testing.T) {
+func Test_action_NotifyOriginatorOfRetryableRevert(t *testing.T) {
 	ctx := context.Background()
 	txn, mocks := NewTransactionBuilderForTesting(t, State_Confirmed).
 		UseMockTransportWriter().
@@ -171,20 +171,45 @@ func Test_action_NotifyOriginatorOfConfirmation_Revert(t *testing.T) {
 	}
 
 	mocks.TransportWriter.EXPECT().
-		SendTransactionConfirmed(ctx, txn.pt.ID, txn.originatorNode, &txn.pt.Address, &nonce, revertReason).
+		SendTransactionConfirmed(ctx, txn.pt.ID, txn.originatorNode, &txn.pt.Address, &nonce, revertReason, true).
 		Return(nil)
 
-	err := action_NotifyOriginatorOfConfirmation(ctx, txn, event)
+	err := action_NotifyOriginatorOfRetryableRevert(ctx, txn, event)
+	require.NoError(t, err)
+}
+
+func Test_action_NotifyOriginatorOfNonRetryableRevert(t *testing.T) {
+	ctx := context.Background()
+	txn, mocks := NewTransactionBuilderForTesting(t, State_Confirmed).
+		UseMockTransportWriter().
+		Build()
+
+	nonce := pldtypes.HexUint64(42)
+	revertReason := pldtypes.MustParseHexBytes("0x1234")
+	event := &ConfirmedRevertedEvent{
+		BaseCoordinatorEvent: BaseCoordinatorEvent{
+			TransactionID: txn.pt.ID,
+		},
+		Nonce:        &nonce,
+		RevertReason: revertReason,
+	}
+
+	mocks.TransportWriter.EXPECT().
+		SendTransactionConfirmed(ctx, txn.pt.ID, txn.originatorNode, &txn.pt.Address, &nonce, revertReason, false).
+		Return(nil)
+
+	err := action_NotifyOriginatorOfNonRetryableRevert(ctx, txn, event)
 	require.NoError(t, err)
 }
 
 func Test_action_RecordConfirmation_RevertSetsRevertReason(t *testing.T) {
 	ctx := context.Background()
 	hash := pldtypes.RandBytes32()
-	txn, _ := NewTransactionBuilderForTesting(t, State_Confirmed).
+	txn, mocks := NewTransactionBuilderForTesting(t, State_Confirmed).
 		LatestSubmissionHash(&hash).
 		Build()
 	revertReason := pldtypes.MustParseHexBytes("0x1234")
+	mocks.DomainAPI.EXPECT().IsBaseLedgerRevertRetryable(mock.Anything, []byte(revertReason)).Return(false, "", nil)
 	event := &ConfirmedRevertedEvent{
 		BaseCoordinatorEvent: BaseCoordinatorEvent{
 			TransactionID: txn.pt.ID,
@@ -201,11 +226,12 @@ func Test_action_RecordConfirmation_RevertSetsRevertReason(t *testing.T) {
 func Test_action_RecordConfirmation_RevertIncrementsRevertCount(t *testing.T) {
 	ctx := context.Background()
 	hash := pldtypes.RandBytes32()
-	txn, _ := NewTransactionBuilderForTesting(t, State_Confirmed).
+	txn, mocks := NewTransactionBuilderForTesting(t, State_Confirmed).
 		LatestSubmissionHash(&hash).
 		RevertCount(2).
 		Build()
 	revertReason := pldtypes.MustParseHexBytes("0xabcd")
+	mocks.DomainAPI.EXPECT().IsBaseLedgerRevertRetryable(mock.Anything, []byte(revertReason)).Return(false, "", nil)
 	event := &ConfirmedRevertedEvent{
 		BaseCoordinatorEvent: BaseCoordinatorEvent{
 			TransactionID: txn.pt.ID,
@@ -483,75 +509,130 @@ func Test_ConfirmedRevert_StateDispatched_RetryableRevert_ExceedsThreshold_Trans
 	assert.Equal(t, State_Confirmed, txn.stateMachine.GetCurrentState())
 }
 
-func Test_guard_CanRetryRevert_RetryableAndUnderThreshold(t *testing.T) {
+func Test_action_RecordConfirmation_RevertRetryableAndUnderThreshold(t *testing.T) {
 	ctx := context.Background()
+	revertReason := pldtypes.MustParseHexBytes("0xbeef")
+	hash := pldtypes.RandBytes32()
 	txn, mocks := NewTransactionBuilderForTesting(t, State_Dispatched).
 		BaseLedgerRevertRetryThreshold(3).
-		RevertReason(pldtypes.MustParseHexBytes("0xbeef")).
+		LatestSubmissionHash(&hash).
+		Build()
+	mocks.DomainAPI.EXPECT().IsBaseLedgerRevertRetryable(mock.Anything, []byte(revertReason)).Return(true, "decoded", nil)
+
+	err := action_RecordConfirmation(ctx, txn, &ConfirmedRevertedEvent{
+		BaseCoordinatorEvent: BaseCoordinatorEvent{TransactionID: txn.pt.ID},
+		Hash:                 hash,
+		RevertReason:         revertReason,
+	})
+	require.NoError(t, err)
+	assert.True(t, txn.lastCanRetryRevert)
+	assert.Equal(t, "decoded", txn.decodedRevertReason)
+	assert.Equal(t, 1, txn.revertCount)
+}
+
+func Test_action_RecordConfirmation_RevertRetryableAtThreshold(t *testing.T) {
+	ctx := context.Background()
+	revertReason := pldtypes.MustParseHexBytes("0xbeef")
+	txn, mocks := NewTransactionBuilderForTesting(t, State_Dispatched).
+		BaseLedgerRevertRetryThreshold(3).
 		RevertCount(2).
 		Build()
-	mocks.DomainAPI.EXPECT().IsBaseLedgerRevertRetryable(mock.Anything, []byte(txn.revertReason)).Return(true, "", nil)
+	mocks.DomainAPI.EXPECT().IsBaseLedgerRevertRetryable(mock.Anything, []byte(revertReason)).Return(true, "", nil)
 
-	assert.True(t, guard_CanRetryRevert(ctx, txn))
+	err := action_RecordConfirmation(ctx, txn, &ConfirmedRevertedEvent{
+		BaseCoordinatorEvent: BaseCoordinatorEvent{TransactionID: txn.pt.ID},
+		RevertReason:         revertReason,
+	})
+	require.NoError(t, err)
+	assert.True(t, txn.lastCanRetryRevert)
 }
 
-func Test_guard_CanRetryRevert_RetryableAtThreshold(t *testing.T) {
+func Test_action_RecordConfirmation_RevertRetryableOverThreshold(t *testing.T) {
 	ctx := context.Background()
+	revertReason := pldtypes.MustParseHexBytes("0xbeef")
 	txn, mocks := NewTransactionBuilderForTesting(t, State_Dispatched).
 		BaseLedgerRevertRetryThreshold(3).
-		RevertReason(pldtypes.MustParseHexBytes("0xbeef")).
 		RevertCount(3).
 		Build()
-	mocks.DomainAPI.EXPECT().IsBaseLedgerRevertRetryable(mock.Anything, []byte(txn.revertReason)).Return(true, "", nil)
+	mocks.DomainAPI.EXPECT().IsBaseLedgerRevertRetryable(mock.Anything, []byte(revertReason)).Return(true, "", nil)
 
-	assert.True(t, guard_CanRetryRevert(ctx, txn))
+	err := action_RecordConfirmation(ctx, txn, &ConfirmedRevertedEvent{
+		BaseCoordinatorEvent: BaseCoordinatorEvent{TransactionID: txn.pt.ID},
+		RevertReason:         revertReason,
+	})
+	require.NoError(t, err)
+	assert.False(t, txn.lastCanRetryRevert)
 }
 
-func Test_guard_CanRetryRevert_RetryableOverThreshold(t *testing.T) {
+func Test_action_RecordConfirmation_RevertNotRetryable(t *testing.T) {
 	ctx := context.Background()
+	revertReason := pldtypes.MustParseHexBytes("0xdead")
 	txn, mocks := NewTransactionBuilderForTesting(t, State_Dispatched).
 		BaseLedgerRevertRetryThreshold(3).
-		RevertReason(pldtypes.MustParseHexBytes("0xbeef")).
-		RevertCount(4).
 		Build()
-	mocks.DomainAPI.EXPECT().IsBaseLedgerRevertRetryable(mock.Anything, []byte(txn.revertReason)).Return(true, "", nil)
+	mocks.DomainAPI.EXPECT().IsBaseLedgerRevertRetryable(mock.Anything, []byte(revertReason)).Return(false, "decoded error", nil)
 
-	assert.False(t, guard_CanRetryRevert(ctx, txn))
+	err := action_RecordConfirmation(ctx, txn, &ConfirmedRevertedEvent{
+		BaseCoordinatorEvent: BaseCoordinatorEvent{TransactionID: txn.pt.ID},
+		RevertReason:         revertReason,
+	})
+	require.NoError(t, err)
+	assert.False(t, txn.lastCanRetryRevert)
+	assert.Equal(t, "decoded error", txn.decodedRevertReason)
 }
 
-func Test_guard_CanRetryRevert_NotRetryable(t *testing.T) {
+func Test_action_RecordConfirmation_RevertDomainAPIError_TreatedAsNonRetryable(t *testing.T) {
 	ctx := context.Background()
+	revertReason := pldtypes.MustParseHexBytes("0xdead")
 	txn, mocks := NewTransactionBuilderForTesting(t, State_Dispatched).
 		BaseLedgerRevertRetryThreshold(3).
-		RevertReason(pldtypes.MustParseHexBytes("0xdead")).
-		RevertCount(1).
 		Build()
-	mocks.DomainAPI.EXPECT().IsBaseLedgerRevertRetryable(mock.Anything, []byte(txn.revertReason)).Return(false, "decoded error", nil)
+	mocks.DomainAPI.EXPECT().IsBaseLedgerRevertRetryable(mock.Anything, []byte(revertReason)).Return(false, "", assert.AnError)
 
-	assert.False(t, guard_CanRetryRevert(ctx, txn))
+	err := action_RecordConfirmation(ctx, txn, &ConfirmedRevertedEvent{
+		BaseCoordinatorEvent: BaseCoordinatorEvent{TransactionID: txn.pt.ID},
+		RevertReason:         revertReason,
+	})
+	require.NoError(t, err)
+	assert.False(t, txn.lastCanRetryRevert)
 }
 
-func Test_guard_CanRetryRevert_DomainAPIError_TreatedAsNonRetryable(t *testing.T) {
+func Test_action_RecordConfirmation_RevertThresholdZero(t *testing.T) {
 	ctx := context.Background()
-	txn, mocks := NewTransactionBuilderForTesting(t, State_Dispatched).
-		BaseLedgerRevertRetryThreshold(3).
-		RevertReason(pldtypes.MustParseHexBytes("0xdead")).
-		RevertCount(1).
-		Build()
-	mocks.DomainAPI.EXPECT().IsBaseLedgerRevertRetryable(mock.Anything, []byte(txn.revertReason)).Return(false, "", assert.AnError)
-
-	assert.False(t, guard_CanRetryRevert(ctx, txn))
-}
-
-func Test_guard_CanRetryRevert_ThresholdZero(t *testing.T) {
-	ctx := context.Background()
+	revertReason := pldtypes.MustParseHexBytes("0xbeef")
 	txn, mocks := NewTransactionBuilderForTesting(t, State_Dispatched).
 		BaseLedgerRevertRetryThreshold(0).
-		RevertReason(pldtypes.MustParseHexBytes("0xbeef")).
-		RevertCount(1).
 		Build()
-	mocks.DomainAPI.EXPECT().IsBaseLedgerRevertRetryable(mock.Anything, []byte(txn.revertReason)).Return(true, "", nil)
+	mocks.DomainAPI.EXPECT().IsBaseLedgerRevertRetryable(mock.Anything, []byte(revertReason)).Return(true, "", nil)
 
+	err := action_RecordConfirmation(ctx, txn, &ConfirmedRevertedEvent{
+		BaseCoordinatorEvent: BaseCoordinatorEvent{TransactionID: txn.pt.ID},
+		RevertReason:         revertReason,
+	})
+	require.NoError(t, err)
+	assert.False(t, txn.lastCanRetryRevert)
+}
+
+func Test_action_RecordConfirmation_SuccessResetsCanRetry(t *testing.T) {
+	ctx := context.Background()
+	txn, _ := NewTransactionBuilderForTesting(t, State_Dispatched).Build()
+	txn.lastCanRetryRevert = true
+
+	err := action_RecordConfirmation(ctx, txn, &ConfirmedSuccessEvent{
+		BaseCoordinatorEvent: BaseCoordinatorEvent{TransactionID: txn.pt.ID},
+	})
+	require.NoError(t, err)
+	assert.False(t, txn.lastCanRetryRevert)
+}
+
+func Test_guard_CanRetryRevert_ReadsStoredValue(t *testing.T) {
+	ctx := context.Background()
+	txn, _ := NewTransactionBuilderForTesting(t, State_Dispatched).Build()
+
+	txn.lastCanRetryRevert = true
+	assert.True(t, guard_CanRetryRevert(ctx, txn))
+
+	txn.lastCanRetryRevert = false
 	assert.False(t, guard_CanRetryRevert(ctx, txn))
 }
 

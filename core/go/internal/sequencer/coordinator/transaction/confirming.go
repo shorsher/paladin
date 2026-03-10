@@ -29,16 +29,7 @@ func guard_HasRevertReason(ctx context.Context, txn *coordinatorTransaction) boo
 }
 
 func guard_CanRetryRevert(ctx context.Context, txn *coordinatorTransaction) bool {
-	retryable, decodedReason, err := txn.domainAPI.IsBaseLedgerRevertRetryable(ctx, txn.revertReason)
-	if err != nil {
-		log.L(ctx).Errorf("error checking if revert is retryable for transaction %s, treating as non-retryable: %s", txn.pt.ID.String(), err)
-		return false
-	}
-	txn.decodedRevertReason = decodedReason
-	canRetry := retryable && txn.revertCount <= txn.baseLedgerRevertRetryThreshold
-	log.L(ctx).Infof("transaction %s base ledger revert (count=%d, retryable=%t, threshold=%d, canRetry=%t)",
-		txn.pt.ID.String(), txn.revertCount, retryable, txn.baseLedgerRevertRetryThreshold, canRetry)
-	return canRetry
+	return txn.lastCanRetryRevert
 }
 
 func action_RecordConfirmation(ctx context.Context, t *coordinatorTransaction, event common.Event) error {
@@ -49,10 +40,21 @@ func action_RecordConfirmation(ctx context.Context, t *coordinatorTransaction, e
 		// we might have had a previous revert that we've been reporting in snapshots so unset these values
 		t.revertReason = nil
 		t.decodedRevertReason = ""
+		t.lastCanRetryRevert = false
 	case *ConfirmedRevertedEvent:
 		hash = e.Hash
 		t.revertReason = e.RevertReason
 		t.revertCount++
+
+		retryable, decodedReason, err := t.domainAPI.IsBaseLedgerRevertRetryable(ctx, t.revertReason)
+		if err != nil {
+			log.L(ctx).Errorf("error checking if revert is retryable for transaction %s, treating as non-retryable: %s", t.pt.ID.String(), err)
+			retryable = false
+		}
+		t.decodedRevertReason = decodedReason
+		t.lastCanRetryRevert = retryable && t.revertCount <= t.baseLedgerRevertRetryThreshold
+		log.L(ctx).Infof("transaction %s base ledger revert (count=%d, retryable=%t, threshold=%d, canRetry=%t)",
+			t.pt.ID.String(), t.revertCount, retryable, t.baseLedgerRevertRetryThreshold, t.lastCanRetryRevert)
 	}
 
 	if t.latestSubmissionHash == nil {
@@ -68,13 +70,18 @@ func action_RecordConfirmation(ctx context.Context, t *coordinatorTransaction, e
 }
 
 func action_NotifyOriginatorOfConfirmation(ctx context.Context, t *coordinatorTransaction, event common.Event) error {
-	switch e := event.(type) {
-	case *ConfirmedSuccessEvent:
-		return t.transportWriter.SendTransactionConfirmed(ctx, t.pt.ID, t.originatorNode, &t.pt.Address, e.Nonce, nil)
-	case *ConfirmedRevertedEvent:
-		return t.transportWriter.SendTransactionConfirmed(ctx, t.pt.ID, t.originatorNode, &t.pt.Address, e.Nonce, e.RevertReason)
-	}
-	return nil
+	e := event.(*ConfirmedSuccessEvent)
+	return t.transportWriter.SendTransactionConfirmed(ctx, t.pt.ID, t.originatorNode, &t.pt.Address, e.Nonce, nil, false)
+}
+
+func action_NotifyOriginatorOfRetryableRevert(ctx context.Context, t *coordinatorTransaction, event common.Event) error {
+	e := event.(*ConfirmedRevertedEvent)
+	return t.transportWriter.SendTransactionConfirmed(ctx, t.pt.ID, t.originatorNode, &t.pt.Address, e.Nonce, e.RevertReason, true)
+}
+
+func action_NotifyOriginatorOfNonRetryableRevert(ctx context.Context, t *coordinatorTransaction, event common.Event) error {
+	e := event.(*ConfirmedRevertedEvent)
+	return t.transportWriter.SendTransactionConfirmed(ctx, t.pt.ID, t.originatorNode, &t.pt.Address, e.Nonce, e.RevertReason, false)
 }
 
 func action_FinalizeNonRetryableRevert(ctx context.Context, t *coordinatorTransaction, _ common.Event) error {

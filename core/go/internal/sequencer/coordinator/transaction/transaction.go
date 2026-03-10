@@ -61,6 +61,7 @@ type coordinatorTransaction struct {
 	revertReason               pldtypes.HexBytes
 	decodedRevertReason        string
 	revertCount                int
+	lastCanRetryRevert         bool
 
 	//TODO move the fields that are really just fine grained state info.  Move them into the stateMachine struct ( consider separate structs for each concrete state)
 	heartbeatIntervalsSinceStateChange int

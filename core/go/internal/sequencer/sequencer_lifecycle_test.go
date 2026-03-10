@@ -29,7 +29,6 @@ import (
 	coordinatorTx "github.com/LFDT-Paladin/paladin/core/internal/sequencer/coordinator/transaction"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/metrics"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/originator"
-	originatorTx "github.com/LFDT-Paladin/paladin/core/internal/sequencer/originator/transaction"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/syncpoints"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/transport"
 	"github.com/LFDT-Paladin/paladin/core/mocks/blockindexermocks"
@@ -498,10 +497,6 @@ func TestSequencerManager_handleTransactionConfirmedByChainedTransaction_LoadedQ
 		event, ok := e.(*coordinatorTx.ConfirmedSuccessEvent)
 		return ok && event.TransactionID == txID && event.Hash == txHash
 	})).Once()
-	mocks.originator.EXPECT().QueueEvent(ctx, mock.MatchedBy(func(e interface{}) bool {
-		event, ok := e.(*originatorTx.ConfirmedSuccessEvent)
-		return ok && event.TransactionID == txID
-	})).Once()
 
 	err := sm.handleTransactionConfirmedByChainedTransaction(ctx, completion)
 	require.NoError(t, err)
@@ -546,10 +541,6 @@ func TestSequencerManager_handleTransactionConfirmedDirect_LoadedQueuesCoordinat
 			*event.Nonce == nonce &&
 			event.RevertReason.Equals(revertReason)
 	})).Once()
-	mocks.originator.EXPECT().QueueEvent(ctx, mock.MatchedBy(func(e interface{}) bool {
-		event, ok := e.(*originatorTx.ConfirmedRevertedEvent)
-		return ok && event.TransactionID == txID && event.RevertReason.Equals(revertReason)
-	})).Once()
 
 	err := sm.handleTransactionConfirmedDirect(ctx, completion, from, &nonce)
 	require.NoError(t, err)
@@ -587,10 +578,6 @@ func TestSequencerManager_handleTransactionConfirmedByChainedTransaction_LoadedQ
 		event, ok := e.(*coordinatorTx.ConfirmedRevertedEvent)
 		return ok && event.TransactionID == txID && event.Hash == txHash && event.RevertReason.Equals(revertReason)
 	})).Once()
-	mocks.originator.EXPECT().QueueEvent(ctx, mock.MatchedBy(func(e interface{}) bool {
-		event, ok := e.(*originatorTx.ConfirmedRevertedEvent)
-		return ok && event.TransactionID == txID && event.RevertReason.Equals(revertReason)
-	})).Once()
 
 	err := sm.handleTransactionConfirmedByChainedTransaction(ctx, completion)
 	require.NoError(t, err)
@@ -625,10 +612,6 @@ func TestSequencerManager_HandleTransactionFailed_LoadedQueuesCoordinatorAndOrig
 			event.Hash == txHash &&
 			event.RevertReason.Equals(revertReason) &&
 			event.Nonce != nil && uint64(*event.Nonce) == nonce
-	})).Once()
-	mocks.originator.EXPECT().QueueEvent(ctx, mock.MatchedBy(func(e interface{}) bool {
-		event, ok := e.(*originatorTx.ConfirmedRevertedEvent)
-		return ok && event.TransactionID == txID && event.RevertReason.Equals(revertReason)
 	})).Once()
 	mocks.syncPoints.EXPECT().WriteOrDistributeReceipts(ctx, dbTX, mock.MatchedBy(func(receipts []*components.ReceiptInputWithOriginator) bool {
 		// On-chain reverts are intentionally not finalized at this point.

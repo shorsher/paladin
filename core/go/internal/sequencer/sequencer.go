@@ -26,7 +26,6 @@ import (
 	coordinatorTx "github.com/LFDT-Paladin/paladin/core/internal/sequencer/coordinator/transaction"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/metrics"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/originator"
-	originatorTx "github.com/LFDT-Paladin/paladin/core/internal/sequencer/originator/transaction"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/syncpoints"
 	"github.com/LFDT-Paladin/paladin/toolkit/pkg/prototk"
 	"github.com/google/uuid"
@@ -654,15 +653,16 @@ func (sMgr *sequencerManager) handleTransactionConfirmedDirect(ctx context.Conte
 	if from == nil {
 		return i18n.NewError(ctx, msgs.MsgSequencerInternalError, "nil From address for confirmed transaction %s", confirmedTxn.TransactionID)
 	}
-	// we leave it to the coordinator and originator to decide whether they are in a state where they handle the event
-	// and check whether it's a transaction that they are tracking
-	now := time.Now()
+
+	// we leave it to the coordinator to decide whether it is in a state where it handles the event
+	// and check whether it's a transaction that it is tracking
+
 	// the transaction was reverted
 	if len(confirmedTxn.RevertData) > 0 {
 		sequencer.GetCoordinator().QueueEvent(ctx, &coordinatorTx.ConfirmedRevertedEvent{
 			BaseCoordinatorEvent: coordinatorTx.BaseCoordinatorEvent{
 				BaseEvent: common.BaseEvent{
-					EventTime: now,
+					EventTime: time.Now(),
 				},
 				TransactionID: confirmedTxn.TransactionID,
 			},
@@ -670,35 +670,18 @@ func (sMgr *sequencerManager) handleTransactionConfirmedDirect(ctx context.Conte
 			RevertReason: confirmedTxn.RevertData,
 			Nonce:        nonce,
 		})
-		sequencer.GetOriginator().QueueEvent(ctx, &originatorTx.ConfirmedRevertedEvent{
-			BaseEvent: originatorTx.BaseEvent{
-				BaseEvent: common.BaseEvent{
-					EventTime: now,
-				},
-				TransactionID: confirmedTxn.TransactionID,
-			},
-			RevertReason: confirmedTxn.RevertData,
-		})
 		return nil
 	}
 	// the transaction was successful
 	sequencer.GetCoordinator().QueueEvent(ctx, &coordinatorTx.ConfirmedSuccessEvent{
 		BaseCoordinatorEvent: coordinatorTx.BaseCoordinatorEvent{
 			BaseEvent: common.BaseEvent{
-				EventTime: now,
+				EventTime: time.Now(),
 			},
 			TransactionID: confirmedTxn.TransactionID,
 		},
 		Hash:  confirmedTxn.OnChain.TransactionHash,
 		Nonce: nonce,
-	})
-	sequencer.GetOriginator().QueueEvent(ctx, &originatorTx.ConfirmedSuccessEvent{
-		BaseEvent: originatorTx.BaseEvent{
-			BaseEvent: common.BaseEvent{
-				EventTime: now,
-			},
-			TransactionID: confirmedTxn.TransactionID,
-		},
 	})
 	return nil
 }
@@ -732,28 +715,19 @@ func (sMgr *sequencerManager) handleTransactionConfirmedByChainedTransaction(ctx
 		return nil
 	}
 
-	// we leave it to the coordinator and originator to decide whether they are in a state where they handle the event
-	// and check whether it's a transaction that they are tracking
-	now := time.Now()
+	// we leave it to the coordinator to decide whether it is in a state where it handles the event
+	// and check whether it's a transaction that it is tracking
+
 	// the transaction was reverted
 	if len(confirmedTxn.RevertData) > 0 {
 		sequencer.GetCoordinator().QueueEvent(ctx, &coordinatorTx.ConfirmedRevertedEvent{
 			BaseCoordinatorEvent: coordinatorTx.BaseCoordinatorEvent{
 				BaseEvent: common.BaseEvent{
-					EventTime: now,
+					EventTime: time.Now(),
 				},
 				TransactionID: confirmedTxn.TransactionID,
 			},
 			Hash:         confirmedTxn.OnChain.TransactionHash,
-			RevertReason: confirmedTxn.RevertData,
-		})
-		sequencer.GetOriginator().QueueEvent(ctx, &originatorTx.ConfirmedRevertedEvent{
-			BaseEvent: originatorTx.BaseEvent{
-				BaseEvent: common.BaseEvent{
-					EventTime: now,
-				},
-				TransactionID: confirmedTxn.TransactionID,
-			},
 			RevertReason: confirmedTxn.RevertData,
 		})
 		return nil
@@ -762,19 +736,11 @@ func (sMgr *sequencerManager) handleTransactionConfirmedByChainedTransaction(ctx
 	sequencer.GetCoordinator().QueueEvent(ctx, &coordinatorTx.ConfirmedSuccessEvent{
 		BaseCoordinatorEvent: coordinatorTx.BaseCoordinatorEvent{
 			BaseEvent: common.BaseEvent{
-				EventTime: now,
+				EventTime: time.Now(),
 			},
 			TransactionID: confirmedTxn.TransactionID,
 		},
 		Hash: confirmedTxn.OnChain.TransactionHash,
-	})
-	sequencer.GetOriginator().QueueEvent(ctx, &originatorTx.ConfirmedSuccessEvent{
-		BaseEvent: originatorTx.BaseEvent{
-			BaseEvent: common.BaseEvent{
-				EventTime: now,
-			},
-			TransactionID: confirmedTxn.TransactionID,
-		},
 	})
 	return nil
 }
@@ -818,28 +784,19 @@ func (sMgr *sequencerManager) HandleTransactionFailed(ctx context.Context, dbTX 
 			return i18n.NewError(ctx, msgs.MsgSequencerInternalError, "nil From address for confirmed transaction %s", tx.TransactionID)
 		}
 
-		// we leave it to the coordinator and originator to decide whether they are in a state where they handle the event
-		// and check whether it's a transaction that they are tracking
-
+		// we leave it to the coordinator to decide whether it is in a state where it handles the event
+		// and check whether it's a transaction that it is tracking
 		nonceVal := pldtypes.HexUint64(tx.Nonce)
-		now := time.Now()
 		sequencer.GetCoordinator().QueueEvent(ctx, &coordinatorTx.ConfirmedRevertedEvent{
 			BaseCoordinatorEvent: coordinatorTx.BaseCoordinatorEvent{
 				BaseEvent: common.BaseEvent{
-					EventTime: now,
+					EventTime: time.Now(),
 				},
 				TransactionID: tx.TransactionID,
 			},
 			Hash:         tx.Hash,
 			RevertReason: tx.RevertReason,
 			Nonce:        &nonceVal,
-		})
-		sequencer.GetOriginator().QueueEvent(ctx, &originatorTx.ConfirmedRevertedEvent{
-			BaseEvent: originatorTx.BaseEvent{
-				BaseEvent:     common.BaseEvent{EventTime: now},
-				TransactionID: tx.TransactionID,
-			},
-			RevertReason: tx.RevertReason,
 		})
 	}
 
