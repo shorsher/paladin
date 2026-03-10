@@ -336,9 +336,17 @@ var stateDefinitionsMap = StateDefinitions{
 				}},
 			},
 			Event_ConfirmedReverted: {
-				Transitions: []Transition{{
-					To: State_Delegated, //trust coordinator to retry
-				}},
+				Actions: []ActionRule{{Action: action_RecordWillRetry}},
+				Transitions: []Transition{
+					{
+						If: guard_WillRetry,
+						To: State_Delegated,
+					},
+					{
+						If: statemachine.GuardNot(guard_WillRetry),
+						To: State_Confirmed,
+					},
+				},
 			},
 			Event_CoordinatorChanged: {
 				Actions: []ActionRule{{Action: action_CoordinatorChanged}},
@@ -397,9 +405,17 @@ var stateDefinitionsMap = StateDefinitions{
 				}},
 			},
 			Event_ConfirmedReverted: {
-				Transitions: []Transition{{
-					To: State_Delegated, //trust coordinator to retry
-				}},
+				Actions: []ActionRule{{Action: action_RecordWillRetry}},
+				Transitions: []Transition{
+					{
+						If: guard_WillRetry,
+						To: State_Delegated,
+					},
+					{
+						If: statemachine.GuardNot(guard_WillRetry),
+						To: State_Confirmed,
+					},
+				},
 			},
 			Event_CoordinatorChanged: {
 				Actions: []ActionRule{{Action: action_CoordinatorChanged}},
@@ -439,9 +455,17 @@ var stateDefinitionsMap = StateDefinitions{
 				}},
 			},
 			Event_ConfirmedReverted: {
-				Transitions: []Transition{{
-					To: State_Delegated, //trust coordinator to retry
-				}},
+				Actions: []ActionRule{{Action: action_RecordWillRetry}},
+				Transitions: []Transition{
+					{
+						If: guard_WillRetry,
+						To: State_Delegated,
+					},
+					{
+						If: statemachine.GuardNot(guard_WillRetry),
+						To: State_Confirmed,
+					},
+				},
 			},
 			Event_CoordinatorChanged: {
 				Actions: []ActionRule{{Action: action_CoordinatorChanged}},

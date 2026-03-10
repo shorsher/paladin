@@ -184,7 +184,7 @@ func TestCoordinatorTransaction_Assembling_ToReverted_OnAssembleRevertResponse(t
 
 	txn, mocks := txnBuilder.Build()
 
-	mocks.SyncPoints.On("QueueTransactionFinalize", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
+	mocks.SyncPoints.On("QueueTransactionFinalize", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
 
 	err := txn.HandleEvent(ctx, txnBuilder.BuildAssembleRevertEvent())
 	require.NoError(t, err)
@@ -537,26 +537,76 @@ func TestCoordinatorTransaction_Dispatched_NoTransition_OnSubmitted(t *testing.T
 	assert.Equal(t, transaction.State_Dispatched, txn.GetCurrentState(), "current state is %s", txn.GetCurrentState().String())
 }
 
-func TestCoordinatorTransaction_Dispatched_ToPooled_OnConfirmed_IfRevert(t *testing.T) {
+func TestCoordinatorTransaction_Dispatched_ToPooled_OnConfirmedRevert_IfRetryable(t *testing.T) {
 	ctx := context.Background()
-	txn, mocks := transaction.NewTransactionBuilderForTesting(t, transaction.State_Dispatched).Build()
+	revertReason := pldtypes.HexBytes("0x01020304")
+	txn, mocks := transaction.NewTransactionBuilderForTesting(t, transaction.State_Dispatched).
+		BaseLedgerRevertRetryThreshold(3).
+		Build()
+	mocks.DomainAPI.EXPECT().IsBaseLedgerRevertRetryable(mock.Anything, []byte(revertReason)).Return(true, "", nil)
 	mocks.EngineIntegration.EXPECT().ResetTransactions(mock.Anything, txn.GetID()).Return()
 
-	err := txn.HandleEvent(ctx, &transaction.ConfirmedEvent{
+	err := txn.HandleEvent(ctx, &transaction.ConfirmedRevertedEvent{
 		BaseCoordinatorEvent: transaction.BaseCoordinatorEvent{
 			TransactionID: txn.GetID(),
 		},
-		RevertReason: pldtypes.HexBytes("0x01020304"),
+		RevertReason: revertReason,
 	})
 	require.NoError(t, err)
 	assert.Equal(t, transaction.State_Pooled, txn.GetCurrentState(), "current state is %s", txn.GetCurrentState().String())
 }
 
-func TestCoordinatorTransaction_Dispatched_ToConfirmed_IfNoRevert(t *testing.T) {
+func TestCoordinatorTransaction_Dispatched_ToConfirmed_OnConfirmedRevert_IfNonRetryable(t *testing.T) {
+	ctx := context.Background()
+	revertReason := pldtypes.HexBytes("0x01020304")
+	txn, mocks := transaction.NewTransactionBuilderForTesting(t, transaction.State_Dispatched).
+		Dependencies(&pldapi.TransactionDependencies{PrereqOf: []uuid.UUID{}}).
+		Build()
+	mocks.DomainAPI.EXPECT().IsBaseLedgerRevertRetryable(mock.Anything, []byte(revertReason)).Return(false, "decoded error", nil)
+	mocks.EngineIntegration.EXPECT().ResetTransactions(mock.Anything, txn.GetID()).Return()
+	mocks.SyncPoints.EXPECT().QueueTransactionFinalize(
+		mock.Anything, mock.Anything, mock.Anything, mock.Anything,
+	).Return()
+
+	err := txn.HandleEvent(ctx, &transaction.ConfirmedRevertedEvent{
+		BaseCoordinatorEvent: transaction.BaseCoordinatorEvent{
+			TransactionID: txn.GetID(),
+		},
+		RevertReason: revertReason,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, transaction.State_Confirmed, txn.GetCurrentState(), "current state is %s", txn.GetCurrentState().String())
+}
+
+func TestCoordinatorTransaction_Dispatched_ToConfirmed_OnConfirmedRevert_IfThresholdExceeded(t *testing.T) {
+	ctx := context.Background()
+	revertReason := pldtypes.HexBytes("0x01020304")
+	txn, mocks := transaction.NewTransactionBuilderForTesting(t, transaction.State_Dispatched).
+		BaseLedgerRevertRetryThreshold(1).
+		RevertCount(1).
+		Dependencies(&pldapi.TransactionDependencies{PrereqOf: []uuid.UUID{}}).
+		Build()
+	mocks.DomainAPI.EXPECT().IsBaseLedgerRevertRetryable(mock.Anything, []byte(revertReason)).Return(true, "", nil)
+	mocks.EngineIntegration.EXPECT().ResetTransactions(mock.Anything, txn.GetID()).Return()
+	mocks.SyncPoints.EXPECT().QueueTransactionFinalize(
+		mock.Anything, mock.Anything, mock.Anything, mock.Anything,
+	).Return()
+
+	err := txn.HandleEvent(ctx, &transaction.ConfirmedRevertedEvent{
+		BaseCoordinatorEvent: transaction.BaseCoordinatorEvent{
+			TransactionID: txn.GetID(),
+		},
+		RevertReason: revertReason,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, transaction.State_Confirmed, txn.GetCurrentState(), "current state is %s", txn.GetCurrentState().String())
+}
+
+func TestCoordinatorTransaction_Dispatched_ToConfirmed_OnConfirmedSuccess(t *testing.T) {
 	ctx := context.Background()
 	txn, _ := transaction.NewTransactionBuilderForTesting(t, transaction.State_Dispatched).Build()
 
-	err := txn.HandleEvent(ctx, &transaction.ConfirmedEvent{
+	err := txn.HandleEvent(ctx, &transaction.ConfirmedSuccessEvent{
 		BaseCoordinatorEvent: transaction.BaseCoordinatorEvent{
 			TransactionID: txn.GetID(),
 		},
@@ -594,9 +644,7 @@ func TestCoordinatorTransaction_Assembling_ToFinal_OnTransactionUnknownByOrigina
 	// it reverted during assembly but the response was lost and the transaction has since
 	// been cleaned up on the originator), the coordinator transitions to State_Final
 	ctx := context.Background()
-	txn, mocks := transaction.NewTransactionBuilderForTesting(t, transaction.State_Assembling).Build()
-
-	mocks.SyncPoints.On("QueueTransactionFinalize", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
+	txn, _ := transaction.NewTransactionBuilderForTesting(t, transaction.State_Assembling).Build()
 
 	err := txn.HandleEvent(ctx, &transaction.TransactionUnknownByOriginatorEvent{
 		BaseCoordinatorEvent: transaction.BaseCoordinatorEvent{

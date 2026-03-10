@@ -127,6 +127,10 @@ var allSchemas = []*abi.Parameter{
 
 var schemasJSON = mustParseSchemas(allSchemas)
 
+var retryableNotoErrors = map[string]bool{
+	"NotoInvalidInput": true,
+}
+
 type Noto struct {
 	Callbacks plugintk.DomainCallbacks
 
@@ -1326,6 +1330,23 @@ func (n *Noto) encodeNotoDelegateOperation(ctx context.Context, notoDelegateOp *
 		encoded, err = types.NotoDelegateOperationABI.EncodeABIDataJSONCtx(ctx, lockOptionsJSON)
 	}
 	return encoded, err
+}
+
+func (n *Noto) IsBaseLedgerRevertRetryable(ctx context.Context, req *prototk.IsBaseLedgerRevertRetryableRequest) (*prototk.IsBaseLedgerRevertRetryableResponse, error) {
+	if len(req.RevertData) < 4 {
+		return &prototk.IsBaseLedgerRevertRetryableResponse{Retryable: true}, nil
+	}
+	entry, cv, ok := errorsBuild.ABI.ParseErrorCtx(ctx, req.RevertData)
+	if ok {
+		return &prototk.IsBaseLedgerRevertRetryableResponse{
+			Retryable:     retryableNotoErrors[entry.Name],
+			DecodedReason: abi.FormatErrorStringCtx(ctx, entry, cv),
+		}, nil
+	}
+	return &prototk.IsBaseLedgerRevertRetryableResponse{
+		Retryable:     false,
+		DecodedReason: pldtypes.HexBytes(req.RevertData).String(),
+	}, nil
 }
 
 func (n *Noto) computeLockIDForLockTX(ctx context.Context, tx *types.ParsedTransaction, notaryID *identityPair) (pldtypes.Bytes32, error) {

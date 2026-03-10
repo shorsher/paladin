@@ -1135,7 +1135,7 @@ func TestTransactionRevertOnBaseLedger(t *testing.T) {
 			"from": "",
 			"to": "` + bob.GetIdentityLocator() + `",
 			"amount": "1003"
-		}`)). // Special value 1003 in the simple domain causes revert once on the base ledger, then subsequently be successful
+		}`)). // Special value 1003 in the simple domain causes retryable revert once on the base ledger, then subsequently be successful
 		Send().Wait(transactionLatencyThresholdCustom(t, &customDuration))
 	require.NoError(t, aliceTx.Error())
 
