@@ -114,6 +114,12 @@ func (t *coordinatorTransaction) initializeForNewAssembly(ctx context.Context) e
 	return nil
 }
 
+func action_ResetTransactionLocks(ctx context.Context, txn *coordinatorTransaction, _ common.Event) error {
+	log.L(ctx).Debugf("resetting transaction locks for %s", txn.pt.ID.String())
+	txn.engineIntegration.ResetTransactions(ctx, txn.pt.ID)
+	return nil
+}
+
 func guard_HasUnassembledDependencies(ctx context.Context, txn *coordinatorTransaction) bool {
 	return txn.hasDependenciesNotAssembled(ctx)
 }
@@ -126,8 +132,8 @@ func guard_HasChainedTxInProgress(ctx context.Context, txn *coordinatorTransacti
 	return txn.chainedTxAlreadyDispatched
 }
 
-func action_NotifyDependentsOfRepool(ctx context.Context, txn *coordinatorTransaction, _ common.Event) error {
-	// We emit a DependencyRepooledEvent whenever we transition to pooled. For the initial transition
+func action_NotifyDependentsOfReset(ctx context.Context, txn *coordinatorTransaction, _ common.Event) error {
+	// We emit a DependencyResetEvent whenever we transition to pooled. For the initial transition
 	// from State_Initial to State_Pooled and the transition from State_Assembling to State_Pooled
 	// we do not expect any dependents yet, so this is a no-op.
 	return txn.notifyDependentsOfRepool(ctx)
@@ -137,7 +143,7 @@ func (t *coordinatorTransaction) notifyDependentsOfRepool(ctx context.Context) e
 	for _, dependentID := range t.dependencies.PrereqOf {
 		dependentTxn := t.grapher.TransactionByID(ctx, dependentID)
 		if dependentTxn != nil {
-			err := dependentTxn.HandleEvent(ctx, &DependencyRepooledEvent{
+			err := dependentTxn.HandleEvent(ctx, &DependencyResetEvent{
 				BaseCoordinatorEvent: BaseCoordinatorEvent{
 					TransactionID: dependentID,
 				},

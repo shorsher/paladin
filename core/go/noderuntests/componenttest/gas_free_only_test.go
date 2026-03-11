@@ -15,7 +15,7 @@ import (
 	"github.com/LFDT-Paladin/paladin/core/noderuntests/pkg/domains"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldclient"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldtypes"
-	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/query"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -140,26 +140,17 @@ func TestChainedTransactionSuccess(t *testing.T) {
 	require.NotNil(t, tx.Receipt())
 	assert.True(t, tx.Receipt().Success)
 
-	chainedTxIdempotencyKey := fmt.Sprintf("%s_transfer", tx.ID().String())
-	receiptLimit := 1
-	chainedTxns, err := client.PTX().QueryTransactionsFull(ctx, &query.QueryJSON{
-		Limit: &receiptLimit,
-		Statements: query.Statements{
-			Ops: query.Ops{
-				Equal: []*query.OpSingleVal{
-					{
-						Op: query.Op{
-							Field: "idempotencyKey",
-						},
-						Value: pldtypes.JSONString(chainedTxIdempotencyKey),
-					},
-				},
-			},
-		},
-	})
+	txFull, err := client.PTX().GetTransactionFull(ctx, tx.ID())
 	require.NoError(t, err)
-	require.Len(t, chainedTxns, 1)
-	assert.True(t, chainedTxns[0].Receipt.Success)
+	require.Len(t, txFull.ChainedPrivateTransactions, 1)
+
+	chainedTxID, err := uuid.Parse(txFull.ChainedPrivateTransactions[0].ChainedTransactionID)
+	require.NoError(t, err)
+
+	chainedTx, err := client.PTX().GetTransactionFull(ctx, chainedTxID)
+	require.NoError(t, err)
+	require.NotNil(t, chainedTx.Receipt)
+	assert.True(t, chainedTx.Receipt.Success)
 }
 
 func TestChainedTransactionRetryableRevertThenSucceeds(t *testing.T) {
@@ -199,28 +190,19 @@ func TestChainedTransactionRetryableRevertThenSucceeds(t *testing.T) {
 	require.NotNil(t, tx.Receipt())
 	assert.True(t, tx.Receipt().Success)
 
-	chainedTxIdempotencyKey := fmt.Sprintf("%s_transfer", tx.ID().String())
-	receiptLimit := 1
-	chainedTxns, err := client.PTX().QueryTransactionsFull(ctx, &query.QueryJSON{
-		Limit: &receiptLimit,
-		Statements: query.Statements{
-			Ops: query.Ops{
-				Equal: []*query.OpSingleVal{
-					{
-						Op: query.Op{
-							Field: "idempotencyKey",
-						},
-						Value: pldtypes.JSONString(chainedTxIdempotencyKey),
-					},
-				},
-			},
-		},
-	})
+	txFull, err := client.PTX().GetTransactionFull(ctx, tx.ID())
 	require.NoError(t, err)
-	require.Len(t, chainedTxns, 1)
-	assert.True(t, chainedTxns[0].Receipt.Success)
+	require.Len(t, txFull.ChainedPrivateTransactions, 1)
+
+	chainedTxID, err := uuid.Parse(txFull.ChainedPrivateTransactions[0].ChainedTransactionID)
+	require.NoError(t, err)
+
+	chainedTx, err := client.PTX().GetTransactionFull(ctx, chainedTxID)
+	require.NoError(t, err)
+	require.NotNil(t, chainedTx.Receipt)
+	assert.True(t, chainedTx.Receipt.Success)
 	// Should have more than 1 public transaction due to the retry
-	assert.Greater(t, len(chainedTxns[0].Public), 1)
+	assert.Greater(t, len(chainedTx.Public), 1)
 }
 
 func TestChainedTransactionAssemblyFailure(t *testing.T) {
@@ -262,27 +244,17 @@ func TestChainedTransactionAssemblyFailure(t *testing.T) {
 	require.NotNil(t, tx.Receipt())
 	assert.False(t, tx.Receipt().Success)
 
-	// The chained TX should also have a failure receipt, queryable by idempotency key
-	chainedTxIdempotencyKey := fmt.Sprintf("%s_transfer", tx.ID().String())
-	receiptLimit := 1
-	chainedTxns, err := client.PTX().QueryTransactionsFull(ctx, &query.QueryJSON{
-		Limit: &receiptLimit,
-		Statements: query.Statements{
-			Ops: query.Ops{
-				Equal: []*query.OpSingleVal{
-					{
-						Op: query.Op{
-							Field: "idempotencyKey",
-						},
-						Value: pldtypes.JSONString(chainedTxIdempotencyKey),
-					},
-				},
-			},
-		},
-	})
+	txFull, err := client.PTX().GetTransactionFull(ctx, tx.ID())
 	require.NoError(t, err)
-	require.Len(t, chainedTxns, 1)
-	assert.False(t, chainedTxns[0].Receipt.Success)
+	require.Len(t, txFull.ChainedPrivateTransactions, 1)
+
+	chainedTxID, err := uuid.Parse(txFull.ChainedPrivateTransactions[0].ChainedTransactionID)
+	require.NoError(t, err)
+
+	chainedTx, err := client.PTX().GetTransactionFull(ctx, chainedTxID)
+	require.NoError(t, err)
+	require.NotNil(t, chainedTx.Receipt)
+	assert.False(t, chainedTx.Receipt.Success)
 }
 
 func TestChainedTransactionBaseLedgerRevertFailure(t *testing.T) {
@@ -325,31 +297,21 @@ func TestChainedTransactionBaseLedgerRevertFailure(t *testing.T) {
 	assert.False(t, tx.Receipt().Success)
 	assert.Contains(t, tx.Receipt().FailureMessage, "SimpleTokenNonRetryableError")
 
-	// The chained TX should also have a failure receipt
-	chainedTxIdempotencyKey := fmt.Sprintf("%s_transfer", tx.ID().String())
-	receiptLimit := 1
-	chainedTxns, err := client.PTX().QueryTransactionsFull(ctx, &query.QueryJSON{
-		Limit: &receiptLimit,
-		Statements: query.Statements{
-			Ops: query.Ops{
-				Equal: []*query.OpSingleVal{
-					{
-						Op: query.Op{
-							Field: "idempotencyKey",
-						},
-						Value: pldtypes.JSONString(chainedTxIdempotencyKey),
-					},
-				},
-			},
-		},
-	})
+	txFull, err := client.PTX().GetTransactionFull(ctx, tx.ID())
 	require.NoError(t, err)
-	require.Len(t, chainedTxns, 1)
-	assert.False(t, chainedTxns[0].Receipt.Success)
-	assert.Contains(t, chainedTxns[0].Receipt.FailureMessage, "SimpleTokenNonRetryableError")
-	assert.NotNil(t, chainedTxns[0].Receipt.TransactionReceiptDataOnchain)
-	assert.NotNil(t, chainedTxns[0].Receipt.TransactionHash)
-	assert.Greater(t, chainedTxns[0].Receipt.BlockNumber, int64(0))
+	require.Len(t, txFull.ChainedPrivateTransactions, 1)
+
+	chainedTxID, err := uuid.Parse(txFull.ChainedPrivateTransactions[0].ChainedTransactionID)
+	require.NoError(t, err)
+
+	chainedTx, err := client.PTX().GetTransactionFull(ctx, chainedTxID)
+	require.NoError(t, err)
+	require.NotNil(t, chainedTx.Receipt)
+	assert.False(t, chainedTx.Receipt.Success)
+	assert.Contains(t, chainedTx.Receipt.FailureMessage, "SimpleTokenNonRetryableError")
+	assert.NotNil(t, chainedTx.Receipt.TransactionReceiptDataOnchain)
+	assert.NotNil(t, chainedTx.Receipt.TransactionHash)
+	assert.Greater(t, chainedTx.Receipt.BlockNumber, int64(0))
 }
 
 func TestChainedTransactionRetryableRevert_OnlyChainedFails_ThenSucceeds(t *testing.T) {

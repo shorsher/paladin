@@ -326,21 +326,14 @@ func Test_action_NotifyDependantsOfRevertedConfirmation_AlwaysResetsLocks(t *tes
 	assert.True(t, txn.confirmedLocksReleased)
 }
 
-func Test_ConfirmedSuccess_NonTerminalStates_TransitionsToConfirmed(t *testing.T) {
+func Test_ConfirmedSuccess_DispatchedStates_TransitionsToConfirmed(t *testing.T) {
 	ctx := context.Background()
-	nonTerminalStates := []State{
-		State_Initial,
-		State_PreAssembly_Blocked,
-		State_Pooled,
-		State_Assembling,
-		State_Endorsement_Gathering,
-		State_Blocked,
-		State_Confirming_Dispatchable,
-		State_Ready_For_Dispatch,
+	dispatchedStates := []State{
 		State_Dispatched,
+		State_Awaiting_Dispatch_Confirmed_Event,
 	}
 
-	for _, state := range nonTerminalStates {
+	for _, state := range dispatchedStates {
 		t.Run(state.String(), func(t *testing.T) {
 			txn, _ := NewTransactionBuilderForTesting(t, state).Build()
 			nonce := pldtypes.HexUint64(77)
@@ -349,82 +342,6 @@ func Test_ConfirmedSuccess_NonTerminalStates_TransitionsToConfirmed(t *testing.T
 					TransactionID: txn.pt.ID,
 				},
 				Nonce: &nonce,
-			}
-
-			err := txn.HandleEvent(ctx, event)
-			require.NoError(t, err)
-			assert.Equal(t, State_Confirmed, txn.stateMachine.GetCurrentState())
-		})
-	}
-}
-
-func Test_ConfirmedRevert_NonTerminalStates_RetryableRevertStaysInPlace(t *testing.T) {
-	ctx := context.Background()
-	nonTerminalStates := []State{
-		State_Initial,
-		State_PreAssembly_Blocked,
-		State_Pooled,
-		State_Assembling,
-		State_Endorsement_Gathering,
-		State_Blocked,
-		State_Confirming_Dispatchable,
-		State_Ready_For_Dispatch,
-	}
-
-	for _, state := range nonTerminalStates {
-		t.Run(state.String(), func(t *testing.T) {
-			revertReason := pldtypes.MustParseHexBytes("0xbeef")
-			txn, mocks := NewTransactionBuilderForTesting(t, state).
-				BaseLedgerRevertRetryThreshold(3).
-				Build()
-			mocks.DomainAPI.EXPECT().IsBaseLedgerRevertRetryable(mock.Anything, []byte(revertReason)).Return(true, "", nil)
-			nonce := pldtypes.HexUint64(88)
-			event := &ConfirmedRevertedEvent{
-				BaseCoordinatorEvent: BaseCoordinatorEvent{
-					TransactionID: txn.pt.ID,
-				},
-				Nonce:        &nonce,
-				RevertReason: revertReason,
-			}
-
-			err := txn.HandleEvent(ctx, event)
-			require.NoError(t, err)
-			assert.Equal(t, state, txn.stateMachine.GetCurrentState())
-		})
-	}
-}
-
-func Test_ConfirmedRevert_NonTerminalStates_NonRetryable_TransitionsToConfirmed(t *testing.T) {
-	ctx := context.Background()
-	nonTerminalStates := []State{
-		State_Initial,
-		State_PreAssembly_Blocked,
-		State_Pooled,
-		State_Assembling,
-		State_Endorsement_Gathering,
-		State_Blocked,
-		State_Confirming_Dispatchable,
-		State_Ready_For_Dispatch,
-	}
-
-	for _, state := range nonTerminalStates {
-		t.Run(state.String(), func(t *testing.T) {
-			revertReason := pldtypes.MustParseHexBytes("0xbeef")
-			txn, mocks := NewTransactionBuilderForTesting(t, state).
-				Dependencies(&pldapi.TransactionDependencies{PrereqOf: []uuid.UUID{}}).
-				Build()
-			mocks.DomainAPI.EXPECT().IsBaseLedgerRevertRetryable(mock.Anything, []byte(revertReason)).Return(false, "decoded error", nil)
-			mocks.EngineIntegration.EXPECT().ResetTransactions(mock.Anything, txn.pt.ID).Return()
-			mocks.SyncPoints.EXPECT().QueueTransactionFinalize(
-				mock.Anything, mock.Anything, mock.Anything, mock.Anything,
-			).Return()
-			nonce := pldtypes.HexUint64(88)
-			event := &ConfirmedRevertedEvent{
-				BaseCoordinatorEvent: BaseCoordinatorEvent{
-					TransactionID: txn.pt.ID,
-				},
-				Nonce:        &nonce,
-				RevertReason: revertReason,
 			}
 
 			err := txn.HandleEvent(ctx, event)
@@ -713,4 +630,153 @@ func Test_notifyDependentsOfRevertedConfirmation_DependentNotInMemory(t *testing
 	err := txn.notifyDependentsOfRevertedConfirmation(ctx)
 	require.Error(t, err)
 	assert.True(t, strings.Contains(err.Error(), "PD012645"))
+}
+
+func Test_DependencyReset_Dispatched_TransitionsToAwaitingDispatchConfirmedEvent(t *testing.T) {
+	ctx := context.Background()
+	txn, mocks := NewTransactionBuilderForTesting(t, State_Dispatched).Build()
+	mocks.EngineIntegration.EXPECT().ResetTransactions(mock.Anything, txn.pt.ID).Return()
+
+	err := txn.HandleEvent(ctx, &DependencyResetEvent{
+		BaseCoordinatorEvent: BaseCoordinatorEvent{TransactionID: txn.pt.ID},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, State_Awaiting_Dispatch_Confirmed_Event, txn.stateMachine.GetCurrentState())
+}
+
+func Test_DependencyConfirmedReverted_Dispatched_TransitionsToAwaitingDispatchConfirmedEvent(t *testing.T) {
+	ctx := context.Background()
+	txn, mocks := NewTransactionBuilderForTesting(t, State_Dispatched).Build()
+	mocks.EngineIntegration.EXPECT().ResetTransactions(mock.Anything, txn.pt.ID).Return()
+
+	err := txn.HandleEvent(ctx, &DependencyConfirmedRevertedEvent{
+		BaseCoordinatorEvent: BaseCoordinatorEvent{TransactionID: txn.pt.ID},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, State_Awaiting_Dispatch_Confirmed_Event, txn.stateMachine.GetCurrentState())
+}
+
+func Test_DependencyReset_PreDispatchStates_TransitionsToPooled(t *testing.T) {
+	ctx := context.Background()
+	preDispatchStates := []State{
+		State_Endorsement_Gathering,
+		State_Blocked,
+		State_Confirming_Dispatchable,
+		State_Ready_For_Dispatch,
+	}
+
+	for _, state := range preDispatchStates {
+		t.Run(state.String(), func(t *testing.T) {
+			txn, mocks := NewTransactionBuilderForTesting(t, state).Build()
+			mocks.EngineIntegration.EXPECT().ResetTransactions(mock.Anything, txn.pt.ID).Return()
+
+			err := txn.HandleEvent(ctx, &DependencyResetEvent{
+				BaseCoordinatorEvent: BaseCoordinatorEvent{TransactionID: txn.pt.ID},
+			})
+			require.NoError(t, err)
+			assert.Equal(t, State_Pooled, txn.stateMachine.GetCurrentState())
+		})
+	}
+}
+
+func Test_DependencyConfirmedReverted_PreDispatchStates_TransitionsToPooled(t *testing.T) {
+	ctx := context.Background()
+	preDispatchStates := []State{
+		State_Endorsement_Gathering,
+		State_Blocked,
+		State_Confirming_Dispatchable,
+		State_Ready_For_Dispatch,
+	}
+
+	for _, state := range preDispatchStates {
+		t.Run(state.String(), func(t *testing.T) {
+			txn, mocks := NewTransactionBuilderForTesting(t, state).Build()
+			mocks.EngineIntegration.EXPECT().ResetTransactions(mock.Anything, txn.pt.ID).Return()
+
+			err := txn.HandleEvent(ctx, &DependencyConfirmedRevertedEvent{
+				BaseCoordinatorEvent: BaseCoordinatorEvent{TransactionID: txn.pt.ID},
+			})
+			require.NoError(t, err)
+			assert.Equal(t, State_Pooled, txn.stateMachine.GetCurrentState())
+		})
+	}
+}
+
+func Test_AwaitingDispatchConfirmedEvent_ConfirmedSuccess_TransitionsToConfirmed(t *testing.T) {
+	ctx := context.Background()
+	txn, _ := NewTransactionBuilderForTesting(t, State_Awaiting_Dispatch_Confirmed_Event).
+		Dependencies(&pldapi.TransactionDependencies{PrereqOf: []uuid.UUID{}}).
+		Build()
+
+	nonce := pldtypes.HexUint64(42)
+	err := txn.HandleEvent(ctx, &ConfirmedSuccessEvent{
+		BaseCoordinatorEvent: BaseCoordinatorEvent{TransactionID: txn.pt.ID},
+		Nonce:                &nonce,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, State_Confirmed, txn.stateMachine.GetCurrentState())
+}
+
+func Test_AwaitingDispatchConfirmedEvent_RetryableRevert_TransitionsToReadyForDispatch(t *testing.T) {
+	ctx := context.Background()
+	revertReason := pldtypes.MustParseHexBytes("0xbeef")
+	txn, mocks := NewTransactionBuilderForTesting(t, State_Awaiting_Dispatch_Confirmed_Event).
+		BaseLedgerRevertRetryThreshold(3).
+		Build()
+	mocks.DomainAPI.EXPECT().IsBaseLedgerRevertRetryable(mock.Anything, []byte(revertReason)).Return(true, "", nil)
+
+	nonce := pldtypes.HexUint64(88)
+	err := txn.HandleEvent(ctx, &ConfirmedRevertedEvent{
+		BaseCoordinatorEvent: BaseCoordinatorEvent{TransactionID: txn.pt.ID},
+		Nonce:                &nonce,
+		RevertReason:         revertReason,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, State_Ready_For_Dispatch, txn.stateMachine.GetCurrentState())
+}
+
+func Test_AwaitingDispatchConfirmedEvent_NonRetryableRevert_TransitionsToConfirmed(t *testing.T) {
+	ctx := context.Background()
+	revertReason := pldtypes.MustParseHexBytes("0xdead")
+	txn, mocks := NewTransactionBuilderForTesting(t, State_Awaiting_Dispatch_Confirmed_Event).
+		Dependencies(&pldapi.TransactionDependencies{PrereqOf: []uuid.UUID{}}).
+		Build()
+	mocks.DomainAPI.EXPECT().IsBaseLedgerRevertRetryable(mock.Anything, []byte(revertReason)).Return(false, "decoded error", nil)
+	mocks.EngineIntegration.EXPECT().ResetTransactions(mock.Anything, txn.pt.ID).Return()
+	mocks.SyncPoints.EXPECT().QueueTransactionFinalize(
+		mock.Anything, mock.Anything, mock.Anything, mock.Anything,
+	).Return()
+
+	nonce := pldtypes.HexUint64(88)
+	err := txn.HandleEvent(ctx, &ConfirmedRevertedEvent{
+		BaseCoordinatorEvent: BaseCoordinatorEvent{TransactionID: txn.pt.ID},
+		Nonce:                &nonce,
+		RevertReason:         revertReason,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, State_Confirmed, txn.stateMachine.GetCurrentState())
+}
+
+func Test_AwaitingDispatchConfirmedEvent_RetryableRevertExceedsThreshold_TransitionsToConfirmed(t *testing.T) {
+	ctx := context.Background()
+	revertReason := pldtypes.MustParseHexBytes("0xbeef")
+	txn, mocks := NewTransactionBuilderForTesting(t, State_Awaiting_Dispatch_Confirmed_Event).
+		BaseLedgerRevertRetryThreshold(1).
+		RevertCount(1).
+		Dependencies(&pldapi.TransactionDependencies{PrereqOf: []uuid.UUID{}}).
+		Build()
+	mocks.DomainAPI.EXPECT().IsBaseLedgerRevertRetryable(mock.Anything, []byte(revertReason)).Return(true, "", nil)
+	mocks.EngineIntegration.EXPECT().ResetTransactions(mock.Anything, txn.pt.ID).Return()
+	mocks.SyncPoints.EXPECT().QueueTransactionFinalize(
+		mock.Anything, mock.Anything, mock.Anything, mock.Anything,
+	).Return()
+
+	nonce := pldtypes.HexUint64(88)
+	err := txn.HandleEvent(ctx, &ConfirmedRevertedEvent{
+		BaseCoordinatorEvent: BaseCoordinatorEvent{TransactionID: txn.pt.ID},
+		Nonce:                &nonce,
+		RevertReason:         revertReason,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, State_Confirmed, txn.stateMachine.GetCurrentState())
 }

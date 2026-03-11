@@ -26,6 +26,16 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func Test_action_ResetTransactionLocks(t *testing.T) {
+	ctx := context.Background()
+	txn, mocks := NewTransactionBuilderForTesting(t, State_Dispatched).Build()
+
+	mocks.EngineIntegration.EXPECT().ResetTransactions(mock.Anything, txn.pt.ID).Return()
+
+	err := action_ResetTransactionLocks(ctx, txn, nil)
+	require.NoError(t, err)
+}
+
 func Test_action_InitializeForNewAssembly_Success(t *testing.T) {
 	ctx := context.Background()
 	grapher := NewGrapher(ctx)
@@ -324,7 +334,7 @@ func Test_guard_HasChainedTxInProgress(t *testing.T) {
 	assert.True(t, guard_HasChainedTxInProgress(ctx, txn2))
 }
 
-func Test_action_NotifyDependentsOfRepool_WithDependents(t *testing.T) {
+func Test_action_NotifyDependentsOfReset_WithDependents(t *testing.T) {
 	ctx := context.Background()
 	grapher := NewGrapher(ctx)
 
@@ -348,20 +358,20 @@ func Test_action_NotifyDependentsOfRepool_WithDependents(t *testing.T) {
 		Build()
 
 	// Call action_InitializeForNewAssembly - should re-pool dependents
-	err := action_NotifyDependentsOfRepool(ctx, mainTxn, nil)
+	err := action_NotifyDependentsOfReset(ctx, mainTxn, nil)
 	require.NoError(t, err)
 
 	// Verify the dependent transaction received the event
 	assert.Equal(t, State_Pooled, dependentTxn.stateMachine.GetCurrentState())
 }
 
-func Test_action_NotifyDependentsOfRepool_InitialTransitionHasNoDependents(t *testing.T) {
+func Test_action_NotifyDependentsOfReset_InitialTransitionHasNoDependents(t *testing.T) {
 	ctx := context.Background()
 	txn, _ := NewTransactionBuilderForTesting(t, State_Pooled).
 		PreAssembly(&components.TransactionPreAssembly{}).
 		Build()
 
-	err := action_NotifyDependentsOfRepool(ctx, txn, nil)
+	err := action_NotifyDependentsOfReset(ctx, txn, nil)
 	require.NoError(t, err)
 }
 

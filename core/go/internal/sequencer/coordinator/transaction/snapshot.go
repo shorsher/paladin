@@ -44,7 +44,8 @@ func (t *coordinatorTransaction) GetSnapshot(ctx context.Context) (*common.Snaps
 	// State_Ready_For_Dispatch is already past the point of no return. It is as good as dispatched, just waiting for
 	// the dispatcher thread to collect it so we include it in the dispatched transactions of the snapshot
 	case State_Ready_For_Dispatch,
-		State_Dispatched:
+		State_Dispatched,
+		State_Awaiting_Dispatch_Confirmed_Event:
 		dispatchedTransaction := &common.SnapshotDispatchedTransaction{
 			SnapshotPooledTransaction: common.SnapshotPooledTransaction{
 				ID:         t.pt.ID,

@@ -62,6 +62,7 @@ func TestGetSnapshot_DispatchedStates_WithSigner(t *testing.T) {
 	dispatchedStates := []State{
 		State_Ready_For_Dispatch,
 		State_Dispatched,
+		State_Awaiting_Dispatch_Confirmed_Event,
 	}
 	for _, state := range dispatchedStates {
 		t.Run(state.String(), func(t *testing.T) {

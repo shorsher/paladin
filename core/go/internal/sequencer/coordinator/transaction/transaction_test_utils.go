@@ -276,7 +276,7 @@ func NewTransactionBuilderForTesting(t *testing.T, state State) *TransactionBuil
 	}
 
 	switch state {
-	case State_Dispatched:
+	case State_Dispatched, State_Awaiting_Dispatch_Confirmed_Event:
 		nonce := rand.Uint64()
 		builder.nonce = &nonce
 		builder.signerAddress = pldtypes.RandAddress()
@@ -285,13 +285,7 @@ func NewTransactionBuilderForTesting(t *testing.T, state State) *TransactionBuil
 		builder.privateTransactionBuilder.EndorsementComplete()
 	case State_Endorsement_Gathering:
 		//fine grained detail in this state needed to emulate what has already happened wrt endorsement requests and responses so far
-	case State_Blocked:
-		fallthrough
-	case State_Confirming_Dispatchable:
-		fallthrough
-	case State_Ready_For_Dispatch:
-		fallthrough
-	case State_Confirmed:
+	case State_Blocked, State_Confirming_Dispatchable, State_Ready_For_Dispatch, State_Confirmed:
 		//we are emulating a transaction that has been passed State_Endorsement_Gathering so default to complete attestation plan
 		builder.privateTransactionBuilder.EndorsementComplete()
 	}
