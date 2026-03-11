@@ -786,6 +786,34 @@ func (sMgr *sequencerManager) handleTransactionConfirmedByChainedTransaction(ctx
 	return nil
 }
 
+// TODO AM: is this behaviour different to any of the other handlers?
+func (sMgr *sequencerManager) HandleChainedTransactionConfirmation(ctx context.Context, contractAddress pldtypes.EthAddress, txID uuid.UUID, revertData pldtypes.HexBytes, onChain pldtypes.OnChainLocation) {
+	log.L(ctx).Infof("HandleChainedTransactionConfirmation txID=%s contract=%s hasRevertData=%t", txID, contractAddress, len(revertData) > 0)
+
+	sequencer, err := sMgr.GetSequencer(ctx, contractAddress)
+	if err != nil {
+		log.L(ctx).Errorf("HandleChainedTransactionConfirmation failed to get sequencer for %s: %s", contractAddress, err)
+		return
+	}
+	if sequencer == nil {
+		log.L(ctx).Debugf("HandleChainedTransactionConfirmation: no active sequencer for %s, relying on re-delegation", contractAddress)
+		return
+	}
+
+	sequencer.GetCoordinator().QueueEvent(ctx, &coordinatorTx.ConfirmedRevertedEvent{
+		BaseCoordinatorEvent: coordinatorTx.BaseCoordinatorEvent{
+			BaseEvent: common.BaseEvent{
+				EventTime: time.Now(),
+			},
+			TransactionID: txID,
+		},
+		Hash:         onChain.TransactionHash,
+		RevertReason: revertData,
+		OnChain:      onChain,
+	})
+}
+
+// TODO AM: HandleTransactionFailedDirect??
 func (sMgr *sequencerManager) HandleTransactionFailed(ctx context.Context, dbTX persistence.DBTX, failures []*components.PublicTxMatch) error {
 	log.L(sMgr.ctx).Tracef("HandleTransactionFailed %d", len(failures))
 	sMgr.metrics.IncRevertedTransactions()

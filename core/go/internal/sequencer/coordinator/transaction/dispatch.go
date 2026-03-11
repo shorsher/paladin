@@ -17,6 +17,7 @@ package transaction
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/LFDT-Paladin/paladin/common/go/pkg/i18n"
 	"github.com/LFDT-Paladin/paladin/common/go/pkg/log"
@@ -111,6 +112,9 @@ func (t *coordinatorTransaction) buildDispatchBatch(ctx context.Context) (*syncp
 
 	if intent == prototk.TransactionSpecification_SEND_TRANSACTION && hasPrivateTransaction && !hasPublicTransaction {
 		log.L(ctx).Debugf("Result of transaction %s is a chained private transaction", t.pt.ID)
+		if t.revertCount > 0 && t.pt.PreparedPrivateTransaction.IdempotencyKey != "" {
+			t.pt.PreparedPrivateTransaction.IdempotencyKey = fmt.Sprintf("%s_%d", t.pt.PreparedPrivateTransaction.IdempotencyKey, t.revertCount)
+		}
 		validatedPrivateTx, err := t.components.TxManager().PrepareChainedPrivateTransaction(ctx, t.components.Persistence().NOTX(), t.pt.PreAssembly.TransactionSpecification.From, t.pt.ID, t.pt.Domain, &t.pt.Address, t.pt.PreparedPrivateTransaction, pldapi.SubmitModeAuto)
 		if err != nil {
 			log.L(ctx).Errorf("error preparing chained transaction %s: %s", t.pt.ID, err)

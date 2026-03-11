@@ -106,4 +106,9 @@ type SequencerManager interface {
 	HandleNonceAssigned(ctx context.Context, nonce uint64, contractAddress string, txID uuid.UUID) error
 	HandlePublicTXSubmission(ctx context.Context, dbTX persistence.DBTX, txID uuid.UUID, txSubmission *pldapi.PublicTxWithBinding) error
 	HandleTransactionFailed(ctx context.Context, dbTX persistence.DBTX, confirms []*PublicTxMatch) error
+
+	// HandleChainedTransactionConfirmation routes a chained transaction's on-chain revert to the
+	// original transaction's coordinator for retryability evaluation. If the sequencer for the
+	// contract is not currently loaded, this is a no-op (the originator will eventually re-delegate).
+	HandleChainedTransactionConfirmation(ctx context.Context, contractAddress pldtypes.EthAddress, txID uuid.UUID, revertData pldtypes.HexBytes, onChain pldtypes.OnChainLocation)
 }

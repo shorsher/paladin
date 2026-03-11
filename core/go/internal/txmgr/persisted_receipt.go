@@ -204,6 +204,28 @@ func (tm *txManager) FinalizeTransactions(ctx context.Context, dbTX persistence.
 				for _, receipt := range info {
 					if receipt.TransactionID == cr.ChainedTransaction {
 						log.L(ctx).Infof("Propagating chained transaction receipt from %s to %s", receipt.TransactionID, cr.Transaction)
+
+						// TODO AM: careful review of this new if block
+						// When a chained transaction fails with on-chain revert data, route the failure
+						// to the original transaction's coordinator for retryability evaluation instead
+						// of immediately finalizing the original transaction.
+						if receipt.ReceiptType != components.RT_Success && len(receipt.RevertData) > 0 {
+							contractAddr, parseErr := pldtypes.ParseEthAddress(cr.ContractAddress)
+							if parseErr != nil {
+								log.L(ctx).Errorf("Failed to parse contract address %s for chained TX propagation: %s", cr.ContractAddress, parseErr)
+							} else {
+								origTxID := cr.Transaction
+								revertBytes := make(pldtypes.HexBytes, len(receipt.RevertData))
+								copy(revertBytes, receipt.RevertData)
+								onChainCopy := receipt.OnChain
+								log.L(ctx).Infof("Routing chained TX on-chain revert to coordinator for original TX %s (contract %s)", origTxID, cr.ContractAddress)
+								dbTX.AddPostCommit(func(ctx context.Context) {
+									tm.sequencerMgr.HandleChainedTransactionConfirmation(ctx, *contractAddr, origTxID, revertBytes, onChainCopy)
+								})
+							}
+							continue
+						}
+
 						upstreamReceipt := &components.ReceiptInputWithOriginator{
 							Originator:            cr.Sender,
 							DomainContractAddress: cr.ContractAddress,
