@@ -126,6 +126,9 @@ func (tm *txManager) FinalizeTransactions(ctx context.Context, dbTX persistence.
 		}
 		// Process each type, checking for coding errors in the calling component
 		var failureMsg string
+		if len(ri.RevertData) == 0 {
+			ri.RevertData = nil // when we receive over the wire this becomes an empty byte string
+		}
 		switch ri.ReceiptType {
 		case components.RT_Success:
 			if ri.FailureMessage != "" || ri.RevertData != nil {
@@ -133,9 +136,6 @@ func (tm *txManager) FinalizeTransactions(ctx context.Context, dbTX persistence.
 			}
 			receipt.Success = true
 		case components.RT_FailedWithMessage:
-			if len(ri.RevertData) == 0 {
-				ri.RevertData = nil // when we receive over the wire this becomes an empty byte string
-			}
 			if ri.FailureMessage == "" || ri.RevertData != nil {
 				return i18n.NewError(ctx, msgs.MsgTxMgrInvalidReceiptNotification, pldtypes.JSONString(ri))
 			}
@@ -217,8 +217,11 @@ func (tm *txManager) FinalizeTransactions(ctx context.Context, dbTX persistence.
 							outcomeType := receipt.ReceiptType
 							// take a copy of the on chain data and the revert bytes so we have original data when the post commit is called
 							onChainCopy := receipt.OnChain
-							revertBytesCopy := make(pldtypes.HexBytes, len(receipt.RevertData))
-							copy(revertBytesCopy, receipt.RevertData)
+							var revertBytesCopy pldtypes.HexBytes
+							if len(receipt.RevertData) > 0 {
+								revertBytesCopy = make(pldtypes.HexBytes, len(receipt.RevertData))
+								copy(revertBytesCopy, receipt.RevertData)
+							}
 							dbTX.AddPostCommit(func(ctx context.Context) {
 								tm.sequencerMgr.HandleChainedTransactionOutcome(ctx, *contractAddr, origTxID, outcomeType, revertBytesCopy, onChainCopy)
 							})
