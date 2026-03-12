@@ -44,7 +44,7 @@ func Test_addToDelegatedTransactions_NewTransactionError_ReturnsError(t *testing
 	txn := transactionBuilder.BuildSparse()
 
 	invalidOriginator := "sender@node1@node2"
-	err := c.addToDelegatedTransactions(ctx, invalidOriginator, []*components.PrivateTransaction{txn})
+	err := c.addToDelegatedTransactions(ctx, invalidOriginator, []*components.PrivateTransaction{txn}, "")
 
 	require.Error(t, err, "should return error when NewTransaction fails")
 	assert.Equal(t, 0, len(c.transactionsByID), "transaction should not be added when NewTransaction fails")
@@ -62,7 +62,7 @@ func Test_addToDelegatedTransactions_HasChainedTransactionError_ReturnsError(t *
 	transactionBuilder := testutil.NewPrivateTransactionBuilderForTesting().Address(builder.GetContractAddress()).Originator(originator).NumberOfRequiredEndorsers(1)
 	txn := transactionBuilder.BuildSparse()
 
-	err := c.addToDelegatedTransactions(ctx, originator, []*components.PrivateTransaction{txn})
+	err := c.addToDelegatedTransactions(ctx, originator, []*components.PrivateTransaction{txn}, "")
 
 	require.Error(t, err, "should return error when HasChainedTransaction fails")
 	assert.Equal(t, expectedError, err, "should return the same error from HasChainedTransaction")
@@ -89,7 +89,7 @@ func Test_addToDelegatedTransactions_WithChainedTransaction_AddsTransactionInSub
 	transactionBuilder := testutil.NewPrivateTransactionBuilderForTesting().Address(builder.GetContractAddress()).Originator(originator).NumberOfRequiredEndorsers(1)
 	txn := transactionBuilder.BuildSparse()
 
-	err := c.addToDelegatedTransactions(ctx, originator, []*components.PrivateTransaction{txn})
+	err := c.addToDelegatedTransactions(ctx, originator, []*components.PrivateTransaction{txn}, "")
 
 	require.NoError(t, err, "should not return error when HasChainedTransaction returns true")
 	require.Equal(t, 1, len(c.transactionsByID), "transaction should be added to transactionsByID")
@@ -118,7 +118,7 @@ func Test_addToDelegatedTransactions_WithoutChainedTransaction_AddsTransactionIn
 	transactionBuilder := testutil.NewPrivateTransactionBuilderForTesting().Address(builder.GetContractAddress()).Originator(originator).NumberOfRequiredEndorsers(1)
 	txn := transactionBuilder.BuildSparse()
 
-	err := c.addToDelegatedTransactions(ctx, originator, []*components.PrivateTransaction{txn})
+	err := c.addToDelegatedTransactions(ctx, originator, []*components.PrivateTransaction{txn}, "")
 
 	require.NoError(t, err, "should not return error when HasChainedTransaction returns false")
 	require.Equal(t, 1, len(c.transactionsByID), "transaction should be added to transactionsByID")
@@ -148,13 +148,13 @@ func Test_addToDelegatedTransactions_DuplicateTransaction_SkipsAndReturnsNoError
 	transactionBuilder := testutil.NewPrivateTransactionBuilderForTesting().Address(builder.GetContractAddress()).Originator(originator).NumberOfRequiredEndorsers(1)
 	txn := transactionBuilder.BuildSparse()
 
-	err := c.addToDelegatedTransactions(ctx, originator, []*components.PrivateTransaction{txn})
+	err := c.addToDelegatedTransactions(ctx, originator, []*components.PrivateTransaction{txn}, "")
 	require.NoError(t, err, "should not return error on first add")
 	require.Equal(t, 1, len(c.transactionsByID), "transaction should be added to transactionsByID")
 	firstCoordinatedTxn := c.transactionsByID[txn.ID]
 	require.NotNil(t, firstCoordinatedTxn, "transaction should exist in transactionsByID")
 
-	err = c.addToDelegatedTransactions(ctx, originator, []*components.PrivateTransaction{txn})
+	err = c.addToDelegatedTransactions(ctx, originator, []*components.PrivateTransaction{txn}, "")
 	require.NoError(t, err, "should not return error when adding duplicate transaction")
 	assert.Equal(t, 1, len(c.transactionsByID), "duplicate transaction should be skipped, count should remain 1")
 	secondCoordinatedTxn := c.transactionsByID[txn.ID]
@@ -292,11 +292,11 @@ func Test_addToDelegatedTransactions_WhenMaxInflightReached_ReturnsError(t *test
 	txn1 := testutil.NewPrivateTransactionBuilderForTesting().Address(builder.GetContractAddress()).Originator(originator).NumberOfRequiredEndorsers(1).BuildSparse()
 	txn2 := testutil.NewPrivateTransactionBuilderForTesting().Address(builder.GetContractAddress()).Originator(originator).NumberOfRequiredEndorsers(1).BuildSparse()
 
-	err := c.addToDelegatedTransactions(ctx, originator, []*components.PrivateTransaction{txn1})
+	err := c.addToDelegatedTransactions(ctx, originator, []*components.PrivateTransaction{txn1}, "")
 	require.NoError(t, err)
 	require.Len(t, c.transactionsByID, 1)
 
-	err = c.addToDelegatedTransactions(ctx, originator, []*components.PrivateTransaction{txn2})
+	err = c.addToDelegatedTransactions(ctx, originator, []*components.PrivateTransaction{txn2}, "")
 	require.Error(t, err, "should return error when max inflight reached")
 	assert.Len(t, c.transactionsByID, 1, "second transaction should not be added")
 }

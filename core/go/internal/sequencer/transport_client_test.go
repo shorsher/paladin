@@ -918,7 +918,7 @@ func TestHandleDelegationRequestAcknowledgment_Success(t *testing.T) {
 
 	txID := uuid.New()
 	delegationRequestAcknowledgment := &engineProto.DelegationRequestAcknowledgment{
-		TransactionId: txID.String(),
+		TransactionIds: []string{txID.String()},
 	}
 	payload, _ := proto.Marshal(delegationRequestAcknowledgment)
 

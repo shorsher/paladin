@@ -226,6 +226,7 @@ func TestNewTransaction_InvalidOriginator_ReturnsError(t *testing.T) {
 		5,
 		0,
 		3,
+		3,
 		NewGrapher(ctx),
 		nil,
 	)

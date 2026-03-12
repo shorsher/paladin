@@ -19,6 +19,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"slices"
 	"testing"
 
 	"github.com/LFDT-Paladin/paladin/core/internal/components"
@@ -340,8 +341,8 @@ func TestSendDelegationRequestAcknowledgment_Success(t *testing.T) {
 	ctx := context.Background()
 	delegatingNodeName := "delegating-node"
 	delegationId := "delegation-123"
-	delegateNodeName := "delegate-node"
-	transactionID := uuid.New().String()
+	transactionIDs := make([]string, 0)
+	transactionIDs = append(transactionIDs, uuid.New().String())
 	contractAddress := pldtypes.MustEthAddress("0x1234567890123456789012345678901234567890")
 
 	mockTransportManager := componentsmocks.NewTransportManager(t)
@@ -365,10 +366,12 @@ func TestSendDelegationRequestAcknowledgment_Success(t *testing.T) {
 		if ack.DelegationId != delegationId {
 			return false
 		}
-		if ack.TransactionId != transactionID {
-			return false
+		for _, transactionID := range ack.TransactionIds {
+			if !slices.Contains(transactionIDs, transactionID) {
+				return false
+			}
 		}
-		if ack.DelegateNodeId != delegateNodeName {
+		if ack.DelegateNodeId != delegatingNodeName {
 			return false
 		}
 		if ack.ContractAddress != contractAddress.String() {
@@ -385,7 +388,7 @@ func TestSendDelegationRequestAcknowledgment_Success(t *testing.T) {
 		contractAddress:   contractAddress,
 	}
 
-	err := tw.SendDelegationRequestAcknowledgment(ctx, delegatingNodeName, delegationId, delegateNodeName, transactionID)
+	err := tw.SendDelegationRequestAcknowledgment(ctx, delegatingNodeName, delegationId, transactionIDs, []int64{0})
 	require.NoError(t, err)
 	mockTransportManager.AssertExpectations(t)
 }
@@ -394,7 +397,6 @@ func TestSendDelegationRequestAcknowledgment_SendError(t *testing.T) {
 	ctx := context.Background()
 	delegatingNodeName := "delegating-node"
 	delegationId := "delegation-123"
-	delegateNodeName := "delegate-node"
 	transactionID := uuid.New().String()
 	contractAddress := pldtypes.MustEthAddress("0x1234567890123456789012345678901234567890")
 
@@ -412,7 +414,7 @@ func TestSendDelegationRequestAcknowledgment_SendError(t *testing.T) {
 		contractAddress:   contractAddress,
 	}
 
-	err := tw.SendDelegationRequestAcknowledgment(ctx, delegatingNodeName, delegationId, delegateNodeName, transactionID)
+	err := tw.SendDelegationRequestAcknowledgment(ctx, delegatingNodeName, delegationId, []string{transactionID}, []int64{0})
 	require.Error(t, err)
 	assert.Equal(t, sendError, err)
 	mockTransportManager.AssertExpectations(t)
