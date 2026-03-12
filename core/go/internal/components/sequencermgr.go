@@ -94,7 +94,6 @@ type SequencerManager interface {
 
 	// Synchronous function to write receipts for chained transaction propagation.
 	// Chained transaction receipts are final outcomes and should be written/distributed as-is.
-	// TODO AM: can this be consolidated into syncPoints.WriteOrDistributeReceipts
 	WriteOrDistributeChainedTransactionReceipts(ctx context.Context, dbTX persistence.DBTX, receipts []*ReceiptInputWithOriginator) error
 
 	// Events from the public transaction manager

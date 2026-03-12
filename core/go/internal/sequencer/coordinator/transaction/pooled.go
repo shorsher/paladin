@@ -116,6 +116,9 @@ func (t *coordinatorTransaction) initializeForNewAssembly(ctx context.Context) e
 
 func action_ResetTransactionLocks(ctx context.Context, txn *coordinatorTransaction, _ common.Event) error {
 	log.L(ctx).Debugf("resetting transaction locks for %s", txn.pt.ID.String())
+	// Clear minted-state index immediately when resetting in-memory transaction state to avoid
+	// later assembles binding to stale minters that have already been reset/reverted.
+	txn.grapher.ForgetMints(txn.pt.ID)
 	txn.engineIntegration.ResetTransactions(ctx, txn.pt.ID)
 	return nil
 }

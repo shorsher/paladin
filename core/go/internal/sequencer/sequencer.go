@@ -739,7 +739,7 @@ func (sMgr *sequencerManager) HandleChainedTransactionOutcome(ctx context.Contex
 		return
 	}
 	if sequencer == nil {
-		log.L(ctx).Warnf("HandleChainedTransactionOutcome: no loaded sequencer for contract %s txID=%s (originator will re-delegate)", contractAddress, txID)
+		log.L(ctx).Warnf("HandleChainedTransactionOutcome: no loaded sequencer for contract %s txID=%s", contractAddress, txID)
 		return
 	}
 

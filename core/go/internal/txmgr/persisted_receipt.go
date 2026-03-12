@@ -213,13 +213,13 @@ func (tm *txManager) FinalizeTransactions(ctx context.Context, dbTX persistence.
 							log.L(ctx).Errorf("Failed to parse contract address %s for chained TX propagation: %s", cr.ContractAddress, parseErr)
 						} else {
 							origTxID := cr.Transaction
-							// TODO AM: understand why we're copying here
 							outcomeType := receipt.ReceiptType
-							revertBytes := make(pldtypes.HexBytes, len(receipt.RevertData))
-							copy(revertBytes, receipt.RevertData)
+							// take a copy of the on chain data and the revert bytes so we have original data when the post commit is called
 							onChainCopy := receipt.OnChain
+							revertBytesCopy := make(pldtypes.HexBytes, len(receipt.RevertData))
+							copy(revertBytesCopy, receipt.RevertData)
 							dbTX.AddPostCommit(func(ctx context.Context) {
-								tm.sequencerMgr.HandleChainedTransactionOutcome(ctx, *contractAddr, origTxID, outcomeType, revertBytes, onChainCopy)
+								tm.sequencerMgr.HandleChainedTransactionOutcome(ctx, *contractAddr, origTxID, outcomeType, revertBytesCopy, onChainCopy)
 							})
 						}
 

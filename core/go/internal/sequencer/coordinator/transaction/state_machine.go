@@ -479,6 +479,9 @@ var stateDefinitionsMap = StateDefinitions{
 		},
 	},
 	State_Reverted: {
+		OnTransitionTo: []ActionRule{
+			{Action: action_ResetTransactionLocks},
+		},
 		// TODO: when we have best effort FIFO ordering for first assemble within an originator an Event_DependencyRevert will
 		// need to be sent to the "next" transaction from that originator as a signal that it may now assemble. The dependency
 		// can be severed at this point as we have passed first assemble.

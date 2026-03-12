@@ -185,6 +185,7 @@ func TestCoordinatorTransaction_Assembling_ToReverted_OnAssembleRevertResponse(t
 	txn, mocks := txnBuilder.Build()
 
 	mocks.SyncPoints.On("QueueTransactionFinalize", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
+	mocks.EngineIntegration.EXPECT().ResetTransactions(mock.Anything, txn.GetID()).Return()
 
 	err := txn.HandleEvent(ctx, txnBuilder.BuildAssembleRevertEvent())
 	require.NoError(t, err)
