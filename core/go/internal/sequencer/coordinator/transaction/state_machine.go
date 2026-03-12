@@ -28,19 +28,18 @@ import (
 type State int
 
 const (
-	State_Initial                           State = iota // Initial state before anything is calculated
-	State_Pooled                                         // waiting in the pool to be assembled - TODO should rename to "Selectable" or "Selectable_Pooled".  Related to potential rename of `State_PreAssembly_Blocked`
-	State_PreAssembly_Blocked                            // has not been assembled yet and cannot be assembled because a dependency never got assembled successfully - i.e. it was either Parked or Reverted is also blocked
-	State_Assembling                                     // an assemble request has been sent but we are waiting for the response
-	State_Reverted                                       // the transaction has been reverted by the assembler/originator
-	State_Endorsement_Gathering                          // assembled and waiting for endorsement
-	State_Blocked                                        // is fully endorsed but cannot proceed due to dependencies not being ready for dispatch
-	State_Confirming_Dispatchable                        // endorsed and waiting for confirmation that were are OK to dispatch. The originator can still request not to proceed at this point.
-	State_Ready_For_Dispatch                             // dispatch confirmation received and waiting to be collected by the dispatcher thread.Going into this state is the point of no return
-	State_Dispatched                                     // collected by the dispatcher/public TX manager and in-flight on base ledger
-	State_Awaiting_Dispatch_Confirmed_Event              // dispatched but dependency was reset; waiting for on-chain confirmation before deciding retry vs failure
-	State_Confirmed                                      // "recently" confirmed on the base ledger.  NOTE: confirmed transactions are not held in memory for ever so getting a list of confirmed transactions will only return those confirmed recently
-	State_Final                                          // final state for the transaction. Transactions are removed from memory as soon as they enter this state
+	State_Initial                 State = iota // Initial state before anything is calculated
+	State_Pooled                               // waiting in the pool to be assembled - TODO should rename to "Selectable" or "Selectable_Pooled".  Related to potential rename of `State_PreAssembly_Blocked`
+	State_PreAssembly_Blocked                  // has not been assembled yet and cannot be assembled because a dependency never got assembled successfully - i.e. it was either Parked or Reverted is also blocked
+	State_Assembling                           // an assemble request has been sent but we are waiting for the response
+	State_Reverted                             // the transaction has been reverted by the assembler/originator
+	State_Endorsement_Gathering                // assembled and waiting for endorsement
+	State_Blocked                              // is fully endorsed but cannot proceed due to dependencies not being ready for dispatch
+	State_Confirming_Dispatchable              // endorsed and waiting for confirmation that were are OK to dispatch. The originator can still request not to proceed at this point.
+	State_Ready_For_Dispatch                   // dispatch confirmation received and waiting to be collected by the dispatcher thread.Going into this state is the point of no return
+	State_Dispatched                           // collected by the dispatcher/public TX manager and in-flight on base ledger
+	State_Confirmed                            // "recently" confirmed on the base ledger.  NOTE: confirmed transactions are not held in memory for ever so getting a list of confirmed transactions will only return those confirmed recently
+	State_Final                                // final state for the transaction. Transactions are removed from memory as soon as they enter this state
 )
 
 type EventType = common.EventType
@@ -57,7 +56,7 @@ const (
 	Event_DependencyReady                                                                      // another transaction, for which this transaction has a dependency on, has become ready for dispatch
 	Event_DependencyAssembled                                                                  // another transaction, for which this transaction has a dependency on, has been assembled
 	Event_DependencyReverted                                                                   // another transaction, for which this transaction has a dependency on, has been reverted
-	Event_DependencyReset                                                                      // another transaction, for which this transaction has a dependency on, has been reset (put back in the pool)
+	Event_DependencyReset                                                                      // another transaction, for which this transaction has a dependency on, has been reset
 	Event_DependencyConfirmedReverted                                                          // another transaction, for which this transaction has a dependency on, has been confirmed as reverted
 	Event_DispatchRequestApproved                                                              // dispatch confirmation received from the originator
 	Event_DispatchRequestRejected                                                              // dispatch confirmation response received from the originator with a rejection
@@ -91,10 +90,6 @@ var stateDefinitionsMap = StateDefinitions{
 		Events: map[EventType]EventHandler{
 			Event_Delegated: {
 				Transitions: []Transition{
-					{
-						To: State_Dispatched,
-						If: guard_HasChainedTxInProgress,
-					},
 					{
 						To: State_Pooled,
 						If: statemachine.GuardAnd(statemachine.GuardNot(guard_HasUnassembledDependencies), statemachine.GuardNot(guard_HasUnknownDependencies)),
@@ -422,58 +417,15 @@ var stateDefinitionsMap = StateDefinitions{
 				},
 			},
 			Event_DependencyReset: {
-				Transitions: []Transition{{
-					To: State_Awaiting_Dispatch_Confirmed_Event,
-				}},
+				Actions: []ActionRule{
+					{Action: action_ResetTransactionLocks},
+					{Action: action_NotifyDependentsOfReset},
+				},
 			},
 			Event_DependencyConfirmedReverted: {
-				Transitions: []Transition{{
-					To: State_Awaiting_Dispatch_Confirmed_Event,
-				}},
-			},
-		},
-	},
-	State_Awaiting_Dispatch_Confirmed_Event: {
-		OnTransitionTo: []ActionRule{
-			{Action: action_ResetTransactionLocks},
-			{Action: action_NotifyDependentsOfReset},
-		},
-		Events: map[EventType]EventHandler{
-			// It should be impossible that we're confirmed if we're put into this state because a dependency has reverted
-			// but it's safer to handle it just in case
-			Event_ConfirmedSuccess: {
 				Actions: []ActionRule{
-					{Action: action_RecordConfirmation},
-				},
-				Transitions: []Transition{{
-					To: State_Confirmed,
-					Actions: []ActionRule{
-						{Action: action_NotifyOriginatorOfConfirmation},
-						{Action: action_NotifyDependantsOfSuccessfulConfirmation},
-					},
-				}},
-			},
-			Event_ConfirmedReverted: {
-				Actions: []ActionRule{
-					{Action: action_RecordConfirmation},
-				},
-				Transitions: []Transition{
-					{
-						If: guard_CanRetryRevert,
-						To: State_Ready_For_Dispatch,
-						Actions: []ActionRule{
-							{Action: action_NotifyOriginatorOfRetryableRevert},
-						},
-					},
-					{
-						If: statemachine.GuardNot(guard_CanRetryRevert),
-						To: State_Reverted,
-						Actions: []ActionRule{
-							{Action: action_NotifyOriginatorOfNonRetryableRevert},
-							{Action: action_NotifyDependantsOfRevertedConfirmation},
-							{Action: action_FinalizeNonRetryableRevert},
-						},
-					},
+					{Action: action_ResetTransactionLocks},
+					{Action: action_NotifyDependentsOfReset},
 				},
 			},
 		},
@@ -585,8 +537,6 @@ func (s State) String() string {
 		return "State_Ready_For_Dispatch"
 	case State_Dispatched:
 		return "State_Dispatched"
-	case State_Awaiting_Dispatch_Confirmed_Event:
-		return "State_Awaiting_Dispatch_Confirmed_Event"
 	case State_Confirmed:
 		return "State_Confirmed"
 	case State_Final:

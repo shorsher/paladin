@@ -44,8 +44,7 @@ func (t *coordinatorTransaction) GetSnapshot(ctx context.Context) (*common.Snaps
 	// State_Ready_For_Dispatch is already past the point of no return. It is as good as dispatched, just waiting for
 	// the dispatcher thread to collect it so we include it in the dispatched transactions of the snapshot
 	case State_Ready_For_Dispatch,
-		State_Dispatched,
-		State_Awaiting_Dispatch_Confirmed_Event:
+		State_Dispatched:
 		dispatchedTransaction := &common.SnapshotDispatchedTransaction{
 			SnapshotPooledTransaction: common.SnapshotPooledTransaction{
 				ID:         t.pt.ID,
@@ -56,8 +55,6 @@ func (t *coordinatorTransaction) GetSnapshot(ctx context.Context) (*common.Snaps
 			dispatchedTransaction.Signer = *t.signerAddress
 			dispatchedTransaction.Nonce = t.nonce
 			dispatchedTransaction.LatestSubmissionHash = t.latestSubmissionHash
-		} else {
-			log.L(ctx).Warnf("Transaction %s has no signer address", t.pt.ID)
 		}
 		return nil, dispatchedTransaction, nil
 
@@ -75,8 +72,6 @@ func (t *coordinatorTransaction) GetSnapshot(ctx context.Context) (*common.Snaps
 		}
 		if t.signerAddress != nil {
 			confirmedTransaction.Signer = *t.signerAddress
-		} else {
-			log.L(ctx).Warnf("Transaction %s has no signer address", t.pt.ID)
 		}
 		return nil, nil, confirmedTransaction
 	}

@@ -96,6 +96,7 @@ var transactionReceiptFilters = filters.FieldMap{
 
 // FinalizeTransactions is called by the block indexing routine, but also can be called
 // by the private transaction manager if transactions fail without making it to the blockchain
+// or fail on the blockchain in a way that cannot be retried.
 func (tm *txManager) FinalizeTransactions(ctx context.Context, dbTX persistence.DBTX, info []*components.ReceiptInput) error {
 	ctx = log.WithComponent(ctx, "txmanager")
 	log.L(ctx).Debugf("FinalizeTransactions: %v receipt infos", len(info))
