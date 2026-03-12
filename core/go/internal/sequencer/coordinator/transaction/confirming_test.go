@@ -31,31 +31,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func Test_guard_HasRevertReason_FalseWhenEmpty(t *testing.T) {
-	ctx := context.Background()
-	txn, _ := NewTransactionBuilderForTesting(t, State_Dispatched).Build()
-
-	// Initially revertReason should be nil (zero value for HexBytes)
-	// When nil, String() returns "", so guard returns false
-	assert.False(t, guard_HasRevertReason(ctx, txn))
-
-	// Note: An empty slice HexBytes{} would return "0x" from String(),
-	// which is not empty, so the guard would return true. Only nil returns false.
-}
-
-func Test_guard_HasRevertReason_TrueWhenSet(t *testing.T) {
-	ctx := context.Background()
-	txn, _ := NewTransactionBuilderForTesting(t, State_Dispatched).Build()
-
-	// Set revertReason to a non-empty value
-	txn.revertReason = pldtypes.MustParseHexBytes("0x1234567890abcdef")
-	assert.True(t, guard_HasRevertReason(ctx, txn))
-
-	// Test with another value
-	txn.revertReason = pldtypes.MustParseHexBytes("0xdeadbeef")
-	assert.True(t, guard_HasRevertReason(ctx, txn))
-}
-
 func Test_notifyDependentsOfConfirmation_NoDependents(t *testing.T) {
 	ctx := context.Background()
 
@@ -372,7 +347,7 @@ func Test_ConfirmedRevert_StateDispatched_RetryableRevert_TransitionsToPooled(t 
 	require.NoError(t, err)
 	assert.Equal(t, State_Pooled, txn.stateMachine.GetCurrentState())
 }
-func Test_ConfirmedRevert_StateDispatched_NonRetryable_TransitionsToConfirmed(t *testing.T) {
+func Test_ConfirmedRevert_StateDispatched_NonRetryable_TransitionsToReverted(t *testing.T) {
 	ctx := context.Background()
 	revertReason := pldtypes.MustParseHexBytes("0xdead")
 	txn, mocks := NewTransactionBuilderForTesting(t, State_Dispatched).
@@ -394,10 +369,10 @@ func Test_ConfirmedRevert_StateDispatched_NonRetryable_TransitionsToConfirmed(t 
 
 	err := txn.HandleEvent(ctx, event)
 	require.NoError(t, err)
-	assert.Equal(t, State_Confirmed, txn.stateMachine.GetCurrentState())
+	assert.Equal(t, State_Reverted, txn.stateMachine.GetCurrentState())
 }
 
-func Test_ConfirmedRevert_StateDispatched_RetryableRevert_ExceedsThreshold_TransitionsToConfirmed(t *testing.T) {
+func Test_ConfirmedRevert_StateDispatched_RetryableRevert_ExceedsThreshold_TransitionsToReverted(t *testing.T) {
 	ctx := context.Background()
 	revertReason := pldtypes.MustParseHexBytes("0xbeef")
 	txn, mocks := NewTransactionBuilderForTesting(t, State_Dispatched).
@@ -421,7 +396,7 @@ func Test_ConfirmedRevert_StateDispatched_RetryableRevert_ExceedsThreshold_Trans
 
 	err := txn.HandleEvent(ctx, event)
 	require.NoError(t, err)
-	assert.Equal(t, State_Confirmed, txn.stateMachine.GetCurrentState())
+	assert.Equal(t, State_Reverted, txn.stateMachine.GetCurrentState())
 }
 
 func Test_action_RecordConfirmation_RevertRetryableAndUnderThreshold(t *testing.T) {
@@ -564,7 +539,7 @@ func Test_action_FinalizeNonRetryableRevert(t *testing.T) {
 			return req.Domain == txn.pt.Domain &&
 				req.Originator == txn.originator &&
 				req.TransactionID == txn.pt.ID &&
-				req.FailureMessage == txn.revertReason.String() &&
+				req.FailureMessage == "" &&
 				req.RevertData.String() == txn.revertReason.String()
 		}),
 		mock.Anything, mock.Anything,
@@ -735,7 +710,7 @@ func Test_AwaitingDispatchConfirmedEvent_RetryableRevert_TransitionsToReadyForDi
 	assert.Equal(t, State_Ready_For_Dispatch, txn.stateMachine.GetCurrentState())
 }
 
-func Test_AwaitingDispatchConfirmedEvent_NonRetryableRevert_TransitionsToConfirmed(t *testing.T) {
+func Test_AwaitingDispatchConfirmedEvent_NonRetryableRevert_TransitionsToReverted(t *testing.T) {
 	ctx := context.Background()
 	revertReason := pldtypes.MustParseHexBytes("0xdead")
 	txn, mocks := NewTransactionBuilderForTesting(t, State_Awaiting_Dispatch_Confirmed_Event).
@@ -754,10 +729,10 @@ func Test_AwaitingDispatchConfirmedEvent_NonRetryableRevert_TransitionsToConfirm
 		RevertReason:         revertReason,
 	})
 	require.NoError(t, err)
-	assert.Equal(t, State_Confirmed, txn.stateMachine.GetCurrentState())
+	assert.Equal(t, State_Reverted, txn.stateMachine.GetCurrentState())
 }
 
-func Test_AwaitingDispatchConfirmedEvent_RetryableRevertExceedsThreshold_TransitionsToConfirmed(t *testing.T) {
+func Test_AwaitingDispatchConfirmedEvent_RetryableRevertExceedsThreshold_TransitionsToReverted(t *testing.T) {
 	ctx := context.Background()
 	revertReason := pldtypes.MustParseHexBytes("0xbeef")
 	txn, mocks := NewTransactionBuilderForTesting(t, State_Awaiting_Dispatch_Confirmed_Event).
@@ -778,5 +753,5 @@ func Test_AwaitingDispatchConfirmedEvent_RetryableRevertExceedsThreshold_Transit
 		RevertReason:         revertReason,
 	})
 	require.NoError(t, err)
-	assert.Equal(t, State_Confirmed, txn.stateMachine.GetCurrentState())
+	assert.Equal(t, State_Reverted, txn.stateMachine.GetCurrentState())
 }

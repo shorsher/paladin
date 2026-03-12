@@ -556,7 +556,7 @@ func TestCoordinatorTransaction_Dispatched_ToPooled_OnConfirmedRevert_IfRetryabl
 	assert.Equal(t, transaction.State_Pooled, txn.GetCurrentState(), "current state is %s", txn.GetCurrentState().String())
 }
 
-func TestCoordinatorTransaction_Dispatched_ToConfirmed_OnConfirmedRevert_IfNonRetryable(t *testing.T) {
+func TestCoordinatorTransaction_Dispatched_ToReverted_OnConfirmedRevert_IfNonRetryable(t *testing.T) {
 	ctx := context.Background()
 	revertReason := pldtypes.HexBytes("0x01020304")
 	txn, mocks := transaction.NewTransactionBuilderForTesting(t, transaction.State_Dispatched).
@@ -575,10 +575,10 @@ func TestCoordinatorTransaction_Dispatched_ToConfirmed_OnConfirmedRevert_IfNonRe
 		RevertReason: revertReason,
 	})
 	require.NoError(t, err)
-	assert.Equal(t, transaction.State_Confirmed, txn.GetCurrentState(), "current state is %s", txn.GetCurrentState().String())
+	assert.Equal(t, transaction.State_Reverted, txn.GetCurrentState(), "current state is %s", txn.GetCurrentState().String())
 }
 
-func TestCoordinatorTransaction_Dispatched_ToConfirmed_OnConfirmedRevert_IfThresholdExceeded(t *testing.T) {
+func TestCoordinatorTransaction_Dispatched_ToReverted_OnConfirmedRevert_IfThresholdExceeded(t *testing.T) {
 	ctx := context.Background()
 	revertReason := pldtypes.HexBytes("0x01020304")
 	txn, mocks := transaction.NewTransactionBuilderForTesting(t, transaction.State_Dispatched).
@@ -599,7 +599,7 @@ func TestCoordinatorTransaction_Dispatched_ToConfirmed_OnConfirmedRevert_IfThres
 		RevertReason: revertReason,
 	})
 	require.NoError(t, err)
-	assert.Equal(t, transaction.State_Confirmed, txn.GetCurrentState(), "current state is %s", txn.GetCurrentState().String())
+	assert.Equal(t, transaction.State_Reverted, txn.GetCurrentState(), "current state is %s", txn.GetCurrentState().String())
 }
 
 func TestCoordinatorTransaction_Dispatched_ToConfirmed_OnConfirmedSuccess(t *testing.T) {

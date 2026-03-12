@@ -392,6 +392,7 @@ var stateDefinitionsMap = StateDefinitions{
 				Actions: []ActionRule{
 					{Action: action_RecordConfirmation},
 					{Action: action_NotifyOriginatorOfConfirmation},
+					{Action: action_NotifyDependantsOfSuccessfulConfirmation},
 				},
 				Transitions: []Transition{{To: State_Confirmed}},
 			},
@@ -411,9 +412,11 @@ var stateDefinitionsMap = StateDefinitions{
 					},
 					{
 						If: statemachine.GuardNot(guard_CanRetryRevert),
-						To: State_Confirmed,
+						To: State_Reverted,
 						Actions: []ActionRule{
 							{Action: action_NotifyOriginatorOfNonRetryableRevert},
+							{Action: action_NotifyDependantsOfRevertedConfirmation},
+							{Action: action_FinalizeNonRetryableRevert},
 						},
 					},
 				},
@@ -443,8 +446,11 @@ var stateDefinitionsMap = StateDefinitions{
 					{Action: action_RecordConfirmation},
 				},
 				Transitions: []Transition{{
-					To:      State_Confirmed,
-					Actions: []ActionRule{{Action: action_NotifyOriginatorOfConfirmation}},
+					To: State_Confirmed,
+					Actions: []ActionRule{
+						{Action: action_NotifyOriginatorOfConfirmation},
+						{Action: action_NotifyDependantsOfSuccessfulConfirmation},
+					},
 				}},
 			},
 			Event_ConfirmedReverted: {
@@ -461,9 +467,11 @@ var stateDefinitionsMap = StateDefinitions{
 					},
 					{
 						If: statemachine.GuardNot(guard_CanRetryRevert),
-						To: State_Confirmed,
+						To: State_Reverted,
 						Actions: []ActionRule{
 							{Action: action_NotifyOriginatorOfNonRetryableRevert},
+							{Action: action_NotifyDependantsOfRevertedConfirmation},
+							{Action: action_FinalizeNonRetryableRevert},
 						},
 					},
 				},
@@ -486,20 +494,6 @@ var stateDefinitionsMap = StateDefinitions{
 		},
 	},
 	State_Confirmed: {
-		OnTransitionTo: []ActionRule{
-			{
-				Action: action_NotifyDependantsOfSuccessfulConfirmation,
-				If:     statemachine.GuardNot(guard_HasRevertReason),
-			},
-			{
-				Action: action_NotifyDependantsOfRevertedConfirmation,
-				If:     guard_HasRevertReason,
-			},
-			{
-				Action: action_FinalizeNonRetryableRevert,
-				If:     guard_HasRevertReason,
-			},
-		},
 		Events: map[EventType]EventHandler{
 			common.Event_HeartbeatInterval: {
 				Actions: []ActionRule{
