@@ -144,11 +144,11 @@ func (t *coordinatorTransaction) notifyDependentsOfConfirmation(ctx context.Cont
 		} else {
 			err := dependent.HandleEvent(ctx, &DependencyReadyEvent{
 				BaseCoordinatorEvent: BaseCoordinatorEvent{
-					TransactionID: dependent.pt.ID,
+					TransactionID: dependent.GetPrivateTransaction().ID,
 				},
 			})
 			if err != nil {
-				log.L(ctx).Errorf("error notifying dependent transaction %s of readiness of transaction %s: %s", dependent.pt.ID, t.pt.ID, err)
+				log.L(ctx).Errorf("error notifying dependent transaction %s of readiness of transaction %s: %s", dependent.GetPrivateTransaction().ID, t.pt.ID, err)
 				return err
 			}
 		}
@@ -164,11 +164,11 @@ func (t *coordinatorTransaction) notifyDependentsOfRevertedConfirmation(ctx cont
 		} else {
 			err := dependent.HandleEvent(ctx, &DependencyConfirmedRevertedEvent{
 				BaseCoordinatorEvent: BaseCoordinatorEvent{
-					TransactionID: dependent.pt.ID,
+					TransactionID: dependent.GetPrivateTransaction().ID,
 				},
 			})
 			if err != nil {
-				log.L(ctx).Errorf("error notifying dependent transaction %s of revert of transaction %s: %s", dependent.pt.ID, t.pt.ID, err)
+				log.L(ctx).Errorf("error notifying dependent transaction %s of revert of transaction %s: %s", dependent.GetPrivateTransaction().ID, t.pt.ID, err)
 				return err
 			}
 		}

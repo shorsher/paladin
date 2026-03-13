@@ -314,102 +314,6 @@ func Test_nudgeAssembleRequest_WithPendingRequest(t *testing.T) {
 	assert.NoError(t, err)
 }
 
-func Test_isNotAssembled_NotAssembledStates(t *testing.T) {
-	txn, _ := NewTransactionBuilderForTesting(t, State_Assembling).Build()
-
-	states := []State{
-		State_Assembling,
-		State_Pooled,
-		State_Assembling,
-		State_Reverted,
-	}
-
-	for _, state := range states {
-		txn.stateMachine.CurrentState = state
-		assert.True(t, txn.isNotAssembled(), "state %s should be not assembled", state)
-	}
-}
-
-func Test_isNotAssembled_AssembledStates(t *testing.T) {
-	txn, _ := NewTransactionBuilderForTesting(t, State_Assembling).Build()
-
-	states := []State{
-		State_Endorsement_Gathering,
-		State_Confirming_Dispatchable,
-		State_Ready_For_Dispatch,
-		State_Dispatched,
-		State_Confirmed,
-	}
-
-	for _, state := range states {
-		txn.stateMachine.CurrentState = state
-		assert.False(t, txn.isNotAssembled(), "state %s should be assembled", state)
-	}
-}
-
-func Test_notifyDependentsOfAssembled_NoDependents(t *testing.T) {
-	ctx := context.Background()
-	txn, _ := NewTransactionBuilderForTesting(t, State_Assembling).
-		Dependencies(&pldapi.TransactionDependencies{PrereqOf: []uuid.UUID{}}).
-		Build()
-
-	err := txn.notifyDependentsOfAssembled(ctx)
-	assert.NoError(t, err)
-}
-
-func Test_notifyDependentsOfAssembled_WithDependent_HandleEventError(t *testing.T) {
-	ctx := context.Background()
-	grapher := NewGrapher(ctx)
-	txn2ID := uuid.New()
-	txn1, _ := NewTransactionBuilderForTesting(t, State_Assembling).
-		Grapher(grapher).
-		Dependencies(&pldapi.TransactionDependencies{PrereqOf: []uuid.UUID{txn2ID}}).
-		Build()
-	txn2, _ := NewTransactionBuilderForTesting(t, State_PreAssembly_Blocked).
-		Grapher(grapher).
-		TransactionID(txn2ID).
-		Dependencies(&pldapi.TransactionDependencies{}).
-		Build()
-
-	// Mock HandleEvent by setting up txn2 to fail when processing DependencyAssembledEvent
-	// When DependencyAssembledEvent is processed in State_PreAssembly_Blocked, it transitions to State_Pooled
-	// which calls action_initializeDependencies. We can make that fail by removing PreAssembly.
-	txn2.pt.PreAssembly = nil // This will cause action_initializeDependencies to fail
-
-	// Call notifyDependentsOfAssembled - it should return the error from HandleEvent
-	err := txn1.notifyDependentsOfAssembled(ctx)
-	require.Error(t, err)
-}
-
-func Test_notifyDependentsOfAssembled_WithDependents(t *testing.T) {
-	ctx := context.Background()
-	grapher := NewGrapher(ctx)
-	txn2ID := uuid.New()
-	txn1, _ := NewTransactionBuilderForTesting(t, State_Assembling).
-		Grapher(grapher).
-		Dependencies(&pldapi.TransactionDependencies{PrereqOf: []uuid.UUID{txn2ID}}).
-		Build()
-	_, _ = NewTransactionBuilderForTesting(t, State_Assembling).
-		Grapher(grapher).
-		TransactionID(txn2ID).
-		Dependencies(&pldapi.TransactionDependencies{}).
-		Build() // txn2 registered in grapher so txn1.notifyDependentsOfAssembled can find it
-
-	err := txn1.notifyDependentsOfAssembled(ctx)
-	require.NoError(t, err)
-}
-
-func Test_notifyDependentsOfAssembled_DependentNotFound(t *testing.T) {
-	ctx := context.Background()
-	missingID := uuid.New()
-	txn1, _ := NewTransactionBuilderForTesting(t, State_Assembling).
-		Dependencies(&pldapi.TransactionDependencies{PrereqOf: []uuid.UUID{missingID}}).
-		Build()
-
-	err := txn1.notifyDependentsOfAssembled(ctx)
-	require.Error(t, err)
-}
-
 func Test_calculatePostAssembleDependencies_NilPostAssembly(t *testing.T) {
 	ctx := context.Background()
 	txn, _ := NewTransactionBuilderForTesting(t, State_Assembling).Build()
@@ -762,18 +666,6 @@ func Test_action_NudgeAssembleRequest_Success(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func Test_action_NotifyDependentsOfAssembled_Success(t *testing.T) {
-	ctx := context.Background()
-	txn, _ := NewTransactionBuilderForTesting(t, State_Assembling).
-		Dependencies(&pldapi.TransactionDependencies{PrereqOf: []uuid.UUID{}}).
-		Build()
-
-	err := action_NotifyDependentsOfAssembled(ctx, txn, nil)
-	require.NoError(t, err)
-	// State: no dependents, so no HandleEvent calls; dependencies unchanged
-	assert.Len(t, txn.dependencies.PrereqOf, 0)
-}
-
 func Test_revertTransactionFailedAssembly_OnCommitCallback(t *testing.T) {
 	ctx := context.Background()
 	txn, mocks := NewTransactionBuilderForTesting(t, State_Assembling).
@@ -906,4 +798,87 @@ func Test_action_AssembleError_MultipleCallsIncrementCount(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, i, txn.assembleErrorCount)
 	}
+}
+
+func Test_notifyPreAssembleDependentOfSelection_NilPrereq(t *testing.T) {
+	ctx := context.Background()
+	txn, _ := NewTransactionBuilderForTesting(t, State_Assembling).Build()
+	txn.preAssemblePrereqOf = nil
+
+	err := txn.notifyPreAssembleDependentOfSelection(ctx)
+	require.NoError(t, err)
+}
+
+func Test_notifyPreAssembleDependentOfSelection_DependentNotFound(t *testing.T) {
+	ctx := context.Background()
+	dependentID := uuid.New()
+
+	mockGrapher := NewMockGrapher(t)
+	mockGrapher.EXPECT().Add(mock.Anything, mock.Anything).Return()
+	mockGrapher.EXPECT().TransactionByID(ctx, dependentID).Return(nil)
+
+	txn, _ := NewTransactionBuilderForTesting(t, State_Assembling).Grapher(mockGrapher).Build()
+	txn.preAssemblePrereqOf = &dependentID
+
+	err := txn.notifyPreAssembleDependentOfSelection(ctx)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), dependentID.String())
+}
+
+func Test_notifyPreAssembleDependentOfSelection_Success(t *testing.T) {
+	ctx := context.Background()
+	grapher := NewGrapher(ctx)
+
+	dependentTxn, _ := NewTransactionBuilderForTesting(t, State_Blocked).
+		Grapher(grapher).
+		Build()
+
+	txn, _ := NewTransactionBuilderForTesting(t, State_Assembling).
+		Grapher(grapher).
+		Build()
+	txn.preAssemblePrereqOf = &dependentTxn.pt.ID
+
+	err := txn.notifyPreAssembleDependentOfSelection(ctx)
+	require.NoError(t, err)
+}
+
+func Test_action_NotifyPreAssembleDependentOfSelection_NilPrereq(t *testing.T) {
+	ctx := context.Background()
+	txn, _ := NewTransactionBuilderForTesting(t, State_Assembling).Build()
+	txn.preAssemblePrereqOf = nil
+
+	err := action_NotifyPreAssembleDependentOfSelection(ctx, txn, nil)
+	require.NoError(t, err)
+}
+
+func Test_action_NotifyPreAssembleDependentOfSelection_DependentNotFound(t *testing.T) {
+	ctx := context.Background()
+	dependentID := uuid.New()
+
+	mockGrapher := NewMockGrapher(t)
+	mockGrapher.EXPECT().Add(mock.Anything, mock.Anything).Return()
+	mockGrapher.EXPECT().TransactionByID(ctx, dependentID).Return(nil)
+
+	txn, _ := NewTransactionBuilderForTesting(t, State_Assembling).Grapher(mockGrapher).Build()
+	txn.preAssemblePrereqOf = &dependentID
+
+	err := action_NotifyPreAssembleDependentOfSelection(ctx, txn, nil)
+	require.Error(t, err)
+}
+
+func Test_action_NotifyPreAssembleDependentOfSelection_Success(t *testing.T) {
+	ctx := context.Background()
+	grapher := NewGrapher(ctx)
+
+	dependentTxn, _ := NewTransactionBuilderForTesting(t, State_Blocked).
+		Grapher(grapher).
+		Build()
+
+	txn, _ := NewTransactionBuilderForTesting(t, State_Assembling).
+		Grapher(grapher).
+		Build()
+	txn.preAssemblePrereqOf = &dependentTxn.pt.ID
+
+	err := action_NotifyPreAssembleDependentOfSelection(ctx, txn, nil)
+	require.NoError(t, err)
 }

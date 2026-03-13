@@ -16,6 +16,7 @@ package transaction
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 
@@ -77,6 +78,39 @@ func Test_notifyDependentsOfConfirmation_DependentNotInMemory(t *testing.T) {
 	err := txn.notifyDependentsOfConfirmation(ctx)
 	require.Error(t, err)
 	assert.True(t, strings.Contains(err.Error(), "PD012645"))
+}
+
+func Test_notifyDependentsOfConfirmation_HandleEventReturnsError(t *testing.T) {
+	ctx := context.Background()
+	mockGrapher := NewMockGrapher(t)
+	dependentID := uuid.New()
+	privateTxnID := uuid.New()
+
+	// Set up mock expectations for grapher operations used during transaction creation
+	mockGrapher.EXPECT().Add(mock.Anything, mock.Anything).Return().Maybe()
+	mockGrapher.EXPECT().ForgetMints(mock.Anything).Return().Maybe()
+
+	// Create a mock dependent transaction that returns an error from HandleEvent
+	mockDependentTxn := NewMockCoordinatorTransaction(t)
+	expectedError := errors.New("handle event error")
+	mockDependentTxn.EXPECT().GetPrivateTransaction().Return(&components.PrivateTransaction{ID: privateTxnID})
+	mockDependentTxn.EXPECT().HandleEvent(ctx, mock.AnythingOfType("*transaction.DependencyReadyEvent")).Return(expectedError)
+
+	// Configure mock grapher to return the mock dependent transaction
+	mockGrapher.EXPECT().TransactionByID(ctx, dependentID).Return(mockDependentTxn)
+
+	// Create main transaction with the mock grapher and a dependent
+	txn, _ := NewTransactionBuilderForTesting(t, State_Confirmed).
+		Grapher(mockGrapher).
+		Dependencies(&pldapi.TransactionDependencies{
+			PrereqOf: []uuid.UUID{dependentID},
+		}).
+		Build()
+
+	// Call notifyDependentsOfConfirmation - should return the error from HandleEvent
+	err := txn.notifyDependentsOfConfirmation(ctx)
+	require.Error(t, err)
+	assert.Equal(t, expectedError, err)
 }
 
 func Test_notifyDependentsOfConfirmation_WithTraceEnabled(t *testing.T) {
@@ -713,4 +747,37 @@ func Test_notifyDependentsOfRevertedConfirmation_DependentNotInMemory(t *testing
 	err := txn.notifyDependentsOfRevertedConfirmation(ctx)
 	require.Error(t, err)
 	assert.True(t, strings.Contains(err.Error(), "PD012645"))
+}
+
+func Test_notifyDependentsOfRevertedConfirmation_HandleEventReturnsError(t *testing.T) {
+	ctx := context.Background()
+	mockGrapher := NewMockGrapher(t)
+	dependentID := uuid.New()
+	privateTxnID := uuid.New()
+
+	// Set up mock expectations for grapher operations used during transaction creation
+	mockGrapher.EXPECT().Add(mock.Anything, mock.Anything).Return().Maybe()
+	mockGrapher.EXPECT().ForgetMints(mock.Anything).Return().Maybe()
+
+	// Create a mock dependent transaction that returns an error from HandleEvent
+	mockDependentTxn := NewMockCoordinatorTransaction(t)
+	expectedError := errors.New("handle event error")
+	mockDependentTxn.EXPECT().GetPrivateTransaction().Return(&components.PrivateTransaction{ID: privateTxnID})
+	mockDependentTxn.EXPECT().HandleEvent(ctx, mock.AnythingOfType("*transaction.DependencyConfirmedRevertedEvent")).Return(expectedError)
+
+	// Configure mock grapher to return the mock dependent transaction
+	mockGrapher.EXPECT().TransactionByID(ctx, dependentID).Return(mockDependentTxn)
+
+	// Create main transaction with the mock grapher and a dependent
+	txn, _ := NewTransactionBuilderForTesting(t, State_Confirmed).
+		Grapher(mockGrapher).
+		Dependencies(&pldapi.TransactionDependencies{
+			PrereqOf: []uuid.UUID{dependentID},
+		}).
+		Build()
+
+	// Call notifyDependentsOfRevertedConfirmation - should return the error from HandleEvent
+	err := txn.notifyDependentsOfRevertedConfirmation(ctx)
+	require.Error(t, err)
+	assert.Equal(t, expectedError, err)
 }

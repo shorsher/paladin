@@ -168,8 +168,6 @@ func (b *OriginatorBuilderForTesting) Build(ctx context.Context) (*originator, *
 		mocks.EngineIntegration,
 		b.contractAddress,
 		&pldconf.SequencerDefaults,
-		TestDefault_HeartbeatIntervalMs,
-		TestDefault_HeartbeatThreshold,
 		b.metrics,
 	)
 

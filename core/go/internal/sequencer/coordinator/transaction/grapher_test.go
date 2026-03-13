@@ -38,7 +38,7 @@ func Test_grapher_Add_TransactionByID(t *testing.T) {
 
 	lookup := grapher.TransactionByID(ctx, txn.pt.ID)
 	require.NotNil(t, lookup)
-	assert.Equal(t, txn.pt.ID, lookup.pt.ID)
+	assert.Equal(t, txn.pt.ID, lookup.GetPrivateTransaction().ID)
 }
 
 func Test_grapher_Forget_RemovesTransaction(t *testing.T) {
@@ -71,7 +71,7 @@ func Test_grapher_ForgetMints_RemovesMinterLookup(t *testing.T) {
 
 	minter, err := grapher.LookupMinter(ctx, stateID)
 	require.NoError(t, err)
-	assert.Equal(t, txn.pt.ID, minter.pt.ID)
+	assert.Equal(t, txn.pt.ID, minter.GetPrivateTransaction().ID)
 
 	grapher.ForgetMints(txn.pt.ID)
 

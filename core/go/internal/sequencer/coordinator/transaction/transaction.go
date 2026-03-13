@@ -37,6 +37,9 @@ type CoordinatorTransaction interface {
 	GetCurrentState() State
 	HasDispatchedPublicTransaction() bool
 	GetSnapshot(ctx context.Context) (*common.SnapshotPooledTransaction, *common.SnapshotDispatchedTransaction, *common.SnapshotConfirmedTransaction)
+	GetPrivateTransaction() *components.PrivateTransaction
+	DependentsMustWait() bool
+	GetDependencies() *pldapi.TransactionDependencies
 }
 
 // coordinatorTransaction represents a transaction that is being coordinated by a contract sequencer agent in Coordinator state.
@@ -243,4 +246,16 @@ func (t *coordinatorTransaction) HasDispatchedPublicTransaction() bool {
 	defer t.RUnlock()
 	return t.pt.PreparedPublicTransaction != nil &&
 		t.pt.PreAssembly.TransactionSpecification.Intent == prototk.TransactionSpecification_SEND_TRANSACTION
+}
+
+func (t *coordinatorTransaction) GetPrivateTransaction() *components.PrivateTransaction {
+	t.RLock()
+	defer t.RUnlock()
+	return t.pt
+}
+
+func (t *coordinatorTransaction) GetDependencies() *pldapi.TransactionDependencies {
+	t.RLock()
+	defer t.RUnlock()
+	return t.dependencies
 }

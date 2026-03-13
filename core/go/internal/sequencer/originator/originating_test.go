@@ -18,24 +18,15 @@ package originator
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/common"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/originator/transaction"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
-
-func Test_action_ActiveCoordinatorUpdated_Success(t *testing.T) {
-	ctx := context.Background()
-	builder := NewOriginatorBuilderForTesting(State_Idle).CommitteeMembers("sender@senderNode", "coordinator@coordinatorNode")
-	o, _, cleanup := builder.Build(ctx)
-	defer cleanup()
-
-	err := o.stateMachineEventLoop.ProcessEvent(ctx, &ActiveCoordinatorUpdatedEvent{Coordinator: "node1"})
-	require.NoError(t, err)
-	assert.Equal(t, "node1", o.GetCurrentCoordinator())
-}
 
 func Test_action_ActiveCoordinatorUpdated_EmptyCoordinatorReturnsError(t *testing.T) {
 	ctx := context.Background()
@@ -187,17 +178,6 @@ func Test_transactionFoundInHeartbeat_FalseWhenOnlyOtherTxnsInSnapshot(t *testin
 	assert.False(t, transactionFoundInHeartbeat(o, txn))
 }
 
-func Test_sendDelegationRequest_NoActiveCoordinatorReturnsNil(t *testing.T) {
-	ctx := context.Background()
-	builder := NewOriginatorBuilderForTesting(State_Sending).CommitteeMembers("sender@senderNode", "coordinator@coordinatorNode")
-	o, _, cleanup := builder.Build(ctx)
-	defer cleanup()
-
-	o.activeCoordinatorNode = ""
-	err := o.stateMachineEventLoop.ProcessEvent(ctx, &DelegateTimeoutEvent{})
-	require.NoError(t, err)
-}
-
 func Test_sendDelegationRequest_TransactionsWithErrorsAppendedLast(t *testing.T) {
 	ctx := context.Background()
 	originatorLocator := "sender@senderNode"
@@ -311,4 +291,49 @@ func Test_validator_OriginatorTransactionStateTransitionToReverted(t *testing.T)
 	valid, err = validator_OriginatorTransactionStateTransitionToReverted(ctx, nil, &common.TransactionStateTransitionEvent[transaction.State]{To: transaction.State_Final})
 	require.NoError(t, err)
 	assert.False(t, valid)
+}
+
+func Test_guard_RedelegateThresholdExceeded_TrueWhenNoHeartbeatReceived(t *testing.T) {
+	ctx := context.Background()
+	builder := NewOriginatorBuilderForTesting(State_Sending).CommitteeMembers("sender@senderNode", "coordinator@coordinatorNode")
+	o, _, cleanup := builder.Build(ctx)
+	defer cleanup()
+
+	o.timeOfMostRecentHeartbeat = nil
+
+	assert.True(t, guard_RedelegateThresholdExceeded(ctx, o))
+}
+
+func Test_guard_RedelegateThresholdExceeded_TrueWhenClockExpired(t *testing.T) {
+	ctx := context.Background()
+	mockClock := common.NewMockClock(t)
+	mockClock.EXPECT().HasExpired(mock.Anything, mock.Anything).Return(true)
+
+	builder := NewOriginatorBuilderForTesting(State_Sending).
+		CommitteeMembers("sender@senderNode", "coordinator@coordinatorNode").
+		Clock(mockClock)
+	o, _, cleanup := builder.Build(ctx)
+	defer cleanup()
+
+	now := time.Now()
+	o.timeOfMostRecentHeartbeat = &now
+
+	assert.True(t, guard_RedelegateThresholdExceeded(ctx, o))
+}
+
+func Test_guard_RedelegateThresholdExceeded_FalseWhenClockNotExpired(t *testing.T) {
+	ctx := context.Background()
+	mockClock := common.NewMockClock(t)
+	mockClock.EXPECT().HasExpired(mock.Anything, mock.Anything).Return(false)
+
+	builder := NewOriginatorBuilderForTesting(State_Sending).
+		CommitteeMembers("sender@senderNode", "coordinator@coordinatorNode").
+		Clock(mockClock)
+	o, _, cleanup := builder.Build(ctx)
+	defer cleanup()
+
+	now := time.Now()
+	o.timeOfMostRecentHeartbeat = &now
+
+	assert.False(t, guard_RedelegateThresholdExceeded(ctx, o))
 }

@@ -50,7 +50,7 @@ func (t *coordinatorTransaction) updateSigningIdentity() {
 	}
 }
 
-func (t *coordinatorTransaction) dependentsMustWait() bool {
+func (t *coordinatorTransaction) DependentsMustWait() bool {
 	// The return value of this function is based on whether it has progress far enough that it is safe for its dependents to be dispatched.
 	log.L(context.Background()).Tracef("Checking if TX %s has progressed to dispatch state and unblocks it dependents", t.pt.ID.String())
 	// Safe to dispatch as soon as the dependency TX is dispatched
@@ -80,7 +80,7 @@ func (t *coordinatorTransaction) hasDependenciesNotReady(ctx context.Context) bo
 			return true
 		}
 
-		if dependency.dependentsMustWait() {
+		if dependency.DependentsMustWait() {
 			return true
 		}
 	}
@@ -114,12 +114,12 @@ func (t *coordinatorTransaction) notifyDependentsOfReadiness(ctx context.Context
 		} else {
 			err := dependent.HandleEvent(ctx, &DependencyReadyEvent{
 				BaseCoordinatorEvent: BaseCoordinatorEvent{
-					TransactionID: dependent.pt.ID,
+					TransactionID: dependent.GetPrivateTransaction().ID,
 				},
 			})
 
 			if err != nil {
-				log.L(ctx).Errorf("error notifying dependent transaction %s of readiness of transaction %s: %s", dependent.pt.ID, t.pt.ID, err)
+				log.L(ctx).Errorf("error notifying dependent transaction %s of readiness of transaction %s: %s", dependent.GetPrivateTransaction().ID, t.pt.ID, err)
 				return err
 			}
 		}

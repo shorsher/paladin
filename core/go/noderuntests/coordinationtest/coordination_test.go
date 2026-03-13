@@ -1256,7 +1256,8 @@ func TestTransactionSuccessChainedTransactionStopNodesBeforeCompletion(t *testin
 	// because node B is still coming up. If nothing else happens on the contract there's nothing to nudge re-delegation except the delegate timeout.
 	// Reduce it down a little here to speed up the test.
 	sequencerConfig := pldconf.SequencerDefaults
-	sequencerConfig.DelegateTimeout = confutil.P("2s")
+	sequencerConfig.HeartbeatInterval = confutil.P("1s")
+	sequencerConfig.RedelegateGracePeriod = confutil.P(1)
 
 	alice.OverrideSequencerConfig(&sequencerConfig)
 	bob.OverrideSequencerConfig(&sequencerConfig)

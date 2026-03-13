@@ -35,8 +35,8 @@ import (
 // The Grapher is not a graph data structure, but a simple index of transactions by ID and by state ID
 // the actual graph is the emergent data structure of the transactions maintaining links to each other
 type Grapher interface {
-	Add(context.Context, *coordinatorTransaction)
-	TransactionByID(ctx context.Context, transactionID uuid.UUID) *coordinatorTransaction
+	Add(context.Context, CoordinatorTransaction)
+	TransactionByID(ctx context.Context, transactionID uuid.UUID) CoordinatorTransaction
 	LookupMinter(ctx context.Context, stateID pldtypes.HexBytes) (*coordinatorTransaction, error)
 	AddMinter(ctx context.Context, stateID pldtypes.HexBytes, transaction *coordinatorTransaction) error
 	Forget(transactionID uuid.UUID) error
@@ -45,7 +45,7 @@ type Grapher interface {
 
 type grapher struct {
 	transactionByOutputState map[string]*coordinatorTransaction
-	transactionByID          map[uuid.UUID]*coordinatorTransaction
+	transactionByID          map[uuid.UUID]CoordinatorTransaction
 	outputStatesByMinter     map[uuid.UUID][]string //used for reverse lookup to cleanup transactionByOutputState
 }
 
@@ -56,13 +56,13 @@ type grapher struct {
 func NewGrapher(ctx context.Context) Grapher {
 	return &grapher{
 		transactionByOutputState: make(map[string]*coordinatorTransaction),
-		transactionByID:          make(map[uuid.UUID]*coordinatorTransaction),
+		transactionByID:          make(map[uuid.UUID]CoordinatorTransaction),
 		outputStatesByMinter:     make(map[uuid.UUID][]string),
 	}
 }
 
-func (s *grapher) Add(ctx context.Context, txn *coordinatorTransaction) {
-	s.transactionByID[txn.pt.ID] = txn
+func (s *grapher) Add(ctx context.Context, txn CoordinatorTransaction) {
+	s.transactionByID[txn.GetID()] = txn
 }
 
 func (s *grapher) LookupMinter(ctx context.Context, stateID pldtypes.HexBytes) (*coordinatorTransaction, error) {
@@ -92,11 +92,11 @@ func (s *grapher) Forget(transactionID uuid.UUID) error {
 
 // Temporary approach that removes updates depends-on list for any transactions this is a pre-req of
 // Note - this doesn't update the grapher itself
-func (s *grapher) pruneDependencyLinks(txn *coordinatorTransaction) {
+func (s *grapher) pruneDependencyLinks(txn CoordinatorTransaction) {
 	// Remove this TX from all dependent forward links.
 	dependentIDs := make(map[uuid.UUID]struct{})
-	if txn.dependencies != nil {
-		for _, dependentID := range txn.dependencies.PrereqOf {
+	if txn.GetDependencies() != nil {
+		for _, dependentID := range txn.GetDependencies().PrereqOf {
 			dependentIDs[dependentID] = struct{}{}
 		}
 	}
@@ -105,8 +105,8 @@ func (s *grapher) pruneDependencyLinks(txn *coordinatorTransaction) {
 		if dependent == nil {
 			continue
 		}
-		if dependent.dependencies != nil {
-			dependent.dependencies.DependsOn = removeUUID(dependent.dependencies.DependsOn, txn.pt.ID)
+		if dependent.GetDependencies() != nil {
+			dependent.GetDependencies().DependsOn = removeUUID(dependent.GetDependencies().DependsOn, txn.GetID())
 		}
 	}
 }
@@ -131,6 +131,6 @@ func (s *grapher) ForgetMints(transactionID uuid.UUID) {
 	// Note we specifically don't delete the transaction (i.e. the minter) here. Use Forget() to do both.
 }
 
-func (s *grapher) TransactionByID(ctx context.Context, transactionID uuid.UUID) *coordinatorTransaction {
+func (s *grapher) TransactionByID(ctx context.Context, transactionID uuid.UUID) CoordinatorTransaction {
 	return s.transactionByID[transactionID]
 }

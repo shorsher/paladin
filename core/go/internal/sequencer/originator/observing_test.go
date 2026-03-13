@@ -18,7 +18,6 @@ package originator
 import (
 	"context"
 	"testing"
-	"time"
 
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/common"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/testutil"
@@ -280,62 +279,4 @@ func Test_applyHeartbeatReceived_DispatchedTransactionNonceOnlySucceeds(t *testi
 	// This should succeed with a real transaction
 	err = o.applyHeartbeatReceived(ctx, heartbeatEvent)
 	assert.NoError(t, err)
-}
-
-func Test_guard_HeartbeatThresholdExceeded_NilTimeReturnsTrue(t *testing.T) {
-	ctx := context.Background()
-	originatorLocator := "sender@senderNode"
-	coordinatorLocator := "coordinator@coordinatorNode"
-	builder := NewOriginatorBuilderForTesting(State_Observing).CommitteeMembers(originatorLocator, coordinatorLocator)
-	o, _, cleanup := builder.Build(ctx)
-	defer cleanup()
-
-	// Ensure timeOfMostRecentHeartbeat is nil
-	o.timeOfMostRecentHeartbeat = nil
-
-	result := guard_HeartbeatThresholdExceeded(ctx, o)
-	assert.True(t, result, "Should return true when timeOfMostRecentHeartbeat is nil")
-}
-
-func Test_guard_HeartbeatThresholdExceeded_ThresholdExpiredReturnsTrue(t *testing.T) {
-	// Test that guard_HeartbeatThresholdExceeded returns true when threshold has expired
-	ctx := context.Background()
-	originatorLocator := "sender@senderNode"
-	coordinatorLocator := "coordinator@coordinatorNode"
-
-	clock := common.NewMockClock(t)
-	initialTime := time.Now()
-	clock.On("HasExpired", initialTime, time.Duration(TestDefault_HeartbeatThreshold*TestDefault_HeartbeatIntervalMs)*time.Millisecond).Return(true).Once()
-
-	builder := NewOriginatorBuilderForTesting(State_Observing).
-		Clock(clock).
-		CommitteeMembers(originatorLocator, coordinatorLocator)
-	o, _, cleanup := builder.Build(ctx)
-	defer cleanup()
-
-	o.timeOfMostRecentHeartbeat = &initialTime
-
-	result := guard_HeartbeatThresholdExceeded(ctx, o)
-	assert.True(t, result, "Should return true when threshold has expired")
-}
-
-func Test_guard_HeartbeatThresholdExceeded_ThresholdNotExpiredReturnsFalse(t *testing.T) {
-	ctx := context.Background()
-	originatorLocator := "sender@senderNode"
-	coordinatorLocator := "coordinator@coordinatorNode"
-
-	clock := common.NewMockClock(t)
-	initialTime := time.Now()
-	clock.On("HasExpired", initialTime, time.Duration(TestDefault_HeartbeatThreshold*TestDefault_HeartbeatIntervalMs)*time.Millisecond).Return(false).Once()
-
-	builder := NewOriginatorBuilderForTesting(State_Observing).
-		Clock(clock).
-		CommitteeMembers(originatorLocator, coordinatorLocator)
-	o, _, cleanup := builder.Build(ctx)
-	defer cleanup()
-
-	o.timeOfMostRecentHeartbeat = &initialTime
-
-	result := guard_HeartbeatThresholdExceeded(ctx, o)
-	assert.False(t, result, "Should return false when threshold has not expired")
 }

@@ -36,7 +36,6 @@ import (
 	"github.com/LFDT-Paladin/paladin/toolkit/pkg/prototk"
 	"github.com/google/uuid"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
 
@@ -228,6 +227,7 @@ type TransactionBuilderForTesting struct {
 	t                                  *testing.T
 	privateTransactionBuilder          *testutil.PrivateTransactionBuilderForTesting
 	originator                         string
+	originatorNode                     string
 	queueEventForCoordinator           func(context.Context, common.Event)
 	domainSigningIdentity              string
 	coordinatorSigningIdentity         string
@@ -627,7 +627,6 @@ func (b *TransactionBuilderForTesting) Build() (*coordinatorTransaction, *transa
 
 	// create the mocks needed for the NewTransaction call below
 	// the return values of these can be set by builder methods if needed
-	mocks.TXManager.On("HasChainedTransaction", mock.Anything, mock.Anything).Return(false, nil)
 	mocks.Domain.On("FixedSigningIdentity").Return("")
 	mocks.DomainAPI.On("ContractConfig").Return(&prototk.ContractConfig{
 		SubmitterSelection: b.submitterSelection,
@@ -651,12 +650,15 @@ func (b *TransactionBuilderForTesting) Build() (*coordinatorTransaction, *transa
 		clock = common.RealClock()
 	}
 
-	txn, err := newTransaction(
+	txn := newTransaction(
 		ctx,
 		b.originator,
+		b.originatorNode,
+		false,
 		b.nodeName,
 		privateTransaction,
 		b.coordinatorSigningIdentity,
+		nil,
 		transportWriter,
 		clock,
 		b.queueEventForCoordinator,

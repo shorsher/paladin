@@ -204,46 +204,14 @@ func TestTransaction_AddsItselfToGrapher(t *testing.T) {
 	assert.NotNil(t, txn)
 }
 
-func TestNewTransaction_InvalidOriginator_ReturnsError(t *testing.T) {
-	ctx := context.Background()
-
-	_, err := newTransaction(
-		ctx,
-		"", // invalid: empty originator
-		"node1",
-		&components.PrivateTransaction{ID: uuid.New()},
-		"coordinator-signer",
-		transport.NewMockTransportWriter(t),
-		common.NewMockClock(t),
-		func(ctx context.Context, event common.Event) {},
-		common.NewMockEngineIntegration(t),
-		&syncpoints.MockSyncPoints{},
-		componentsmocks.NewAllComponents(t),
-		componentsmocks.NewDomainSmartContract(t),
-		nil,
-		time.Duration(1000),
-		time.Duration(5000),
-		5,
-		0,
-		3,
-		3,
-		NewGrapher(ctx),
-		nil,
-	)
-	require.Error(t, err)
-}
-
 func TestNewTransaction_Success_ReturnsTransaction(t *testing.T) {
 	ctx := context.Background()
 	pt := &components.PrivateTransaction{ID: uuid.New()}
 	allComponents := componentsmocks.NewAllComponents(t)
-	txManager := componentsmocks.NewTXManager(t)
 	domainAPI := componentsmocks.NewDomainSmartContract(t)
 	domain := componentsmocks.NewDomain(t)
 	clock := common.NewMockClock(t)
 
-	allComponents.EXPECT().TxManager().Return(txManager)
-	txManager.EXPECT().HasChainedTransaction(mock.Anything, pt.ID).Return(false, nil)
 	domainAPI.EXPECT().Domain().Return(domain)
 	domain.EXPECT().FixedSigningIdentity().Return("domain-signer")
 	domainAPI.EXPECT().ContractConfig().Return(&prototk.ContractConfig{
@@ -251,12 +219,15 @@ func TestNewTransaction_Success_ReturnsTransaction(t *testing.T) {
 	})
 	clock.EXPECT().Now().Return(time.Now())
 
-	txn, err := newTransaction(
+	txn := newTransaction(
 		ctx,
 		"sender@node1",
 		"node1",
+		false,
+		"node1",
 		pt,
 		"coordinator-signer",
+		nil,
 		transport.NewMockTransportWriter(t),
 		clock,
 		func(ctx context.Context, event common.Event) {},
@@ -274,7 +245,6 @@ func TestNewTransaction_Success_ReturnsTransaction(t *testing.T) {
 		NewGrapher(ctx),
 		nil,
 	)
-	require.NoError(t, err)
 	require.NotNil(t, txn)
 	assert.Equal(t, pt.ID, txn.GetID())
 	assert.Equal(t, State_Initial, txn.GetCurrentState())

@@ -1143,3 +1143,40 @@ func TestCoordinator_PropagateEventToAllTransactions_IncrementsHeartbeatCounterF
 	// Transaction should have transitioned to State_Final
 	assert.Equal(t, transaction.State_Final, txn.GetCurrentState(), "transaction should have transitioned to State_Final after heartbeat")
 }
+
+func TestCoordinator_PropagateEventToAllTransactions_HandleEventReturnsError(t *testing.T) {
+	ctx := context.Background()
+	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
+	c, _, done := builder.Build(ctx)
+	defer done()
+
+	// Create a mock transaction that returns an error from HandleEvent
+	mockTxn := transaction.NewMockCoordinatorTransaction(t)
+	txnID := uuid.New()
+	expectedError := fmt.Errorf("handle event error")
+
+	mockTxn.EXPECT().GetID().Return(txnID)
+	mockTxn.EXPECT().HandleEvent(ctx, mock.AnythingOfType("*common.HeartbeatIntervalEvent")).Return(expectedError)
+
+	// Add mock transaction to coordinator
+	c.transactionsByID[txnID] = mockTxn
+
+	// Propagate heartbeat event - should return the error
+	event := &common.HeartbeatIntervalEvent{}
+	err := c.propagateEventToAllTransactions(ctx, event)
+	require.Error(t, err)
+	assert.Equal(t, expectedError, err)
+}
+
+func TestCoordinator_WaitForDone_ReturnsEarlyWhenContextCancelled(t *testing.T) {
+	ctx := context.Background()
+	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
+	c, _, done := builder.Build(ctx)
+	defer done()
+
+	// Create a context that is already cancelled
+	cancelledCtx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	c.WaitForDone(cancelledCtx)
+}

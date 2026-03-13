@@ -199,28 +199,6 @@ func Test_applyEndorsement_NoPendingRequestForParty_IgnoresAndReturnsNil(t *test
 	assert.Empty(t, txn.pt.PostAssembly.Endorsements)
 }
 
-func Test_sendEndorsementRequests_NudgeReturnsError_SetsLatestError(t *testing.T) {
-	ctx := context.Background()
-	txn, mocks := NewTransactionBuilderForTesting(t, State_Endorsement_Gathering).
-		UseMockTransportWriter().
-		PostAssembly(&components.TransactionPostAssembly{
-			AttestationPlan: []*prototk.AttestationRequest{{Name: "att1", AttestationType: prototk.AttestationType_ENDORSE, Parties: []string{"party1"}}},
-			Endorsements:    []*prototk.AttestationResult{},
-		}).
-		Build()
-
-	mocks.TransportWriter.EXPECT().
-		SendEndorsementRequest(
-			ctx, txn.pt.ID, mock.Anything, "party1", mock.Anything,
-			(*prototk.TransactionSpecification)(nil), mock.Anything, mock.Anything,
-			mock.Anything, mock.Anything, mock.Anything, mock.Anything,
-		).Return(assert.AnError)
-
-	err := txn.sendEndorsementRequests(ctx)
-	require.NoError(t, err)
-	assert.NotEmpty(t, txn.latestError)
-}
-
 func Test_resetEndorsementRequests_WhenPendingNotNull_CancelsAndClears(t *testing.T) {
 	ctx := context.Background()
 	cancelCalled := false
@@ -276,26 +254,4 @@ func Test_EndorsementCompletion_ResetsRequests_OnTransitionToBlocked(t *testing.
 	require.NoError(t, err)
 	require.Equal(t, State_Blocked, txn.stateMachine.GetCurrentState())
 	assert.Nil(t, txn.pendingEndorsementRequests)
-}
-
-func Test_requestEndorsement_TransportError_SetsLatestErrorAndReturnsError(t *testing.T) {
-	ctx := context.Background()
-	txn, mocks := NewTransactionBuilderForTesting(t, State_Endorsement_Gathering).
-		UseMockTransportWriter().
-		PostAssembly(&components.TransactionPostAssembly{
-			AttestationPlan: []*prototk.AttestationRequest{{Name: "att1", AttestationType: prototk.AttestationType_ENDORSE, Parties: []string{"party1"}}},
-			Endorsements:    []*prototk.AttestationResult{},
-		}).
-		Build()
-
-	mocks.TransportWriter.EXPECT().
-		SendEndorsementRequest(
-			ctx, txn.pt.ID, mock.Anything, "party1", mock.Anything,
-			mock.Anything, mock.Anything, mock.Anything,
-			mock.Anything, mock.Anything, mock.Anything, mock.Anything,
-		).Return(assert.AnError)
-
-	err := txn.requestEndorsement(ctx, uuid.New(), "party1", &prototk.AttestationRequest{Name: "att1"})
-	require.Error(t, err)
-	assert.NotEmpty(t, txn.latestError)
 }

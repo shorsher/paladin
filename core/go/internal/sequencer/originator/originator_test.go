@@ -21,7 +21,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/LFDT-Paladin/paladin/config/pkg/confutil"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/common"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/metrics"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/originator/transaction"
@@ -125,97 +124,6 @@ func TestOriginator_SingleTransactionLifecycle(t *testing.T) {
 	// unconfirmed transactions left, the originator transitions back to State_Observing.
 	require.Eventually(t, func() bool { return s.transactionsByID[txn.ID] == nil }, 100*time.Millisecond, 1*time.Millisecond, "Transaction should be cleaned up from transactionsByID after confirmation")
 	require.Eventually(t, func() bool { return s.GetCurrentState() == State_Observing }, 100*time.Millisecond, 1*time.Millisecond, "Originator should transition to Observing when all transactions are confirmed")
-}
-
-func TestOriginator_DelegateDroppedTransactions(t *testing.T) {
-
-	ctx := context.Background()
-	originatorLocator := "sender@senderNode"
-	coordinatorLocator := "coordinator@coordinatorNode"
-	builder := NewOriginatorBuilderForTesting(State_Idle).CommitteeMembers(originatorLocator, coordinatorLocator)
-	config := builder.GetSequencerConfig()
-	config.DelegateTimeout = confutil.P("100ms")
-	builder.OverrideSequencerConfig(config)
-	s, mocks, cleanup := builder.Build(ctx)
-	defer cleanup()
-
-	//ensure the originator is in observing mode by emulating a heartbeat from an active coordinator
-	contractAddress := builder.GetContractAddress()
-	heartbeatEvent := &HeartbeatReceivedEvent{}
-	heartbeatEvent.From = coordinatorLocator
-	heartbeatEvent.ContractAddress = &contractAddress
-	s.QueueEvent(ctx, heartbeatEvent)
-	require.Eventually(t, func() bool { return s.GetCurrentState() == State_Observing }, 100*time.Millisecond, 1*time.Millisecond, "Originator should transition to Observing")
-
-	transactionBuilder1 := testutil.NewPrivateTransactionBuilderForTesting().Address(builder.GetContractAddress()).Originator(originatorLocator).NumberOfRequiredEndorsers(1)
-	txn1 := transactionBuilder1.BuildSparse()
-	s.QueueEvent(ctx, &TransactionCreatedEvent{Transaction: txn1})
-	// Assert that a delegation request has been sent to the coordinator
-	require.Eventually(t, func() bool { return mocks.SentMessageRecorder.HasSentDelegationRequest() }, 100*time.Millisecond, 1*time.Millisecond, "Delegation request should be sent")
-	mocks.SentMessageRecorder.Reset(ctx)
-
-	transactionBuilder2 := testutil.NewPrivateTransactionBuilderForTesting().Address(builder.GetContractAddress()).Originator(originatorLocator).NumberOfRequiredEndorsers(1)
-	txn2 := transactionBuilder2.BuildSparse()
-	s.QueueEvent(ctx, &TransactionCreatedEvent{Transaction: txn2})
-	// Assert that a delegation request has been sent to the coordinator
-	require.Eventually(t, func() bool { return mocks.SentMessageRecorder.HasSentDelegationRequest() }, 100*time.Millisecond, 1*time.Millisecond, "Delegation request should be sent")
-	mocks.SentMessageRecorder.Reset(ctx)
-
-	heartbeatWithPooled := &HeartbeatReceivedEvent{}
-	heartbeatWithPooled.From = coordinatorLocator
-	heartbeatWithPooled.ContractAddress = &contractAddress
-	heartbeatWithPooled.PooledTransactions = []*common.SnapshotPooledTransaction{
-		{
-			ID:         txn1.ID,
-			Originator: originatorLocator,
-		},
-	}
-	// Real-time wait for delegate timeout (100ms) to elapse so re-delegation can fire; sync events cannot advance the ticker
-	time.Sleep(110 * time.Millisecond)
-	s.QueueEvent(ctx, heartbeatWithPooled)
-	require.Eventually(t, func() bool { return mocks.SentMessageRecorder.HasSentDelegationRequest() }, 100*time.Millisecond, 1*time.Millisecond, "Delegation request should be sent after heartbeat")
-	require.True(t, mocks.SentMessageRecorder.HasDelegatedTransaction(txn1.ID))
-	require.True(t, mocks.SentMessageRecorder.HasDelegatedTransaction(txn2.ID))
-}
-
-func TestOriginator_TransactionConfirmedViaTransactionEvent_AllStates(t *testing.T) {
-	ctx := context.Background()
-
-	tests := []struct {
-		name          string
-		initialState  State
-		expectedState State
-	}{
-		{name: "Idle", initialState: State_Idle, expectedState: State_Idle},
-		{name: "Observing", initialState: State_Observing, expectedState: State_Observing},
-		{name: "Sending", initialState: State_Sending, expectedState: State_Observing},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			builder := NewOriginatorBuilderForTesting(tc.initialState).CommitteeMembers("member1@node1", "member2@node2")
-			txBuilder := transaction.NewTransactionBuilderForTesting(t, transaction.State_Submitted)
-			builder.TransactionBuilders(txBuilder)
-
-			s, _, cleanup := builder.Build(ctx)
-			defer cleanup()
-			txn := txBuilder.GetBuiltTransaction()
-			require.NotNil(t, txn)
-
-			s.QueueEvent(ctx, &transaction.ConfirmedSuccessEvent{
-				BaseEvent: transaction.BaseEvent{
-					BaseEvent:     common.BaseEvent{EventTime: time.Now()},
-					TransactionID: txn.GetID(),
-				},
-			})
-
-			require.Eventually(t, func() bool {
-				state := txn.GetCurrentState()
-				return state == transaction.State_Confirmed || state == transaction.State_Final
-			}, 100*time.Millisecond, 1*time.Millisecond)
-			require.Eventually(t, func() bool { return s.GetCurrentState() == tc.expectedState }, 100*time.Millisecond, 1*time.Millisecond)
-		})
-	}
 }
 
 func Test_propagateEventToTransaction_UnknownTransaction_AssembleRequestSendsUnknown(t *testing.T) {
@@ -326,69 +234,6 @@ func TestOriginator_EventLoop_ErrorHandling(t *testing.T) {
 	// Queue a valid event to verify the originator is still working
 	s.QueueEvent(ctx, validEvent)
 	require.Eventually(t, func() bool { return mocks.SentMessageRecorder.HasSentDelegationRequest() }, 100*time.Millisecond, 1*time.Millisecond, "Originator should still process valid event after error")
-}
-
-// Stop behaviour: the common statemachine package covers the event loop (stop signal,
-// idempotent Stop, concurrent Stop) — see TestStateMachineEventLoop_Stop_WhenAlreadyStopped
-// and TestStateMachineEventLoop_Stop_ConcurrentCalls. The tests below cover how the
-// originator consumes this: it stops the delegate loop first, then the state machine
-// event loop, and Stop() is idempotent at the originator level.
-
-// TestOriginator_Stop_Completes verifies that Stop() returns after both the delegate loop
-// and the state machine event loop have stopped.
-func TestOriginator_Stop_Completes(t *testing.T) {
-	ctx := context.Background()
-	builder := NewOriginatorBuilderForTesting(State_Idle).CommitteeMembers("sender@senderNode", "coordinator@coordinatorNode")
-	s, _, cleanup := builder.Build(ctx)
-
-	cleanup()
-
-	require.True(t, s.stateMachineEventLoop.IsStopped(), "state machine event loop should be stopped")
-	_, ok := <-s.delegateLoopStopped
-	require.False(t, ok, "delegateLoopStopped channel should be closed")
-}
-
-// TestOriginator_Stop_Idempotent verifies that calling Stop() twice is safe and does not panic.
-func TestOriginator_Stop_Idempotent(t *testing.T) {
-	ctx := context.Background()
-	builder := NewOriginatorBuilderForTesting(State_Idle).CommitteeMembers("sender@senderNode", "coordinator@coordinatorNode")
-	s, _, cleanup := builder.Build(ctx)
-
-	cleanup()
-	cleanup()
-
-	require.True(t, s.stateMachineEventLoop.IsStopped(), "state machine event loop should be stopped")
-	_, ok := <-s.delegateLoopStopped
-	require.False(t, ok, "delegateLoopStopped channel should be closed")
-}
-
-// TestOriginator_Stop_AfterEventsProcessed verifies that after queuing events and waiting for
-// them to be processed (via the common state machine event loop), Stop() completes and both
-// the delegate loop and the state machine event loop are stopped.
-func TestOriginator_Stop_AfterEventsProcessed(t *testing.T) {
-	ctx := context.Background()
-	originatorLocator := "sender@senderNode"
-	coordinatorLocator := "coordinator@coordinatorNode"
-	builder := NewOriginatorBuilderForTesting(State_Idle).CommitteeMembers(originatorLocator, coordinatorLocator)
-	s, mocks, cleanup := builder.Build(ctx)
-
-	contractAddress := builder.GetContractAddress()
-	heartbeatEvent := &HeartbeatReceivedEvent{}
-	heartbeatEvent.From = coordinatorLocator
-	heartbeatEvent.ContractAddress = &contractAddress
-	s.QueueEvent(ctx, heartbeatEvent)
-	require.Eventually(t, func() bool { return s.GetCurrentState() == State_Observing }, 100*time.Millisecond, 1*time.Millisecond, "Originator should transition to Observing")
-
-	transactionBuilder := testutil.NewPrivateTransactionBuilderForTesting().Address(builder.GetContractAddress()).Originator(originatorLocator).NumberOfRequiredEndorsers(1)
-	txn := transactionBuilder.BuildSparse()
-	s.QueueEvent(ctx, &TransactionCreatedEvent{Transaction: txn})
-	require.Eventually(t, func() bool { return mocks.SentMessageRecorder.HasSentDelegationRequest() }, 100*time.Millisecond, 1*time.Millisecond, "Event should be processed before cleanup")
-
-	cleanup()
-
-	require.True(t, s.stateMachineEventLoop.IsStopped(), "state machine event loop should be stopped")
-	_, ok := <-s.delegateLoopStopped
-	require.False(t, ok, "delegateLoopStopped channel should be closed")
 }
 
 type mockFailingTransaction struct {
