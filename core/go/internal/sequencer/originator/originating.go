@@ -18,6 +18,7 @@ package originator
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/LFDT-Paladin/paladin/common/go/pkg/i18n"
 	"github.com/LFDT-Paladin/paladin/common/go/pkg/log"
@@ -56,7 +57,7 @@ func (o *originator) createTransaction(ctx context.Context, txn *components.Priv
 	return nil
 }
 
-func sendDelegationRequest(ctx context.Context, o *originator, includeAlreadyDelegated bool, ignoreDelegateTimeout bool) error {
+func sendDelegationRequest(ctx context.Context, o *originator) error {
 	if o.activeCoordinatorNode == "" {
 		// the delegation timeout loop ensures that this request will be retried when we have an active coordinator
 		log.L(ctx).Debugf("no active coordinator set yet; deferring delegation for contract %s", o.contractAddress.String())
@@ -69,22 +70,12 @@ func sendDelegationRequest(ctx context.Context, o *originator, includeAlreadyDel
 	privateTransactions := make([]*components.PrivateTransaction, 0)
 	transactionsToDelegate := make([]*transaction.OriginatorTransaction, 0)
 	for _, txn := range o.transactionsOrdered {
-		if includeAlreadyDelegated && txn.GetCurrentState() == transaction.State_Delegated &&
-			(ignoreDelegateTimeout || (txn.GetLastDelegatedTime() != nil && o.clock.HasExpired(*txn.GetLastDelegatedTime(), o.delegateTimeout))) {
-			// only re-delegate after the delegate timeout
-
+		// Every delegation request must include all transaction that have not yet been assembled for the first time, sent
+		// in the order they were created on the originating node. This allows the coordinator to respect FIFO ordering
+		// within an originator up until first assembly.
+		if txn.GetCurrentState() == transaction.State_Delegated || txn.GetCurrentState() == transaction.State_Pending {
 			if txn.GetAssembleErrorCount() > 0 {
-				// These get re-delegated but after everyone else
-				transactionsWithErrors = append(transactionsWithErrors, txn.GetPrivateTransaction())
-			} else {
-				privateTransactions = append(privateTransactions, txn.GetPrivateTransaction())
-			}
-			transactionsToDelegate = append(transactionsToDelegate, txn)
-		}
-
-		if txn.GetCurrentState() == transaction.State_Pending {
-			if txn.GetAssembleErrorCount() > 0 {
-				// These get re-delegated but after everyone else
+				// These get re-delegated but are put to the end of the list
 				transactionsWithErrors = append(transactionsWithErrors, txn.GetPrivateTransaction())
 			} else {
 				privateTransactions = append(privateTransactions, txn.GetPrivateTransaction())
@@ -113,16 +104,8 @@ func sendDelegationRequest(ctx context.Context, o *originator, includeAlreadyDel
 	return o.transportWriter.SendDelegationRequest(ctx, o.activeCoordinatorNode, append(privateTransactions, transactionsWithErrors...), o.currentBlockHeight)
 }
 
-func action_SendDroppedTXDelegationRequest(ctx context.Context, o *originator, _ common.Event) error {
-	return sendDelegationRequest(ctx, o, true, true)
-}
-
-func action_ResendTimedOutDelegationRequest(ctx context.Context, o *originator, _ common.Event) error {
-	return sendDelegationRequest(ctx, o, true, false)
-}
-
 func action_SendDelegationRequest(ctx context.Context, o *originator, _ common.Event) error {
-	return sendDelegationRequest(ctx, o, false, false)
+	return sendDelegationRequest(ctx, o)
 }
 
 func guard_HasDroppedTransactions(ctx context.Context, o *originator) bool {
@@ -232,4 +215,15 @@ func action_ActiveCoordinatorUpdated(ctx context.Context, o *originator, event c
 	o.activeCoordinatorNode = e.Coordinator
 	log.L(ctx).Debugf("active coordinator updated to %s", e.Coordinator)
 	return nil
+}
+
+func guard_RedelegateThresholdExceeded(_ context.Context, o *originator) bool {
+	if o.timeOfMostRecentHeartbeat == nil {
+		//we have never seen a heartbeat so that was a really long time ago, certainly longer than any threshold
+		return true
+	}
+	if o.clock.HasExpired(*o.timeOfMostRecentHeartbeat, time.Duration(o.redelegateThreshold)*o.heartbeatInterval) {
+		return true
+	}
+	return false
 }
