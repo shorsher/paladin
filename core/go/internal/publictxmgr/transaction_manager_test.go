@@ -1070,7 +1070,9 @@ func TestWriteNewTransactionsEmptyList(t *testing.T) {
 
 func TestWriteNewTransactionsTraceLogging(t *testing.T) {
 	ctx := context.Background()
-	_, ptm, _, done := newTestPublicTxManager(t, true)
+	_, ptm, _, done := newTestPublicTxManager(t, true, func(mocks *mocksAndTestControl, conf *pldconf.PublicTxManagerConfig) {
+		mocks.disableManagerStart = true
+	})
 	defer done()
 
 	// Enable trace so the "WriteNewTransactions transaction ID" block runs
