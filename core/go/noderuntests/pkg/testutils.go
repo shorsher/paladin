@@ -90,7 +90,7 @@ func NewNodeConfiguration(t *testing.T, nodeName string) *nodeConfiguration {
 	require.NoError(t, err)
 	cert, key := buildTestCertificate(t, pkix.Name{CommonName: nodeName}, nil, nil)
 	return &nodeConfiguration{
-		address: "localhost",
+		address: "127.0.0.1",
 		port:    port,
 		cert:    cert,
 		key:     key,
@@ -229,7 +229,7 @@ func NewInstanceForTesting(t *testing.T, domainRegistryAddress *pldtypes.EthAddr
 				Library: "loaded/via/unit/test/loader",
 			},
 			Config: map[string]any{
-				"address": "localhost",
+				"address": binding.address,
 				"port":    binding.port,
 				"tls": pldconf.TLSConfig{
 					Enabled: true,
