@@ -640,9 +640,23 @@ func (p *partyForTesting) Start(t *testing.T, domainConfig any, configPath strin
 }
 
 func (p *partyForTesting) Stop(t *testing.T) {
+	if p.instance == nil {
+		return
+	}
 	p.instance.GetComponentManager().Stop()
 	p.instance.GetPluginManager().Stop()
 	p.instance.CancelInstanceCtx()
+
+	// Avoid restart races by waiting for the transport listener to release its bind port.
+	listenerAddr := net.JoinHostPort(p.nodeConfig.address, strconv.Itoa(p.nodeConfig.port))
+	require.Eventually(t, func() bool {
+		conn, err := net.DialTimeout("tcp", listenerAddr, 100*time.Millisecond)
+		if err != nil {
+			return true
+		}
+		_ = conn.Close()
+		return false
+	}, 10*time.Second, 100*time.Millisecond, "transport listener still accepting connections on %s", listenerAddr)
 }
 
 func (p *partyForTesting) ResolveEthereumAddress(identity string) string {
