@@ -86,7 +86,7 @@ func Test_queueEventInternal_QueuesPriorityEvent(t *testing.T) {
 	require.False(t, c.stateMachineEventLoop.IsStopped(), "event loop should still be running")
 }
 
-func Test_TryQueueEvent_DelegatesToEventLoop(t *testing.T) {
+func Test_TryQueueEvent_QueuesToEventLoop(t *testing.T) {
 	ctx := context.Background()
 	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
 	c, _, done := builder.Build(ctx)

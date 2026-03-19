@@ -729,7 +729,6 @@ var (
 	SequencerConfigBaseLedgerRevertRetryThreshold    = pdm("SequencerConfig.baseLedgerRevertRetryThreshold", "Maximum number of times a transaction can be retried after a retryable base ledger revert before it is finalized as failed")
 	SequencerConfigDelegateTimeout                   = pdm("SequencerConfig.delegateTimeout", "Timeout for re-delegating transactions")
 	SequencerConfigHeartbeatInterval                 = pdm("SequencerConfig.heartbeatInterval", "Heartbeat interval for coordinators")
-	SequencerConfigHeartbeatThreshold                = pdm("SequencerConfig.heartbeatThreshold", "Heartbeat threshold")
 	SequencerConfigMaxInflightTransactions           = pdm("SequencerConfig.maxInflightTransactions", "Maximum number of inflight transactions")
 	SequencerConfigMaxDispatchAhead                  = pdm("SequencerConfig.maxDispatchAhead", "Maximum number of transactions to dispatch ahead")
 	SequencerConfigOriginatorIdleGracePeriod         = pdm("SequencerConfig.originatorIdleGracePeriod", "Number of heartbeats to receive before moving to idle state")

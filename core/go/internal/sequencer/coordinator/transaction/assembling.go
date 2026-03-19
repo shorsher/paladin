@@ -190,11 +190,6 @@ func (t *coordinatorTransaction) writeLockStates(ctx context.Context) error {
 
 func validator_MatchesPendingAssembleRequest(ctx context.Context, txn *coordinatorTransaction, event common.Event) (bool, error) {
 	switch event := event.(type) {
-	// TODO: Snapshot freshness
-	// We currently accept an assemble response if the request ID matches the pending request.
-	// Add a snapshot version to assemble requests/responses and reject responses
-	// that were built from a snapshot older than the transaction's current assembly version.
-	// This is intended to guard against stale in-flight assemble responses after repool/unwind.
 	case *AssembleSuccessEvent:
 		return txn.pendingAssembleRequest != nil && txn.pendingAssembleRequest.IdempotencyKey() == event.RequestID, nil
 	case *AssembleRevertResponseEvent:

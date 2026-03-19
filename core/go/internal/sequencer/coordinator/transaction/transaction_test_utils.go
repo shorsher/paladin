@@ -227,6 +227,7 @@ type TransactionBuilderForTesting struct {
 	t                                  *testing.T
 	privateTransactionBuilder          *testutil.PrivateTransactionBuilderForTesting
 	originator                         string
+	originatorNode                     string
 	queueEventForCoordinator           func(context.Context, common.Event)
 	domainSigningIdentity              string
 	coordinatorSigningIdentity         string
@@ -255,6 +256,7 @@ type TransactionBuilderForTesting struct {
 	submitterSelection                 prototk.ContractConfig_SubmitterSelection
 	nodeName                           string
 	baseLedgerRevertRetryThreshold     int
+	assembleErrorCount                 int
 	assembleErrorRetryThreshhold       int
 	revertCount                        int
 }
@@ -265,6 +267,7 @@ func NewTransactionBuilderForTesting(t *testing.T, state State) *TransactionBuil
 	builder := &TransactionBuilderForTesting{
 		t:                                 t,
 		originator:                        "sender@node1",
+		originatorNode:                    "node1",
 		queueEventForCoordinator:          func(context.Context, common.Event) {},
 		signerAddress:                     nil,
 		latestSubmissionHash:              nil,
@@ -495,6 +498,16 @@ func (b *TransactionBuilderForTesting) BaseLedgerRevertRetryThreshold(threshold 
 	return b
 }
 
+func (b *TransactionBuilderForTesting) AssembleErrorCount(count int) *TransactionBuilderForTesting {
+	b.assembleErrorCount = count
+	return b
+}
+
+func (b *TransactionBuilderForTesting) AssembleErrorRetryThreshold(threshold int) *TransactionBuilderForTesting {
+	b.assembleErrorRetryThreshhold = threshold
+	return b
+}
+
 func (b *TransactionBuilderForTesting) RevertCount(count int) *TransactionBuilderForTesting {
 	b.revertCount = count
 	return b
@@ -637,9 +650,10 @@ func (b *TransactionBuilderForTesting) Build() (*coordinatorTransaction, *transa
 		clock = common.RealClock()
 	}
 
-	txn, err := newTransaction(
+	txn := newTransaction(
 		ctx,
 		b.originator,
+		b.originatorNode,
 		b.nodeName,
 		privateTransaction,
 		b.coordinatorSigningIdentity,
@@ -674,6 +688,7 @@ func (b *TransactionBuilderForTesting) Build() (*coordinatorTransaction, *transa
 	txn.stateMachine.CurrentState = b.state
 	txn.revertReason = b.revertReason
 	txn.revertCount = b.revertCount
+	txn.assembleErrorCount = b.assembleErrorCount
 
 	if b.dependencies != nil {
 		txn.dependencies = b.dependencies

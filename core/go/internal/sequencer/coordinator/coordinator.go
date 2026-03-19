@@ -173,7 +173,7 @@ func NewCoordinator(
 	c.closingGracePeriod = confutil.IntMin(configuration.ClosingGracePeriod, pldconf.SequencerMinimum.ClosingGracePeriod, *pldconf.SequencerDefaults.ClosingGracePeriod)
 	c.confirmedLockRetentionGracePeriod = confutil.IntMin(configuration.ConfirmedLockRetentionGracePeriod, pldconf.SequencerMinimum.ConfirmedLockRetentionGracePeriod, *pldconf.SequencerDefaults.ConfirmedLockRetentionGracePeriod)
 	c.baseLedgerRevertRetryThreshold = confutil.IntMin(configuration.BaseLedgerRevertRetryThreshold, pldconf.SequencerMinimum.BaseLedgerRevertRetryThreshold, *pldconf.SequencerDefaults.BaseLedgerRevertRetryThreshold)
-	c.assembleErrorRetryThreshhold = confutil.IntMin(configuration.AssembleErrorRetryThreshhold, pldconf.SequencerMinimum.AssembleErrorRetryThreshhold, *pldconf.SequencerDefaults.AssembleErrorRetryThreshhold)
+	c.assembleErrorRetryThreshhold = confutil.IntMin(configuration.AssembleErrorRetryThreshold, pldconf.SequencerMinimum.AssembleErrorRetryThreshold, *pldconf.SequencerDefaults.AssembleErrorRetryThreshold)
 	c.maxInflightTransactions = confutil.IntMin(configuration.MaxInflightTransactions, pldconf.SequencerMinimum.MaxInflightTransactions, *pldconf.SequencerDefaults.MaxInflightTransactions)
 	c.heartbeatInterval = confutil.DurationMin(configuration.HeartbeatInterval, pldconf.SequencerMinimum.HeartbeatInterval, *pldconf.SequencerDefaults.HeartbeatInterval)
 	c.coordinatorSelectionBlockRange = confutil.Uint64Min(configuration.BlockRange, pldconf.SequencerMinimum.BlockRange, *pldconf.SequencerDefaults.BlockRange)

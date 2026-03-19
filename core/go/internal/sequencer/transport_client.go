@@ -437,25 +437,26 @@ func (sMgr *sequencerManager) handleDelegationRequestAcknowledgment(ctx context.
 
 	rejectedDelegationIDs := make([]string, 0, len(delegationRequestAcknowledgment.TransactionIds))
 	rejectedDelegationMaxInFlight := 0
-	rejectedDelegationUnknownError := 0
+	rejectedDelegationCoordinatorError := 0
 
 	// Currently we don't act on specific errors, but we have the option in the future to treat a specific delegate rejection
 	// differently to just relying on re-delegate on the next heartbeat/timeout. For now log explicit rejections from the coordinator.
-	for i, error := range delegationRequestAcknowledgment.Errors {
-		if error == int64(coordinator.DelegationAcknowledgementError_MaxInflightTransactions) {
+	for i, errorCode := range delegationRequestAcknowledgment.Errors {
+		switch coordinator.DelegationAcknowledgementError(errorCode) {
+		case coordinator.DelegationAcknowledgementError_MaxInflightTransactions:
 			rejectedDelegationIDs = append(rejectedDelegationIDs, delegationRequestAcknowledgment.TransactionIds[i])
 			rejectedDelegationMaxInFlight++
-		} else if error != int64(coordinator.DelegationAcknowledgementError_None) {
-			log.L(ctx).Tracef("transaction %s rejected by coordinator - unknown error", delegationRequestAcknowledgment.TransactionIds[i])
-			rejectedDelegationUnknownError++
+		case coordinator.DelegationAcknowledgementError_CoordinatorError, coordinator.DelegationAcknowledgementError_PreviousTransactionError:
+			rejectedDelegationCoordinatorError++
 		}
 	}
 
 	if rejectedDelegationMaxInFlight > 0 {
-		log.L(ctx).Debugf("coordinator rejected %d delegations with max in flight limit: %+v", rejectedDelegationMaxInFlight, rejectedDelegationIDs)
+		log.L(ctx).Debugf("coordinator rejected %d delegations with max in flight limit", rejectedDelegationMaxInFlight)
+		log.L(ctx).Tracef("rejected delegations: %+v", rejectedDelegationIDs)
 	}
-	if rejectedDelegationUnknownError > 0 {
-		log.L(ctx).Warnf("coordinator rejected %d delegations, unknown error", rejectedDelegationUnknownError)
+	if rejectedDelegationCoordinatorError > 0 {
+		log.L(ctx).Warnf("coordinator error processing %d delegations", rejectedDelegationCoordinatorError)
 	}
 }
 

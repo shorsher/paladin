@@ -100,6 +100,7 @@ var stateDefinitionsMap = StateDefinitions{
 					},
 					{
 						To: State_Pooled,
+						If: statemachine.GuardNot(guard_HasUnassembledDependencies), // No-op check (opposite of guard_HasUnassembledDependencies above) but including to be explicit when we should go to pooled
 					},
 				},
 			},

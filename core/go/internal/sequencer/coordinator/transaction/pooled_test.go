@@ -36,7 +36,7 @@ func Test_action_ResetTransactionLocks(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func Test_action_ReinitializeForNewAssembly_Success(t *testing.T) {
+func Test_action_InitializeForNewAssembly_Success(t *testing.T) {
 	ctx := context.Background()
 	grapher := NewGrapher(ctx)
 

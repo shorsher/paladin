@@ -24,6 +24,7 @@ import (
 	"github.com/LFDT-Paladin/paladin/core/internal/msgs"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/common"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/coordinator/transaction"
+	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldtypes"
 	"github.com/LFDT-Paladin/paladin/toolkit/pkg/prototk"
 	"github.com/google/uuid"
 )
@@ -59,12 +60,20 @@ func (c *coordinator) addToDelegatedTransactions(ctx context.Context, originator
 	inProgressTransactions := 0
 	var txnHandlingError error
 
+	_, originatorNode, err := pldtypes.PrivateIdentityLocator(originator).Validate(ctx, "", false)
+	if err != nil {
+		log.L(ctx).Errorf("error validating originator %s: %s", originator, err)
+		// This is likely a code bug that the originator can't do anything about, and since we can't parse the node to send an acknowledgement back to,
+		// no point sending a delegation acknowledgement here.
+		return err
+	}
+
 	for i, txn := range transactions {
 		// Acknowledge every delegation
 		delegateAcknowledgementIDs = append(delegateAcknowledgementIDs, txn.ID.String())
 
-		// Any previous errors, don't handle this TX
 		if txnHandlingError != nil {
+			// Any previous errors, don't handle this or subsequent TXNs to maintain FIFO ordering
 			delegateAcknowledgementErrors[i] = int64(DelegationAcknowledgementError_PreviousTransactionError)
 			continue
 		}
@@ -128,9 +137,10 @@ func (c *coordinator) addToDelegatedTransactions(ctx context.Context, originator
 			}
 		}
 
-		newTransaction, err := transaction.NewTransaction(
+		newTransaction := transaction.NewTransaction(
 			ctx,
 			originator,
+			originatorNode,
 			c.nodeName,
 			txn,
 			c.signingIdentity,
@@ -153,13 +163,6 @@ func (c *coordinator) addToDelegatedTransactions(ctx context.Context, originator
 			c.metrics,
 		)
 
-		if err != nil {
-			txnHandlingError = err
-			delegateAcknowledgementErrors[i] = int64(DelegationAcknowledgementError_CoordinatorError)
-			// All subsequent transactions will be skipped
-			continue
-		}
-
 		c.transactionsByID[txn.ID] = newTransaction
 		c.metrics.IncCoordinatingTransactions()
 		acceptedTransactions++
@@ -178,13 +181,13 @@ func (c *coordinator) addToDelegatedTransactions(ctx context.Context, originator
 	}
 
 	// Acknowledge the delegate request. Optionally errors can be returned which the originator may use to base re-delegate decisions on
-	err := c.transportWriter.SendDelegationRequestAcknowledgment(ctx, c.nodeName, delegationID, delegateAcknowledgementIDs, delegateAcknowledgementErrors)
+	err = c.transportWriter.SendDelegationRequestAcknowledgment(ctx, originatorNode, delegationID, delegateAcknowledgementIDs, delegateAcknowledgementErrors)
 	if err != nil {
 		return err
 	}
 
 	if rejectedMaxInFlight > 0 {
-		err := i18n.NewError(ctx, msgs.MsgSequencerMaxInflightTransactions, c.maxInflightTransactions, len(transactions), acceptedTransactions, rejectedMaxInFlight)
+		err := i18n.NewError(ctx, msgs.MsgSequencerMaxInflightTransactions, c.maxInflightTransactions, len(transactions), acceptedTransactions, inProgressTransactions, rejectedMaxInFlight)
 		return err
 	}
 

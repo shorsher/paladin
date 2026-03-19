@@ -70,18 +70,15 @@ func sendDelegationRequest(ctx context.Context, o *originator) error {
 	privateTransactions := make([]*components.PrivateTransaction, 0)
 	transactionsToDelegate := make([]*transaction.OriginatorTransaction, 0)
 	for _, txn := range o.transactionsOrdered {
-		// Every delegation request must include all transaction that have not yet been assembled for the first time, sent
-		// in the order they were created on the originating node. This allows the coordinator to respect FIFO ordering
-		// within an originator up until first assembly.
-		if txn.GetCurrentState() == transaction.State_Delegated || txn.GetCurrentState() == transaction.State_Pending {
-			if txn.GetAssembleErrorCount() > 0 {
-				// These get re-delegated but are put to the end of the list
-				transactionsWithErrors = append(transactionsWithErrors, txn.GetPrivateTransaction())
-			} else {
-				privateTransactions = append(privateTransactions, txn.GetPrivateTransaction())
-			}
-			transactionsToDelegate = append(transactionsToDelegate, txn)
+		// Every delegation request must include all transaction, sent in the order they were created on the originating node.
+		// This allows the coordinator to respect FIFO ordering within an originator up until first assembly.
+		if txn.GetAssembleErrorCount() > 0 {
+			// These get re-delegated but are put to the end of the list
+			transactionsWithErrors = append(transactionsWithErrors, txn.GetPrivateTransaction())
+		} else {
+			privateTransactions = append(privateTransactions, txn.GetPrivateTransaction())
 		}
+		transactionsToDelegate = append(transactionsToDelegate, txn)
 	}
 
 	// Update internal TX state machines before sending delegation requests to avoid race condition
@@ -109,11 +106,10 @@ func action_SendDelegationRequest(ctx context.Context, o *originator, _ common.E
 }
 
 func guard_HasDroppedTransactions(ctx context.Context, o *originator) bool {
-	//are there any transactions that the current active coordinator seems to have dropped ( as per its latest heartbeat)
-	//NOTE: "dropped" is not a state in the transaction state machine, but rather a state in the originator's view of the world.
-	// Reason for this is that it is not really a state of the transaction, it is a property of the heartbeat event and as such,
-	// is reconciled as part of handling that event so immediately, the transaction is in Delegated state again
-	for _, txn := range o.getTransactionsInStates([]transaction.State{transaction.State_Delegated}) {
+	// Are there any transactions that the current active coordinator seems to have dropped (as per its latest heartbeat)?
+	// NOTE: "dropped" is not a state in the transaction state machine, but rather a description of the originator's view of the world
+	// based on the heartbeats it receives from coordinators.
+	for _, txn := range o.transactionsOrdered {
 		// If any one of the transactions has been dropped, re-delegate everything
 		if !transactionFoundInHeartbeat(o, txn) {
 			log.L(ctx).Debugf("transaction %s is in Delegated state but not found in latest coordinator snapshot, assuming dropped", txn.GetID())

@@ -747,27 +747,30 @@ func Test_sendAssembleRequest_schedulesTimer(t *testing.T) {
 
 func Test_guard_CanRetryErroredAssemble_WhenBelowThreshold(t *testing.T) {
 	ctx := context.Background()
-	txn, _ := NewTransactionBuilderForTesting(t, State_Assembling).Build()
-	txn.assembleErrorCount = 0
-	txn.assembleErrorRetryThreshhold = 3
+	txn, _ := NewTransactionBuilderForTesting(t, State_Assembling).
+		AssembleErrorCount(0).
+		AssembleErrorRetryThreshold(3).
+		Build()
 
 	assert.True(t, guard_CanRetryErroredAssemble(ctx, txn))
 }
 
 func Test_guard_CanRetryErroredAssemble_WhenAtThreshold(t *testing.T) {
 	ctx := context.Background()
-	txn, _ := NewTransactionBuilderForTesting(t, State_Assembling).Build()
-	txn.assembleErrorCount = 3
-	txn.assembleErrorRetryThreshhold = 3
+	txn, _ := NewTransactionBuilderForTesting(t, State_Assembling).
+		AssembleErrorCount(3).
+		AssembleErrorRetryThreshold(3).
+		Build()
 
 	assert.False(t, guard_CanRetryErroredAssemble(ctx, txn))
 }
 
 func Test_guard_CanRetryErroredAssemble_WhenAboveThreshold(t *testing.T) {
 	ctx := context.Background()
-	txn, _ := NewTransactionBuilderForTesting(t, State_Assembling).Build()
-	txn.assembleErrorCount = 5
-	txn.assembleErrorRetryThreshhold = 3
+	txn, _ := NewTransactionBuilderForTesting(t, State_Assembling).
+		AssembleErrorCount(5).
+		AssembleErrorRetryThreshold(3).
+		Build()
 
 	assert.False(t, guard_CanRetryErroredAssemble(ctx, txn))
 }

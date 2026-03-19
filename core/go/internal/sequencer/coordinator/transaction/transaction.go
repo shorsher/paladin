@@ -108,6 +108,7 @@ type coordinatorTransaction struct {
 
 func NewTransaction(ctx context.Context,
 	originator string,
+	originatorNode string,
 	nodeName string,
 	pt *components.PrivateTransaction,
 	coordinatorSigningIdentity string,
@@ -128,10 +129,11 @@ func NewTransaction(ctx context.Context,
 	assembleErrorRetryThreshhold int,
 	grapher Grapher,
 	metrics metrics.DistributedSequencerMetrics,
-) (CoordinatorTransaction, error) {
+) CoordinatorTransaction {
 	return newTransaction(
 		ctx,
 		originator,
+		originatorNode,
 		nodeName,
 		pt,
 		coordinatorSigningIdentity,
@@ -158,6 +160,7 @@ func NewTransaction(ctx context.Context,
 func newTransaction(
 	ctx context.Context,
 	originator string,
+	originatorNode string,
 	nodeName string,
 	pt *components.PrivateTransaction,
 	coordinatorSigningIdentity string,
@@ -178,14 +181,8 @@ func newTransaction(
 	assembleErrorRetryThreshhold int,
 	grapher Grapher,
 	metrics metrics.DistributedSequencerMetrics,
-) (*coordinatorTransaction, error) {
+) *coordinatorTransaction {
 	txCtx := log.WithLogField(ctx, "txID", pt.ID.String())
-
-	_, originatorNode, err := pldtypes.PrivateIdentityLocator(originator).Validate(txCtx, "", false)
-	if err != nil {
-		log.L(ctx).Errorf("error validating originator %s: %s", originator, err)
-		return nil, err
-	}
 
 	txn := &coordinatorTransaction{
 		originator:                        originator,
@@ -216,7 +213,7 @@ func newTransaction(
 	}
 	txn.initializeStateMachine(State_Initial)
 	grapher.Add(txCtx, txn)
-	return txn, nil
+	return txn
 }
 
 // This function is external but doesn't not need a lock as ints are atomic
