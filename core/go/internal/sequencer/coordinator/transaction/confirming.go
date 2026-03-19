@@ -42,14 +42,15 @@ func action_RecordConfirmation(ctx context.Context, t *coordinatorTransaction, e
 	case *ConfirmedRevertedEvent:
 		hash = e.Hash
 		t.revertReason = e.RevertReason
-		t.revertOnChain = &e.OnChain
 		t.revertCount++
 		if len(e.RevertReason) == 0 {
 			// Off-chain revert (for example a chained assembly failure propagated from another TX).
 			// This is not a base-ledger revert, so do not route through domain retryability logic.
+			t.revertOnChain = nil
 			t.decodedRevertReason = e.FailureMessage
 			t.lastCanRetryRevert = false
 		} else {
+			t.revertOnChain = &e.OnChain
 			retryable, decodedReason, err := t.domainAPI.IsBaseLedgerRevertRetryable(ctx, t.revertReason)
 			if err != nil {
 				log.L(ctx).Errorf("error checking if revert is retryable for transaction %s, treating as non-retryable: %s", t.pt.ID.String(), err)

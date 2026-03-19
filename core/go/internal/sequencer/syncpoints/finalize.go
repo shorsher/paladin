@@ -35,8 +35,8 @@ type TransactionFinalizeRequest struct {
 	ContractAddress pldtypes.EthAddress
 	Originator      string
 	TransactionID   uuid.UUID
-	FailureMessage  string                   // pre-formatted message for off-chain failures
-	RevertData      pldtypes.HexBytes        // raw revert data for on-chain failures
+	FailureMessage  string                    // pre-formatted message for off-chain failures
+	RevertData      pldtypes.HexBytes         // raw revert data for on-chain failures
 	OnChain         *pldtypes.OnChainLocation // populated when the failure was on-chain
 }
 
@@ -75,7 +75,11 @@ func (s *syncPoints) writeFailureOperations(ctx context.Context, dbTX persistenc
 	// so that all states are stored, before we clear out the transaction from the in-memory Domain Context.
 	receiptsToDistribute := make([]*components.ReceiptInputWithOriginator, 0, len(finalizeOperations))
 	for _, op := range finalizeOperations {
+		onChain := pldtypes.OnChainLocation{Type: pldtypes.NotOnChain}
 		if op.OnChain != nil {
+			onChain = *op.OnChain
+		}
+		if op.OnChain != nil && op.OnChain.Type != pldtypes.NotOnChain && len(op.RevertData) > 0 {
 			receiptsToDistribute = append(receiptsToDistribute, &components.ReceiptInputWithOriginator{
 				Originator: op.Originator,
 				ReceiptInput: components.ReceiptInput{

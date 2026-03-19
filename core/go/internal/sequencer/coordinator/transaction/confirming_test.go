@@ -488,6 +488,7 @@ func Test_action_RecordConfirmation_OffChainFailureMessageSkipsDomainRetryCheck(
 	assert.False(t, txn.lastCanRetryRevert)
 	assert.Equal(t, failureMessage, txn.decodedRevertReason)
 	assert.Empty(t, txn.revertReason)
+	assert.Nil(t, txn.revertOnChain)
 }
 
 func Test_action_RecordConfirmation_OnChainRevertWithFailureMessageStillUsesDomainRetryability(t *testing.T) {
