@@ -232,6 +232,65 @@ func TestFinalizeTransactionsRedactFailureOverSuccessPersistedDoesNotSkip(t *tes
 
 }
 
+func TestFinalizeTransactionsOverwriteFailureWithSuccessRealDB(t *testing.T) {
+	ctx, txm, done := newTestTransactionManager(t, true)
+	defer done()
+
+	txA := uuid.New()
+	txB := uuid.New()
+	txC := uuid.New()
+
+	// Seed an existing failure receipt.
+	err := txm.p.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
+		return txm.FinalizeTransactions(ctx, dbTX, []*components.ReceiptInput{
+			{
+				TransactionID:  txB,
+				ReceiptType:    components.RT_FailedWithMessage,
+				FailureMessage: "seed failure",
+			},
+		})
+	})
+	require.NoError(t, err)
+
+	initialReceipt, err := txm.GetTransactionReceiptByID(ctx, txB)
+	require.NoError(t, err)
+	require.False(t, initialReceipt.Success)
+	require.NotZero(t, initialReceipt.Sequence)
+
+	// Trigger the duplicate handling path with a partial conflict pattern (A inserted, B conflicts, C inserted).
+	err = txm.p.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
+		return txm.FinalizeTransactions(ctx, dbTX, []*components.ReceiptInput{
+			{
+				TransactionID: txA,
+				ReceiptType:   components.RT_Success,
+			},
+			{
+				TransactionID: txB, // conflicts with seeded failure and must be replaced with success
+				ReceiptType:   components.RT_Success,
+			},
+			{
+				TransactionID: txC,
+				ReceiptType:   components.RT_Success,
+			},
+		})
+	})
+	require.NoError(t, err)
+
+	updatedReceipt, err := txm.GetTransactionReceiptByID(ctx, txB)
+	require.NoError(t, err)
+	require.True(t, updatedReceipt.Success)
+	require.Empty(t, updatedReceipt.FailureMessage)
+	require.Greater(t, updatedReceipt.Sequence, initialReceipt.Sequence, "replacement must allocate a new sequence")
+
+	receiptA, err := txm.GetTransactionReceiptByID(ctx, txA)
+	require.NoError(t, err)
+	require.True(t, receiptA.Success)
+
+	receiptC, err := txm.GetTransactionReceiptByID(ctx, txC)
+	require.NoError(t, err)
+	require.True(t, receiptC.Success)
+}
+
 func TestFinalizeTransactionsChainedLookupFail(t *testing.T) {
 
 	txID := uuid.New()
