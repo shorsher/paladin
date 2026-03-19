@@ -46,11 +46,28 @@ const (
 func action_TransactionsDelegated(ctx context.Context, c *coordinator, event common.Event) error {
 	e := event.(*TransactionsDelegatedEvent)
 	c.updateOriginatorNodePool(e.FromNode)
-	return c.addToDelegatedTransactions(ctx, e.Originator, e.Transactions, e.DelegationID)
+	return c.addToDelegatedTransactions(ctx, e.Originator, e.Transactions, e.DelegationID, c.newCoordinatorTransaction)
+}
+
+func (c *coordinator) newCoordinatorTransaction(ctx context.Context, originator string, originatorNode string, nodeName string, pt *components.PrivateTransaction, coordinatorSigningIdentity string, preAssembleDependsOn *uuid.UUID) transaction.CoordinatorTransaction {
+	return transaction.NewTransaction(ctx, originator, originatorNode, nodeName, pt, coordinatorSigningIdentity, preAssembleDependsOn, c.transportWriter, c.clock, c.queueEventInternal, c.engineIntegration, c.syncPoints, c.components, c.domainAPI, c.dCtx, c.requestTimeout, c.stateTimeout, c.closingGracePeriod, c.confirmedLockRetentionGracePeriod, c.baseLedgerRevertRetryThreshold, c.assembleErrorRetryThreshhold, c.grapher, c.metrics)
 }
 
 // originator must be a fully qualified identity locator otherwise an error will be returned
-func (c *coordinator) addToDelegatedTransactions(ctx context.Context, originator string, transactions []*components.PrivateTransaction, delegationID string) error {
+func (c *coordinator) addToDelegatedTransactions(
+	ctx context.Context,
+	originator string,
+	transactions []*components.PrivateTransaction,
+	delegationID string,
+	createTransaction func(
+		ctx context.Context,
+		originator string,
+		originatorNode string,
+		nodeName string,
+		pt *components.PrivateTransaction,
+		coordinatorSigningIdentity string,
+		preAssembleDependsOn *uuid.UUID) transaction.CoordinatorTransaction) error {
+
 	var previousTransaction transaction.CoordinatorTransaction
 
 	delegateAcknowledgementIDs := make([]string, 0, len(transactions))
@@ -137,31 +154,7 @@ func (c *coordinator) addToDelegatedTransactions(ctx context.Context, originator
 			}
 		}
 
-		newTransaction := transaction.NewTransaction(
-			ctx,
-			originator,
-			originatorNode,
-			c.nodeName,
-			txn,
-			c.signingIdentity,
-			previousTransactionID,
-			c.transportWriter,
-			c.clock,
-			c.queueEventInternal,
-			c.engineIntegration,
-			c.syncPoints,
-			c.components,
-			c.domainAPI,
-			c.dCtx,
-			c.requestTimeout,
-			c.stateTimeout,
-			c.closingGracePeriod,
-			c.confirmedLockRetentionGracePeriod,
-			c.baseLedgerRevertRetryThreshold,
-			c.assembleErrorRetryThreshhold,
-			c.grapher,
-			c.metrics,
-		)
+		newTransaction := createTransaction(ctx, originator, originatorNode, c.nodeName, txn, c.signingIdentity, previousTransactionID)
 
 		c.transactionsByID[txn.ID] = newTransaction
 		c.metrics.IncCoordinatingTransactions()
