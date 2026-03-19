@@ -109,7 +109,7 @@ func guard_HasDroppedTransactions(ctx context.Context, o *originator) bool {
 	// Are there any transactions that the current active coordinator seems to have dropped (as per its latest heartbeat)?
 	// NOTE: "dropped" is not a state in the transaction state machine, but rather a description of the originator's view of the world
 	// based on the heartbeats it receives from coordinators.
-	for _, txn := range o.transactionsOrdered {
+	for _, txn := range o.getTransactionsNotInStates([]transaction.State{transaction.State_Final, transaction.State_Confirmed, transaction.State_Reverted}) {
 		// If any one of the transactions has been dropped, re-delegate everything
 		if !transactionFoundInHeartbeat(o, txn) {
 			log.L(ctx).Debugf("transaction %s is in Delegated state but not found in latest coordinator snapshot, assuming dropped", txn.GetID())
