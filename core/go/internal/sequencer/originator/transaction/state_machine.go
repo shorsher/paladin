@@ -68,15 +68,15 @@ const (
 
 // Type aliases for the generic statemachine types, specialized for Transaction
 type (
-	Action           = statemachine.Action[*OriginatorTransaction]
-	Guard            = statemachine.Guard[*OriginatorTransaction]
-	ActionRule       = statemachine.ActionRule[*OriginatorTransaction]
-	Transition       = statemachine.Transition[State, *OriginatorTransaction]
-	Validator        = statemachine.Validator[*OriginatorTransaction]
-	EventHandler     = statemachine.EventHandler[State, *OriginatorTransaction]
-	StateDefinition  = statemachine.StateDefinition[State, *OriginatorTransaction]
-	StateDefinitions = statemachine.StateDefinitions[State, *OriginatorTransaction]
-	StateMachine     = statemachine.StateMachine[State, *OriginatorTransaction]
+	Action           = statemachine.Action[*originatorTransaction]
+	Guard            = statemachine.Guard[*originatorTransaction]
+	ActionRule       = statemachine.ActionRule[*originatorTransaction]
+	Transition       = statemachine.Transition[State, *originatorTransaction]
+	Validator        = statemachine.Validator[*originatorTransaction]
+	EventHandler     = statemachine.EventHandler[State, *originatorTransaction]
+	StateDefinition  = statemachine.StateDefinition[State, *originatorTransaction]
+	StateDefinitions = statemachine.StateDefinitions[State, *originatorTransaction]
+	StateMachine     = statemachine.StateMachine[State, *originatorTransaction]
 )
 
 var stateDefinitionsMap = StateDefinitions{
@@ -552,10 +552,10 @@ var stateDefinitionsMap = StateDefinitions{
 	},
 }
 
-func (t *OriginatorTransaction) initializeStateMachine(initialState State) {
+func (t *originatorTransaction) initializeStateMachine(initialState State) {
 	t.stateMachine = statemachine.NewStateMachine(initialState, stateDefinitionsMap,
 		fmt.Sprintf("orig-tx-%s", t.pt.ID.String()[0:8]),
-		statemachine.WithTransitionCallback(func(ctx context.Context, t *OriginatorTransaction, from, to State, event common.Event) {
+		statemachine.WithTransitionCallback(func(ctx context.Context, t *originatorTransaction, from, to State, event common.Event) {
 			if t.queueEventForOriginator != nil {
 				t.queueEventForOriginator(ctx, &common.TransactionStateTransitionEvent[State]{
 					BaseEvent:     common.BaseEvent{EventTime: time.Now()},
@@ -568,14 +568,14 @@ func (t *OriginatorTransaction) initializeStateMachine(initialState State) {
 	)
 }
 
-func (t *OriginatorTransaction) HandleEvent(ctx context.Context, event common.Event) error {
+func (t *originatorTransaction) HandleEvent(ctx context.Context, event common.Event) error {
 	// Adding the log field here means every function called by the transaction state machine will have the txID field
 	// in addition to the fields of the parent context
 	txCtx := log.WithLogField(ctx, "txID", t.pt.ID.String())
 	return t.stateMachine.ProcessEvent(txCtx, t, event)
 }
 
-func action_CoordinatorChanged(ctx context.Context, t *OriginatorTransaction, event common.Event) error {
+func action_CoordinatorChanged(ctx context.Context, t *originatorTransaction, event common.Event) error {
 	e := event.(*CoordinatorChangedEvent)
 	t.currentDelegate = e.Coordinator
 	return nil

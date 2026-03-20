@@ -31,16 +31,20 @@ import (
 
 func action_TransactionCreated(ctx context.Context, o *originator, event common.Event) error {
 	e := event.(*TransactionCreatedEvent)
-	return o.createTransaction(ctx, e.Transaction)
+	return o.addToTransactions(ctx, e.Transaction, o.newOriginatorTransaction)
 }
 
-func (o *originator) createTransaction(ctx context.Context, txn *components.PrivateTransaction) error {
-	newTxn, err := transaction.NewTransaction(ctx,
-		txn,
-		o.transportWriter,
-		o.queueEventInternal,
-		o.engineIntegration,
-		o.metrics)
+func (o *originator) newOriginatorTransaction(ctx context.Context, pt *components.PrivateTransaction) (transaction.OriginatorTransaction, error) {
+	return transaction.NewTransaction(ctx, pt, o.transportWriter, o.queueEventInternal, o.engineIntegration, o.metrics)
+}
+
+func (o *originator) addToTransactions(
+	ctx context.Context,
+	txn *components.PrivateTransaction,
+	createTransaction func(
+		ctx context.Context,
+		pt *components.PrivateTransaction) (transaction.OriginatorTransaction, error)) error {
+	newTxn, err := createTransaction(ctx, txn)
 	if err != nil {
 		log.L(ctx).Errorf("error creating transaction: %v", err)
 		return err
@@ -68,7 +72,7 @@ func sendDelegationRequest(ctx context.Context, o *originator) error {
 
 	// Re-delegate transactions
 	privateTransactions := make([]*components.PrivateTransaction, 0)
-	transactionsToDelegate := make([]*transaction.OriginatorTransaction, 0)
+	transactionsToDelegate := make([]transaction.OriginatorTransaction, 0)
 	for _, txn := range o.transactionsOrdered {
 		// Every delegation request must include all transaction, sent in the order they were created on the originating node.
 		// This allows the coordinator to respect FIFO ordering within an originator up until first assembly.
@@ -119,7 +123,7 @@ func guard_HasDroppedTransactions(ctx context.Context, o *originator) bool {
 	return false
 }
 
-func transactionFoundInHeartbeat(o *originator, txn *transaction.OriginatorTransaction) bool {
+func transactionFoundInHeartbeat(o *originator, txn transaction.OriginatorTransaction) bool {
 	for _, dispatchedTransaction := range o.latestCoordinatorSnapshot.DispatchedTransactions {
 		if dispatchedTransaction.ID == txn.GetID() {
 			return true

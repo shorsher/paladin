@@ -165,6 +165,9 @@ func (c *coordinator) addToDelegatedTransactions(
 
 		err = newTransaction.HandleEvent(ctx, receivedEvent)
 		if err != nil {
+			delete(c.transactionsByID, txn.ID)
+			c.metrics.DecCoordinatingTransactions()
+			acceptedTransactions--
 			txnHandlingError = err
 			delegateAcknowledgementErrors[i] = int64(DelegationAcknowledgementError_CoordinatorError)
 			// All subsequent transactions will be skipped

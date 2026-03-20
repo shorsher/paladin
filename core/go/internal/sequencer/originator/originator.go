@@ -59,8 +59,8 @@ type originator struct {
 	stateMachineEventLoop     *statemachine.StateMachineEventLoop[State, *originator]
 	activeCoordinatorNode     string
 	timeOfMostRecentHeartbeat *time.Time
-	transactionsByID          map[uuid.UUID]*transaction.OriginatorTransaction
-	transactionsOrdered       []*transaction.OriginatorTransaction
+	transactionsByID          map[uuid.UUID]transaction.OriginatorTransaction
+	transactionsOrdered       []transaction.OriginatorTransaction
 	currentBlockHeight        uint64
 	latestCoordinatorSnapshot *common.CoordinatorSnapshot
 
@@ -97,7 +97,7 @@ func NewOriginator(
 	o := &originator{
 		ctx:                 origCtx,
 		nodeName:            nodeName,
-		transactionsByID:    make(map[uuid.UUID]*transaction.OriginatorTransaction),
+		transactionsByID:    make(map[uuid.UUID]transaction.OriginatorTransaction),
 		transportWriter:     transportWriter,
 		blockRangeSize:      confutil.Uint64Min(configuration.BlockRange, pldconf.SequencerMinimum.BlockRange, *pldconf.SequencerDefaults.BlockRange),
 		contractAddress:     contractAddress,
@@ -208,14 +208,14 @@ func (o *originator) propagateEventToTransaction(ctx context.Context, event tran
 // getTransactionsInStates returns transactions in any of the given states.
 //
 //nolint:unused // retaining until we decide we don't have any reasons for retrieving transactions by state
-func (o *originator) getTransactionsInStates(states []transaction.State) []*transaction.OriginatorTransaction {
+func (o *originator) getTransactionsInStates(states []transaction.State) []transaction.OriginatorTransaction {
 	//TODO this could be made more efficient by maintaining a separate index of transactions for each state but that is error prone so
 	// deferring until we have a comprehensive test suite to catch errors
 	matchingStates := make(map[transaction.State]bool)
 	for _, state := range states {
 		matchingStates[state] = true
 	}
-	matchingTxns := make([]*transaction.OriginatorTransaction, 0, len(o.transactionsByID))
+	matchingTxns := make([]transaction.OriginatorTransaction, 0, len(o.transactionsByID))
 	for _, txn := range o.transactionsByID {
 		if matchingStates[txn.GetCurrentState()] {
 			matchingTxns = append(matchingTxns, txn)
@@ -224,14 +224,14 @@ func (o *originator) getTransactionsInStates(states []transaction.State) []*tran
 	return matchingTxns
 }
 
-func (o *originator) getTransactionsNotInStates(states []transaction.State) []*transaction.OriginatorTransaction {
+func (o *originator) getTransactionsNotInStates(states []transaction.State) []transaction.OriginatorTransaction {
 	//TODO this could be made more efficient by maintaining a separate index of transactions for each state but that is error prone so
 	// deferring until we have a comprehensive test suite to catch errors
 	nonMatchingStates := make(map[transaction.State]bool)
 	for _, state := range states {
 		nonMatchingStates[state] = true
 	}
-	matchingTxns := make([]*transaction.OriginatorTransaction, 0, len(o.transactionsByID))
+	matchingTxns := make([]transaction.OriginatorTransaction, 0, len(o.transactionsByID))
 	for _, txn := range o.transactionsByID {
 		if !nonMatchingStates[txn.GetCurrentState()] {
 			matchingTxns = append(matchingTxns, txn)

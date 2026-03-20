@@ -17,7 +17,6 @@ package transaction
 
 import (
 	"context"
-	"fmt"
 	"math/rand/v2"
 	"testing"
 
@@ -172,7 +171,7 @@ type TransactionBuilderForTesting struct {
 	privateTransactionBuilder *testutil.PrivateTransactionBuilderForTesting
 	state                     State
 	currentDelegate           string
-	txn                       *OriginatorTransaction
+	txn                       *originatorTransaction
 	sentMessageRecorder       *SentMessageRecorder
 	fakeEngineIntegration     *common.FakeEngineIntegrationForTesting
 	queueEventForOriginator   func(ctx context.Context, event common.Event)
@@ -250,7 +249,7 @@ func (b *TransactionBuilderForTesting) AssembleErrorCount(n int) *TransactionBui
 	return b
 }
 
-func (b *TransactionBuilderForTesting) GetBuiltTransaction() *OriginatorTransaction {
+func (b *TransactionBuilderForTesting) GetBuiltTransaction() *originatorTransaction {
 	return b.txn
 }
 
@@ -261,7 +260,7 @@ type TransactionDependencyFakes struct {
 	emittedEvents       []common.Event
 }
 
-func (b *TransactionBuilderForTesting) BuildWithMocks() (*OriginatorTransaction, *TransactionDependencyFakes) {
+func (b *TransactionBuilderForTesting) BuildWithMocks() (*originatorTransaction, *TransactionDependencyFakes) {
 	mocks := &TransactionDependencyFakes{
 		SentMessageRecorder: b.sentMessageRecorder,
 		EngineIntegration:   b.fakeEngineIntegration,
@@ -273,18 +272,18 @@ func (b *TransactionBuilderForTesting) BuildWithMocks() (*OriginatorTransaction,
 	return b.Build(), mocks
 }
 
-func (b *TransactionBuilderForTesting) Build() *OriginatorTransaction {
+func (b *TransactionBuilderForTesting) Build() *originatorTransaction {
 	ctx := context.Background()
 
 	privateTransaction := b.privateTransactionBuilder.Build()
 	if b.queueEventForOriginator == nil {
 		b.queueEventForOriginator = func(ctx context.Context, event common.Event) {}
 	}
-	txn, err := NewTransaction(ctx,
+	txn := newTransaction(ctx,
 		privateTransaction,
+		b.fakeEngineIntegration,
 		b.sentMessageRecorder,
 		b.queueEventForOriginator,
-		b.fakeEngineIntegration,
 		b.metrics)
 
 	txn.stateMachine.CurrentState = b.state
@@ -338,9 +337,6 @@ func (b *TransactionBuilderForTesting) Build() *OriginatorTransaction {
 
 	txn.assembleErrorCount = b.assembleErrorCount
 
-	if err != nil {
-		panic(fmt.Sprintf("Error from NewTransaction: %v", err))
-	}
 	b.txn = txn
 
 	b.txn.stateMachine.CurrentState = b.state

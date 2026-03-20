@@ -17,18 +17,16 @@ package originator
 
 import (
 	"context"
-	"errors"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/common"
-	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/metrics"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/originator/transaction"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/statemachine"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/testutil"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldtypes"
 	"github.com/google/uuid"
-	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/assert"
 	mock "github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -236,60 +234,101 @@ func TestOriginator_EventLoop_ErrorHandling(t *testing.T) {
 	require.Eventually(t, func() bool { return mocks.SentMessageRecorder.HasSentDelegationRequest() }, 100*time.Millisecond, 1*time.Millisecond, "Originator should still process valid event after error")
 }
 
-type mockFailingTransaction struct {
-	*transaction.OriginatorTransaction
-	handleEventError error
-}
-
-func (m *mockFailingTransaction) HandleEvent(ctx context.Context, event common.Event) error {
-	return m.handleEventError
-}
-
-func TestOriginator_CreateTransaction_ErrorFromHandleEvent(t *testing.T) {
-
+func Test_getTransactionsInStates_ReturnsOnlyTransactionsWhoseStateIsListed(t *testing.T) {
 	ctx := context.Background()
-	originatorLocator := "sender@senderNode"
-	coordinatorLocator := "coordinator@coordinatorNode"
-	builder := NewOriginatorBuilderForTesting(State_Idle).CommitteeMembers(originatorLocator, coordinatorLocator)
-	s, mocks, cleanup := builder.Build(ctx)
+	tbPending := transaction.NewTransactionBuilderForTesting(t, transaction.State_Pending)
+	tbDelegated := transaction.NewTransactionBuilderForTesting(t, transaction.State_Delegated)
+	tbAssembling := transaction.NewTransactionBuilderForTesting(t, transaction.State_Assembling)
+
+	builder := NewOriginatorBuilderForTesting(State_Sending).
+		CommitteeMembers("sender@senderNode", "coordinator@coordinatorNode").
+		TransactionBuilders(tbPending, tbDelegated, tbAssembling)
+	o, _, cleanup := builder.Build(ctx)
 	defer cleanup()
 
-	// Ensure the originator is in observing mode
-	heartbeatEvent := &HeartbeatReceivedEvent{}
-	heartbeatEvent.From = coordinatorLocator
-	contractAddress := builder.GetContractAddress()
-	heartbeatEvent.ContractAddress = &contractAddress
+	matching := o.getTransactionsInStates([]transaction.State{transaction.State_Pending, transaction.State_Delegated})
+	require.Len(t, matching, 2)
 
-	err := s.stateMachineEventLoop.ProcessEvent(ctx, heartbeatEvent)
-	assert.NoError(t, err)
-	assert.True(t, s.GetCurrentState() == State_Observing)
+	byID := make(map[uuid.UUID]transaction.State)
+	for _, txn := range matching {
+		byID[txn.GetID()] = txn.GetCurrentState()
+	}
+	assert.Equal(t, transaction.State_Pending, byID[tbPending.GetBuiltTransaction().GetID()])
+	assert.Equal(t, transaction.State_Delegated, byID[tbDelegated.GetBuiltTransaction().GetID()])
+}
 
-	// Create a transaction
-	transactionBuilder := testutil.NewPrivateTransactionBuilderForTesting().Address(builder.GetContractAddress()).Originator(originatorLocator).NumberOfRequiredEndorsers(1)
-	txn := transactionBuilder.BuildSparse()
+func Test_getTransactionsInStates_EmptyStateListReturnsNoTransactions(t *testing.T) {
+	ctx := context.Background()
+	tb := transaction.NewTransactionBuilderForTesting(t, transaction.State_Pending)
+	builder := NewOriginatorBuilderForTesting(State_Sending).
+		CommitteeMembers("sender@senderNode", "coordinator@coordinatorNode").
+		TransactionBuilders(tb)
+	o, _, cleanup := builder.Build(ctx)
+	defer cleanup()
 
-	// Create a real transaction using NewTransaction (this is what createTransaction does at line 174)
-	testMetrics := metrics.InitMetrics(ctx, prometheus.NewRegistry())
-	realTxn, err := transaction.NewTransaction(ctx, txn, mocks.SentMessageRecorder, s.stateMachineEventLoop.QueueEvent, mocks.EngineIntegration, testMetrics)
-	require.NoError(t, err)
+	assert.Empty(t, o.getTransactionsInStates(nil))
+	assert.Empty(t, o.getTransactionsInStates([]transaction.State{}))
+}
 
-	// Wrap it in a mock that will fail HandleEvent
-	expectedError := errors.New("mock HandleEvent error")
-	mockTxn := &mockFailingTransaction{
-		OriginatorTransaction: realTxn,
-		handleEventError:      expectedError,
+func Test_heartbeatLoop_TickerQueuesHeartbeatIntervalEvent(t *testing.T) {
+	ctx := context.Background()
+	builder := NewOriginatorBuilderForTesting(State_Idle).CommitteeMembers("sender@senderNode", "coordinator@coordinatorNode")
+	o, _, cleanup := builder.Build(ctx)
+	defer cleanup()
+
+	o.heartbeatInterval = 25 * time.Millisecond
+
+	var mu sync.Mutex
+	heartbeatIntervalCount := 0
+	queueEvent := func(_ context.Context, ev common.Event) {
+		if _, ok := ev.(*common.HeartbeatIntervalEvent); !ok {
+			return
+		}
+		mu.Lock()
+		heartbeatIntervalCount++
+		n := heartbeatIntervalCount
+		mu.Unlock()
+		if n >= 2 && o.heartbeatCancel != nil {
+			o.heartbeatCancel()
+		}
 	}
 
-	createdEvent := &transaction.CreatedEvent{}
-	createdEvent.TransactionID = txn.ID
+	done := make(chan struct{})
+	go func() {
+		o.heartbeatLoop(ctx, queueEvent)
+		close(done)
+	}()
 
-	// Call HandleEvent on the mock - this should return our error (line 183)
-	err = mockTxn.HandleEvent(ctx, createdEvent)
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("heartbeat loop did not stop after ticker-fired HeartbeatIntervalEvent")
+	}
 
-	// Verify the error is returned (this tests lines 184-186)
-	assert.Error(t, err)
-	assert.Equal(t, expectedError, err)
-	assert.Contains(t, err.Error(), "mock HandleEvent error")
+	mu.Lock()
+	n := heartbeatIntervalCount
+	mu.Unlock()
+	require.GreaterOrEqual(t, n, 2, "expected immediate HeartbeatInterval plus at least one from ticker")
+}
+
+func Test_action_StopHeartbeatLoop_CallsCancelWhenHeartbeatLoopWasStarted(t *testing.T) {
+	ctx := context.Background()
+	builder := NewOriginatorBuilderForTesting(State_Idle).CommitteeMembers("sender@senderNode", "coordinator@coordinatorNode")
+	o, _, cleanup := builder.Build(ctx)
+	defer cleanup()
+
+	hbCtx, hbCancel := context.WithCancel(context.Background())
+	o.heartbeatCtx = hbCtx
+	o.heartbeatCancel = hbCancel
+
+	err := action_StopHeartbeatLoop(ctx, o, nil)
+	require.NoError(t, err)
+
+	select {
+	case <-hbCtx.Done():
+	default:
+		t.Fatal("expected heartbeat context to be canceled")
+	}
 }
 
 func Test_propagateEventToTransaction_UnknownTransaction_PreDispatchRequestSendsUnknown(t *testing.T) {
@@ -313,50 +352,3 @@ func Test_propagateEventToTransaction_UnknownTransaction_PreDispatchRequestSends
 	assert.Equal(t, unknownTxID, txID)
 	assert.Equal(t, coordinatorLocator, coordinator)
 }
-
-// TODO: error not currently reachable without injectable transaction dependency
-// func TestSendDelegationRequest_HandleEventError(t *testing.T) {
-// 	ctx := context.Background()
-// 	originatorLocator := "sender@senderNode"
-// 	coordinatorLocator := "coordinator@coordinatorNode"
-// 	builder := NewOriginatorBuilderForTesting(State_Sending).CommitteeMembers(originatorLocator, coordinatorLocator)
-// 	o, mocks := builder.Build(ctx)
-
-// 	// Ensure the originator is in sending mode
-// 	heartbeatEvent := &HeartbeatReceivedEvent{}
-// 	heartbeatEvent.From = coordinatorLocator
-// 	contractAddress := builder.GetContractAddress()
-// 	heartbeatEvent.ContractAddress = &contractAddress
-
-// 	err := o.stateMachineEventLoop.ProcessEvent(ctx, heartbeatEvent)
-// 	assert.NoError(t, err)
-
-// 	// Create a transaction and add it to the originator
-// 	transactionBuilder := testutil.NewPrivateTransactionBuilderForTesting().Address(builder.GetContractAddress()).Originator(originatorLocator).NumberOfRequiredEndorsers(1)
-// 	txn := transactionBuilder.BuildSparse()
-
-// 	// Create a real transaction
-// 	testMetrics := metrics.InitMetrics(ctx, prometheus.NewRegistry())
-// 	realTxn, err := transaction.NewTransaction(ctx, txn, mocks.SentMessageRecorder, o.stateMachineEventLoop.QueueEvent, mocks.EngineIntegration, testMetrics)
-// 	require.NoError(t, err)
-
-// 	// Add the transaction to the originator
-// 	o.transactionsByID[txn.ID] = realTxn
-// 	o.transactionsOrdered = append(o.transactionsOrdered, realTxn)
-
-// 	// Set transaction to Pending state so it will be included in the delegation request
-// 	createdEvent := &transaction.CreatedEvent{}
-// 	createdEvent.TransactionID = txn.ID
-// 	err = realTxn.HandleEvent(ctx, createdEvent)
-// 	require.NoError(t, err)
-// 	require.Equal(t, transaction.State_Pending, realTxn.GetCurrentState(), "transaction should be in Pending state")
-
-// 	// Set activeCoordinatorNode to empty to cause HandleEvent to fail
-// 	o.activeCoordinatorNode = ""
-
-// 	err = action_SendDelegationRequest(ctx, o, nil)
-
-// 	// Should return an error with the expected message
-// 	require.Error(t, err)
-// 	assert.Contains(t, err.Error(), "error handling delegated event")
-// }

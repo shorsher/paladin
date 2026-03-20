@@ -17,13 +17,18 @@ package originator
 
 import (
 	"context"
+	"fmt"
 	"testing"
+	"time"
 
+	"github.com/LFDT-Paladin/paladin/core/internal/components"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/common"
+	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/originator/transaction"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/testutil"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldtypes"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
 
@@ -57,11 +62,42 @@ func Test_applyHeartbeatReceived_BasicUpdate(t *testing.T) {
 	assert.Equal(t, uint64(1000), o.latestCoordinatorSnapshot.BlockHeight)
 }
 
+func Test_guard_IdleThresholdExceeded_TrueWhenNoHeartbeatReceived(t *testing.T) {
+	ctx := context.Background()
+	builder := NewOriginatorBuilderForTesting(State_Observing).CommitteeMembers("sender@senderNode", "coordinator@coordinatorNode")
+	o, _, cleanup := builder.Build(ctx)
+	defer cleanup()
+
+	o.timeOfMostRecentHeartbeat = nil
+
+	assert.True(t, guard_IdleThresholdExceeded(ctx, o))
+}
+
+func Test_guard_IdleThresholdExceeded_TrueWhenClockSaysIdlePeriodElapsed(t *testing.T) {
+	ctx := context.Background()
+	mockClock := common.NewMockClock(t)
+	mockClock.EXPECT().HasExpired(mock.Anything, mock.Anything).Return(true)
+
+	builder := NewOriginatorBuilderForTesting(State_Observing).
+		CommitteeMembers("sender@senderNode", "coordinator@coordinatorNode").
+		Clock(mockClock)
+	o, _, cleanup := builder.Build(ctx)
+	defer cleanup()
+
+	now := time.Now()
+	o.timeOfMostRecentHeartbeat = &now
+
+	assert.True(t, guard_IdleThresholdExceeded(ctx, o))
+}
+
 func Test_applyHeartbeatReceived_DispatchedTransactionNotFoundLogsAndContinues(t *testing.T) {
 	ctx := context.Background()
 	originatorLocator := "sender@senderNode"
 	coordinatorLocator := "coordinator@coordinatorNode"
-	builder := NewOriginatorBuilderForTesting(State_Observing).CommitteeMembers(originatorLocator, coordinatorLocator)
+	// nodeName must match DispatchedTransactions[].Originator or the heartbeat entry is skipped entirely.
+	builder := NewOriginatorBuilderForTesting(State_Observing).
+		NodeName(originatorLocator).
+		CommitteeMembers(originatorLocator, coordinatorLocator)
 	o, _, cleanup := builder.Build(ctx)
 	defer cleanup()
 
@@ -102,7 +138,7 @@ func Test_applyHeartbeatReceived_DispatchedTransactionWithHashUpdatesSubmitted(t
 	txn := transactionBuilder.BuildSparse()
 
 	// Create the transaction in the originator
-	err := o.createTransaction(ctx, txn)
+	err := o.addToTransactions(ctx, txn, o.newOriginatorTransaction)
 	require.NoError(t, err)
 
 	// Create heartbeat with dispatched transaction that has a hash
@@ -146,7 +182,7 @@ func Test_applyHeartbeatReceived_DispatchedTransactionWithNonceOnlySendsNonceAss
 	txn := transactionBuilder.BuildSparse()
 
 	// Create the transaction in the originator
-	err := o.createTransaction(ctx, txn)
+	err := o.addToTransactions(ctx, txn, o.newOriginatorTransaction)
 	require.NoError(t, err)
 
 	// Create heartbeat with dispatched transaction that has a nonce but no hash
@@ -213,7 +249,7 @@ func Test_applyHeartbeatReceived_DispatchedTransactionWithHashAndNonceSucceeds(t
 	txn := transactionBuilder.BuildSparse()
 
 	// Create the transaction in the originator
-	err := o.createTransaction(ctx, txn)
+	err := o.addToTransactions(ctx, txn, o.newOriginatorTransaction)
 	require.NoError(t, err)
 
 	submissionHash := pldtypes.RandBytes32()
@@ -255,7 +291,7 @@ func Test_applyHeartbeatReceived_DispatchedTransactionNonceOnlySucceeds(t *testi
 	txn := transactionBuilder.BuildSparse()
 
 	// Create the transaction in the originator
-	err := o.createTransaction(ctx, txn)
+	err := o.addToTransactions(ctx, txn, o.newOriginatorTransaction)
 	require.NoError(t, err)
 
 	// Create heartbeat with dispatched transaction that has a nonce but no hash
@@ -279,4 +315,143 @@ func Test_applyHeartbeatReceived_DispatchedTransactionNonceOnlySucceeds(t *testi
 	// This should succeed with a real transaction
 	err = o.applyHeartbeatReceived(ctx, heartbeatEvent)
 	assert.NoError(t, err)
+}
+
+type mockOriginatorTransactionFailingSubmitted struct {
+	id           uuid.UUID
+	pt           *components.PrivateTransaction
+	submittedErr error
+}
+
+func (m *mockOriginatorTransactionFailingSubmitted) HandleEvent(_ context.Context, ev common.Event) error {
+	if _, ok := ev.(*transaction.SubmittedEvent); ok {
+		return m.submittedErr
+	}
+	return nil
+}
+
+func (m *mockOriginatorTransactionFailingSubmitted) GetID() uuid.UUID { return m.id }
+func (m *mockOriginatorTransactionFailingSubmitted) GetAssembleErrorCount() int {
+	return 0
+}
+func (m *mockOriginatorTransactionFailingSubmitted) GetPrivateTransaction() *components.PrivateTransaction {
+	return m.pt
+}
+func (m *mockOriginatorTransactionFailingSubmitted) GetCurrentState() transaction.State {
+	return transaction.State_Pending
+}
+func (m *mockOriginatorTransactionFailingSubmitted) GetStatus(_ context.Context) components.PrivateTxStatus {
+	return components.PrivateTxStatus{TxID: m.id.String(), Status: "pending"}
+}
+
+func Test_applyHeartbeatReceived_SubmittedHandleEventError_ReturnsWrappedError(t *testing.T) {
+	ctx := context.Background()
+	originatorLocator := "sender@senderNode"
+	coordinatorLocator := "coordinator@coordinatorNode"
+	builder := NewOriginatorBuilderForTesting(State_Observing).
+		NodeName(originatorLocator).
+		CommitteeMembers(originatorLocator, coordinatorLocator)
+	o, _, cleanup := builder.Build(ctx)
+	defer cleanup()
+
+	txnID := uuid.New()
+	innerErr := fmt.Errorf("simulated submitted handling failure")
+	mockTxn := &mockOriginatorTransactionFailingSubmitted{
+		id:           txnID,
+		pt:           &components.PrivateTransaction{ID: txnID},
+		submittedErr: innerErr,
+	}
+	o.transactionsByID[txnID] = mockTxn
+
+	signerAddress := pldtypes.RandAddress()
+	submissionHash := pldtypes.RandBytes32()
+
+	heartbeatEvent := &HeartbeatReceivedEvent{}
+	heartbeatEvent.From = coordinatorLocator
+	contractAddress := builder.GetContractAddress()
+	heartbeatEvent.ContractAddress = &contractAddress
+	heartbeatEvent.DispatchedTransactions = []*common.SnapshotDispatchedTransaction{
+		{
+			SnapshotPooledTransaction: common.SnapshotPooledTransaction{
+				ID:         txnID,
+				Originator: originatorLocator,
+			},
+			Signer:               *signerAddress,
+			LatestSubmissionHash: &submissionHash,
+		},
+	}
+
+	err := o.applyHeartbeatReceived(ctx, heartbeatEvent)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "error handling transaction submitted event")
+	assert.Contains(t, err.Error(), txnID.String())
+	assert.Contains(t, err.Error(), innerErr.Error())
+}
+
+type mockOriginatorTransactionFailingNonceAssigned struct {
+	id       uuid.UUID
+	pt       *components.PrivateTransaction
+	nonceErr error
+}
+
+func (m *mockOriginatorTransactionFailingNonceAssigned) HandleEvent(_ context.Context, ev common.Event) error {
+	if _, ok := ev.(*transaction.NonceAssignedEvent); ok {
+		return m.nonceErr
+	}
+	return nil
+}
+
+func (m *mockOriginatorTransactionFailingNonceAssigned) GetID() uuid.UUID { return m.id }
+func (m *mockOriginatorTransactionFailingNonceAssigned) GetAssembleErrorCount() int {
+	return 0
+}
+func (m *mockOriginatorTransactionFailingNonceAssigned) GetPrivateTransaction() *components.PrivateTransaction {
+	return m.pt
+}
+func (m *mockOriginatorTransactionFailingNonceAssigned) GetCurrentState() transaction.State {
+	return transaction.State_Pending
+}
+func (m *mockOriginatorTransactionFailingNonceAssigned) GetStatus(_ context.Context) components.PrivateTxStatus {
+	return components.PrivateTxStatus{TxID: m.id.String(), Status: "pending"}
+}
+
+func Test_applyHeartbeatReceived_NonceAssignedHandleEventError_ReturnsWrappedError(t *testing.T) {
+	ctx := context.Background()
+	originatorLocator := "sender@senderNode"
+	coordinatorLocator := "coordinator@coordinatorNode"
+	builder := NewOriginatorBuilderForTesting(State_Observing).
+		NodeName(originatorLocator).
+		CommitteeMembers(originatorLocator, coordinatorLocator)
+	o, _, cleanup := builder.Build(ctx)
+	defer cleanup()
+
+	txnID := uuid.New()
+	innerErr := fmt.Errorf("simulated nonce handling failure")
+	mockTxn := &mockOriginatorTransactionFailingNonceAssigned{
+		id:       txnID,
+		pt:       &components.PrivateTransaction{ID: txnID},
+		nonceErr: innerErr,
+	}
+	o.transactionsByID[txnID] = mockTxn
+
+	nonce := uint64(99)
+	heartbeatEvent := &HeartbeatReceivedEvent{}
+	heartbeatEvent.From = coordinatorLocator
+	contractAddress := builder.GetContractAddress()
+	heartbeatEvent.ContractAddress = &contractAddress
+	heartbeatEvent.DispatchedTransactions = []*common.SnapshotDispatchedTransaction{
+		{
+			SnapshotPooledTransaction: common.SnapshotPooledTransaction{
+				ID:         txnID,
+				Originator: originatorLocator,
+			},
+			Nonce: &nonce,
+		},
+	}
+
+	err := o.applyHeartbeatReceived(ctx, heartbeatEvent)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "error handling nonce assigned event")
+	assert.Contains(t, err.Error(), txnID.String())
+	assert.Contains(t, err.Error(), innerErr.Error())
 }
