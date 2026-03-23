@@ -222,8 +222,5 @@ func guard_RedelegateThresholdExceeded(_ context.Context, o *originator) bool {
 		//we have never seen a heartbeat so that was a really long time ago, certainly longer than any threshold
 		return true
 	}
-	if o.clock.HasExpired(*o.timeOfMostRecentHeartbeat, time.Duration(o.redelegateThreshold)*o.heartbeatInterval) {
-		return true
-	}
-	return false
+	return o.clock.HasExpired(*o.timeOfMostRecentHeartbeat, time.Duration(o.redelegateThreshold)*o.heartbeatInterval)
 }
