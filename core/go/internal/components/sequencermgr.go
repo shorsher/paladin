@@ -76,9 +76,8 @@ type SequencerManager interface {
 	// Synchronous function to call an existing deployed smart contract
 	CallPrivateSmartContract(ctx context.Context, call *ResolvedTransaction) (*abi.ComponentValue, error)
 
-	// Enqueue a batch of private transaction completions for sequential background processing.
-	// The completions must be pre-sorted in on-chain order by the caller. Processing happens
-	// on a dedicated worker goroutine to preserve ordering within and across batches.
+	// Process a pre-sorted batch of private transaction completions synchronously.
+	// Called from per-domain worker goroutines to preserve ordering within each domain's event stream.
 	PrivateTransactionsConfirmed(ctx context.Context, completions []*TxCompletion)
 
 	// Synchronous functions to build state distributions and nullifiers

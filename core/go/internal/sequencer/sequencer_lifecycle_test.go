@@ -138,7 +138,6 @@ func newSequencerManagerForTesting(t *testing.T, mocks *sequencerLifecycleTestMo
 		metrics:                       mocks.metrics,
 		targetActiveCoordinatorsLimit: 2,
 		targetActiveSequencersLimit:   2,
-		completionQueue:               make(chan []*components.TxCompletion, 5),
 	}
 
 	return sm
@@ -1533,7 +1532,7 @@ func TestSequencerManager_GetTxStatus_OriginatorError(t *testing.T) {
 	assert.Equal(t, "", status.TxID) // Empty status when error occurs
 }
 
-func TestSequencerManager_processCompletionBatch_PreservesOrder(t *testing.T) {
+func TestSequencerManager_PrivateTransactionsConfirmed_PreservesOrder(t *testing.T) {
 	ctx := context.Background()
 	contractAddr := pldtypes.RandAddress()
 	mocks := newSequencerLifecycleTestMocks(t)
@@ -1592,7 +1591,7 @@ func TestSequencerManager_processCompletionBatch_PreservesOrder(t *testing.T) {
 		return ok
 	})).Times(3)
 
-	sm.processCompletionBatch(ctx, completions)
+	sm.PrivateTransactionsConfirmed(ctx, completions)
 
 	require.Len(t, confirmedOrder, 3)
 	assert.Equal(t, txID1, confirmedOrder[0], "first confirmation should be txID1")
@@ -1600,7 +1599,7 @@ func TestSequencerManager_processCompletionBatch_PreservesOrder(t *testing.T) {
 	assert.Equal(t, txID3, confirmedOrder[2], "third confirmation should be txID3")
 }
 
-func TestSequencerManager_processCompletionBatch_SkipsDeploys(t *testing.T) {
+func TestSequencerManager_PrivateTransactionsConfirmed_SkipsDeploys(t *testing.T) {
 	ctx := context.Background()
 	mocks := newSequencerLifecycleTestMocks(t)
 	sm := newSequencerManagerForTesting(t, mocks)
@@ -1625,31 +1624,19 @@ func TestSequencerManager_processCompletionBatch_SkipsDeploys(t *testing.T) {
 	mocks.publicTxManager.EXPECT().QueryPublicTxForTransactions(ctx, mock.Anything, mock.Anything, mock.Anything).Return(nil, nil).Once()
 	mocks.metrics.EXPECT().IncConfirmedTransactions().Once()
 
-	sm.processCompletionBatch(ctx, completions)
+	sm.PrivateTransactionsConfirmed(ctx, completions)
 }
 
-func TestSequencerManager_PrivateTransactionsConfirmed_EnqueuesAndWorkerProcesses(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	mocks := newSequencerLifecycleTestMocks(t)
+func TestSequencerManager_PrivateTransactionsConfirmed_SynchronousProcessing(t *testing.T) {
+	ctx := context.Background()
 	contractAddr := pldtypes.RandAddress()
-
-	sm := &sequencerManager{
-		ctx:                           ctx,
-		config:                        &pldconf.SequencerConfig{},
-		components:                    mocks.components,
-		nodeName:                      "test-node",
-		sequencersLock:                sync.RWMutex{},
-		sequencers:                    make(map[string]*sequencer),
-		metrics:                       mocks.metrics,
-		targetActiveCoordinatorsLimit: 2,
-		targetActiveSequencersLimit:   2,
-		completionQueue:               make(chan []*components.TxCompletion, 100),
-	}
+	mocks := newSequencerLifecycleTestMocks(t)
+	sm := newSequencerManagerForTesting(t, mocks)
 
 	seq := newSequencerForTesting(contractAddr, mocks)
+	sm.sequencersLock.Lock()
 	sm.sequencers[contractAddr.String()] = seq
+	sm.sequencersLock.Unlock()
 
 	txID := uuid.New()
 	txHash := pldtypes.RandBytes32()
@@ -1666,29 +1653,14 @@ func TestSequencerManager_PrivateTransactionsConfirmed_EnqueuesAndWorkerProcesse
 	mocks.components.EXPECT().Persistence().Return(mocks.persistence).Once()
 	mocks.components.EXPECT().PublicTxManager().Return(mocks.publicTxManager).Once()
 	mocks.persistence.EXPECT().NOTX().Return(nil).Once()
-	mocks.publicTxManager.EXPECT().QueryPublicTxForTransactions(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil, nil).Once()
+	mocks.publicTxManager.EXPECT().QueryPublicTxForTransactions(ctx, mock.Anything, mock.Anything, mock.Anything).Return(nil, nil).Once()
 	mocks.metrics.EXPECT().IncConfirmedTransactions().Once()
 	mocks.domainAPI.EXPECT().Address().Return(*contractAddr).Once()
 
-	processed := make(chan struct{})
-	mocks.coordinator.EXPECT().QueueEvent(mock.Anything, mock.MatchedBy(func(e interface{}) bool {
-		_, ok := e.(*coordinatorTx.ConfirmedSuccessEvent)
-		if ok {
-			close(processed)
-		}
-		return ok
+	mocks.coordinator.EXPECT().QueueEvent(ctx, mock.MatchedBy(func(e interface{}) bool {
+		event, ok := e.(*coordinatorTx.ConfirmedSuccessEvent)
+		return ok && event.TransactionID == txID && event.Hash == txHash
 	})).Once()
 
-	sm.completionWG.Add(1)
-	go func() {
-		defer sm.completionWG.Done()
-		sm.completionWorker(ctx)
-	}()
-
 	sm.PrivateTransactionsConfirmed(ctx, completions)
-
-	<-processed
-
-	cancel()
-	sm.completionWG.Wait()
 }

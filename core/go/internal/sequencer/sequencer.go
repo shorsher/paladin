@@ -60,8 +60,6 @@ type sequencerManager struct {
 	engineIntegration             common.EngineIntegration
 	targetActiveCoordinatorsLimit int // Max number of contracts this node aims to concurrently act as coordinator for. It could still efficiently respond to dispatch requests from other coordinators because the originator will remain in memory.
 	targetActiveSequencersLimit   int // Max number of sequencers this node aims to retain in memory concurrently. Hitting this limit will cause an attempt to remove the lowest priority sequencer from memory, and hence require it to be recreated from persisted state if it is needed in the future
-	completionQueue               chan []*components.TxCompletion
-	completionWG                  sync.WaitGroup
 }
 
 // Init implements Engine.
@@ -91,11 +89,6 @@ func (sMgr *sequencerManager) PostInit(c components.AllComponents) error {
 func (sMgr *sequencerManager) Start() error {
 	log.L(sMgr.ctx).Infof("Starting distributed sequencer manager")
 	sMgr.syncPoints.Start()
-	sMgr.completionWG.Add(1)
-	go func() {
-		defer sMgr.completionWG.Done()
-		sMgr.completionWorker(sMgr.ctx)
-	}()
 	sMgr.pollForIncompleteTransactions(sMgr.ctx, confutil.DurationMinIfPositive(sMgr.config.TransactionResumePollInterval, pldconf.SequencerMinimum.TransactionResumePollInterval, *pldconf.SequencerDefaults.TransactionResumePollInterval))
 
 	return nil
@@ -107,7 +100,6 @@ func (sMgr *sequencerManager) Stop() {
 	log.L(sMgr.ctx).Infof("Stopped all sequencers")
 	sMgr.syncPoints.Close()
 	sMgr.cancelCtx()
-	sMgr.completionWG.Wait()
 }
 
 func NewDistributedSequencerManager(ctx context.Context, config *pldconf.SequencerConfig) components.SequencerManager {
@@ -120,7 +112,6 @@ func NewDistributedSequencerManager(ctx context.Context, config *pldconf.Sequenc
 		sequencers:                    make(map[string]*sequencer),
 		targetActiveCoordinatorsLimit: confutil.IntMin(config.TargetActiveCoordinators, pldconf.SequencerMinimum.TargetActiveCoordinators, *pldconf.SequencerDefaults.TargetActiveCoordinators),
 		targetActiveSequencersLimit:   confutil.IntMin(config.TargetActiveSequencers, pldconf.SequencerMinimum.TargetActiveSequencers, *pldconf.SequencerDefaults.TargetActiveSequencers),
-		completionQueue:               make(chan []*components.TxCompletion, 100),
 	}
 	return sMgr
 }
@@ -914,28 +905,10 @@ func (sMgr *sequencerManager) BuildStateDistributions(ctx context.Context, tx *c
 	return common.NewStateDistributionBuilder(sMgr.nodeName, tx).Build(ctx)
 }
 
+// PrivateTransactionsConfirmed processes a pre-sorted batch of completions synchronously.
+// It is expected to be called from a per-domain worker goroutine so that ordering
+// within a domain's event stream is preserved.
 func (sMgr *sequencerManager) PrivateTransactionsConfirmed(ctx context.Context, completions []*components.TxCompletion) {
-	select {
-	case sMgr.completionQueue <- completions:
-	case <-ctx.Done():
-		log.L(ctx).Warnf("context cancelled, dropping %d completion notifications", len(completions))
-	}
-}
-
-func (sMgr *sequencerManager) completionWorker(ctx context.Context) {
-	log.L(ctx).Debugf("completion worker started")
-	for {
-		select {
-		case batch := <-sMgr.completionQueue:
-			sMgr.processCompletionBatch(ctx, batch)
-		case <-ctx.Done():
-			log.L(ctx).Debugf("completion worker stopping")
-			return
-		}
-	}
-}
-
-func (sMgr *sequencerManager) processCompletionBatch(ctx context.Context, completions []*components.TxCompletion) {
 	persistence := sMgr.components.Persistence()
 	publicTxManager := sMgr.components.PublicTxManager()
 
@@ -947,6 +920,7 @@ func (sMgr *sequencerManager) processCompletionBatch(ctx context.Context, comple
 		}
 
 		confirmedWithPublicTX := false
+
 		for _, pubTx := range pubBindingTx {
 			for _, publicTx := range pubTx {
 				log.L(ctx).Debugf("Checking public transactions for TX ID %s to find a match for the receipt we are processing %s", completion.TransactionID, publicTx.TransactionHash)
@@ -962,10 +936,14 @@ func (sMgr *sequencerManager) processCompletionBatch(ctx context.Context, comple
 			}
 		}
 
+		// For private transactions that are being confirmed by virtue of a successful chained private transaction, we don't give the distributed sequencer any information
+		// about the underlying chained public TX.
 		if !confirmedWithPublicTX {
+			// TODO AM: move this log to when we actually know its a chained transaction
 			log.L(ctx).Debugf("No public TX found, confirming %s via chained transaction", completion.TransactionID)
 			err = sMgr.handleTransactionConfirmedSuccess(ctx, completion, nil)
 			if err != nil {
+				// Log but continue confirming other transactions
 				log.L(ctx).Errorf("Error handling transaction confirmed event: %s", err)
 			}
 		}
