@@ -59,17 +59,18 @@ type originator struct {
 	stateMachineEventLoop     *statemachine.StateMachineEventLoop[State, *originator]
 	activeCoordinatorNode     string
 	timeOfMostRecentHeartbeat *time.Time
-	transactionsByID          map[uuid.UUID]*transaction.OriginatorTransaction
-	transactionsOrdered       []*transaction.OriginatorTransaction
+	transactionsByID          map[uuid.UUID]transaction.OriginatorTransaction
+	transactionsOrdered       []transaction.OriginatorTransaction
 	currentBlockHeight        uint64
 	latestCoordinatorSnapshot *common.CoordinatorSnapshot
 
 	/* Config */
-	nodeName           string
-	blockRangeSize     uint64
-	contractAddress    *pldtypes.EthAddress
-	heartbeatThreshold time.Duration
-	delegateTimeout    time.Duration
+	nodeName            string
+	blockRangeSize      uint64
+	contractAddress     *pldtypes.EthAddress
+	heartbeatInterval   time.Duration
+	idleThreshold       int // expressed as a multiple of heartbeat intervals
+	redelegateThreshold int // expressed as a multiple of heartbeat intervals
 
 	/* Dependencies */
 	transportWriter   transport.TransportWriter
@@ -77,8 +78,9 @@ type originator struct {
 	engineIntegration common.EngineIntegration
 	metrics           metrics.DistributedSequencerMetrics
 
-	/* Delegate loop */
-	delegateLoopStopped chan struct{}
+	/* Heartbeat loop */
+	heartbeatCtx    context.Context
+	heartbeatCancel context.CancelFunc
 }
 
 func NewOriginator(
@@ -89,41 +91,34 @@ func NewOriginator(
 	engineIntegration common.EngineIntegration,
 	contractAddress *pldtypes.EthAddress,
 	configuration *pldconf.SequencerConfig,
-	heartbeatPeriodMs int,
-	heartbeatThresholdIntervals int,
 	metrics metrics.DistributedSequencerMetrics,
 ) (*originator, error) {
 	origCtx := log.WithLogField(ctx, "role", "originator")
 	o := &originator{
 		ctx:                 origCtx,
 		nodeName:            nodeName,
-		transactionsByID:    make(map[uuid.UUID]*transaction.OriginatorTransaction),
+		transactionsByID:    make(map[uuid.UUID]transaction.OriginatorTransaction),
 		transportWriter:     transportWriter,
 		blockRangeSize:      confutil.Uint64Min(configuration.BlockRange, pldconf.SequencerMinimum.BlockRange, *pldconf.SequencerDefaults.BlockRange),
 		contractAddress:     contractAddress,
 		clock:               clock,
 		engineIntegration:   engineIntegration,
-		heartbeatThreshold:  time.Duration(heartbeatPeriodMs*heartbeatThresholdIntervals) * time.Millisecond,
-		delegateTimeout:     confutil.DurationMin(configuration.DelegateTimeout, pldconf.SequencerMinimum.DelegateTimeout, *pldconf.SequencerDefaults.DelegateTimeout),
 		metrics:             metrics,
-		delegateLoopStopped: make(chan struct{}),
+		heartbeatInterval:   confutil.DurationMin(configuration.HeartbeatInterval, pldconf.SequencerMinimum.HeartbeatInterval, *pldconf.SequencerDefaults.HeartbeatInterval),
+		idleThreshold:       confutil.IntMin(configuration.OriginatorIdleGracePeriod, pldconf.SequencerMinimum.OriginatorIdleGracePeriod, *pldconf.SequencerDefaults.OriginatorIdleGracePeriod),
+		redelegateThreshold: confutil.IntMin(configuration.RedelegateGracePeriod, pldconf.SequencerMinimum.RedelegateGracePeriod, *pldconf.SequencerDefaults.RedelegateGracePeriod),
 	}
+
 	originatorEventQueueSize := confutil.IntMin(configuration.OriginatorEventQueueSize, pldconf.SequencerMinimum.OriginatorEventQueueSize, *pldconf.SequencerDefaults.OriginatorEventQueueSize)
 	originatorPriorityEventQueueSize := confutil.IntMin(configuration.OriginatorPriorityEventQueueSize, pldconf.SequencerMinimum.OriginatorPriorityEventQueueSize, *pldconf.SequencerDefaults.OriginatorPriorityEventQueueSize)
 	o.initializeStateMachineEventLoop(State_Idle, originatorEventQueueSize, originatorPriorityEventQueueSize)
 
 	go o.stateMachineEventLoop.Start(origCtx)
-	go o.delegateLoop(origCtx)
 
 	return o, nil
 }
 
 func (o *originator) WaitForDone(ctx context.Context) {
-	select {
-	case <-o.delegateLoopStopped:
-	case <-ctx.Done():
-		return
-	}
 	o.stateMachineEventLoop.WaitForDone(ctx)
 }
 
@@ -145,31 +140,41 @@ func (o *originator) queueEventInternal(ctx context.Context, event common.Event)
 	log.L(ctx).Tracef("Pushed internal originator event onto priority queue: %s", event.TypeString())
 }
 
-func (o *originator) delegateLoop(ctx context.Context) {
-	defer close(o.delegateLoopStopped)
-	log.L(ctx).Debugf("delegate loop started for contract %s", o.contractAddress.String())
+func (o *originator) heartbeatLoop(ctx context.Context, queueEvent func(context.Context, common.Event)) {
+	if o.heartbeatCtx == nil {
+		o.heartbeatCtx, o.heartbeatCancel = context.WithCancel(ctx)
+		log.L(ctx).Debugf("orig    | %s   | Starting heartbeat loop", o.contractAddress.String()[0:8])
 
-	// Check for transactions still waiting to be delegated
-	ticker := time.NewTicker(o.delegateTimeout)
-	defer func() {
-		log.L(ctx).Debugf("delegate loop stopping for contract %s", o.contractAddress.String())
-		ticker.Stop()
-	}()
-	for {
-		select {
-		case <-ticker.C:
-			log.L(ctx).Debugf("delegate loop fired for contract %s", o.contractAddress.String())
-			delegateTimeoutEvent := &DelegateTimeoutEvent{}
-			delegateTimeoutEvent.BaseEvent = common.BaseEvent{}
-			delegateTimeoutEvent.EventTime = time.Now()
-			// TryQueueEvent is acceptable here as if the event cannot be queued, it will be retried on
-			// the next tick. Not blocking on a full channel also avoids stalling shutdown.
-			o.stateMachineEventLoop.TryQueueEvent(ctx, delegateTimeoutEvent)
-		case <-ctx.Done():
-			log.L(ctx).Debugf("delegate loop stopped for contract %s", o.contractAddress.String())
-			return
+		// Send an initial heartbeat interval event to be handled immediately
+		queueEvent(ctx, &common.HeartbeatIntervalEvent{})
+
+		// Then every N seconds
+		ticker := time.NewTicker(o.heartbeatInterval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				queueEvent(ctx, &common.HeartbeatIntervalEvent{})
+			case <-o.heartbeatCtx.Done():
+				log.L(ctx).Infof("Ending heartbeat loop for %s", o.contractAddress.String())
+				o.heartbeatCtx = nil
+				o.heartbeatCancel = nil
+				return
+			}
 		}
 	}
+}
+
+func action_StartHeartbeatLoop(ctx context.Context, o *originator, _ common.Event) error {
+	go o.heartbeatLoop(ctx, o.QueueEvent)
+	return nil
+}
+
+func action_StopHeartbeatLoop(ctx context.Context, o *originator, _ common.Event) error {
+	if o.heartbeatCancel != nil {
+		o.heartbeatCancel()
+	}
+	return nil
 }
 
 func (o *originator) propagateEventToTransaction(ctx context.Context, event transaction.Event) error {
@@ -200,14 +205,17 @@ func (o *originator) propagateEventToTransaction(ctx context.Context, event tran
 	return o.transportWriter.SendTransactionUnknown(ctx, coordinator, event.GetTransactionID())
 }
 
-func (o *originator) getTransactionsInStates(states []transaction.State) []*transaction.OriginatorTransaction {
+// getTransactionsInStates returns transactions in any of the given states.
+//
+//nolint:unused // retaining until we decide we don't have any reasons for retrieving transactions by state
+func (o *originator) getTransactionsInStates(states []transaction.State) []transaction.OriginatorTransaction {
 	//TODO this could be made more efficient by maintaining a separate index of transactions for each state but that is error prone so
 	// deferring until we have a comprehensive test suite to catch errors
 	matchingStates := make(map[transaction.State]bool)
 	for _, state := range states {
 		matchingStates[state] = true
 	}
-	matchingTxns := make([]*transaction.OriginatorTransaction, 0, len(o.transactionsByID))
+	matchingTxns := make([]transaction.OriginatorTransaction, 0, len(o.transactionsByID))
 	for _, txn := range o.transactionsByID {
 		if matchingStates[txn.GetCurrentState()] {
 			matchingTxns = append(matchingTxns, txn)
@@ -216,14 +224,14 @@ func (o *originator) getTransactionsInStates(states []transaction.State) []*tran
 	return matchingTxns
 }
 
-func (o *originator) getTransactionsNotInStates(states []transaction.State) []*transaction.OriginatorTransaction {
+func (o *originator) getTransactionsNotInStates(states []transaction.State) []transaction.OriginatorTransaction {
 	//TODO this could be made more efficient by maintaining a separate index of transactions for each state but that is error prone so
 	// deferring until we have a comprehensive test suite to catch errors
 	nonMatchingStates := make(map[transaction.State]bool)
 	for _, state := range states {
 		nonMatchingStates[state] = true
 	}
-	matchingTxns := make([]*transaction.OriginatorTransaction, 0, len(o.transactionsByID))
+	matchingTxns := make([]transaction.OriginatorTransaction, 0, len(o.transactionsByID))
 	for _, txn := range o.transactionsByID {
 		if !nonMatchingStates[txn.GetCurrentState()] {
 			matchingTxns = append(matchingTxns, txn)

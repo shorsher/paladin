@@ -62,6 +62,10 @@ func (r *SentMessageRecorder) HasDelegatedTransaction(txid uuid.UUID) bool {
 	return false
 }
 
+func (r *SentMessageRecorder) GetDelegatedTransactions() []*components.PrivateTransaction {
+	return r.delegatedTransactions
+}
+
 func (r *SentMessageRecorder) Reset(ctx context.Context) {
 	r.SentMessageRecorder.Reset(ctx)
 	r.hasSentDelegationRequest = false
@@ -164,8 +168,6 @@ func (b *OriginatorBuilderForTesting) Build(ctx context.Context) (*originator, *
 		mocks.EngineIntegration,
 		b.contractAddress,
 		&pldconf.SequencerDefaults,
-		TestDefault_HeartbeatIntervalMs,
-		TestDefault_HeartbeatThreshold,
 		b.metrics,
 	)
 

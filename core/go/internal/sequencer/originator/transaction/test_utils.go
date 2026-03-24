@@ -17,7 +17,6 @@ package transaction
 
 import (
 	"context"
-	"fmt"
 	"math/rand/v2"
 	"testing"
 
@@ -38,6 +37,7 @@ type SentMessageRecorder struct {
 	hasSentAssembleSuccessResponse bool
 	hasSentAssembleRevertResponse  bool
 	hasSentAssembleParkResponse    bool
+	hasSentAssembleErrorResponse   bool
 	hasSentTransactionUnknown      bool
 	transactionUnknownTxID         uuid.UUID
 	transactionUnknownCoordinator  string
@@ -74,6 +74,10 @@ func (r *SentMessageRecorder) HasSentAssembleParkResponse() bool {
 	return r.hasSentAssembleParkResponse
 }
 
+func (r *SentMessageRecorder) HasSentAssembleErrorResponse() bool {
+	return r.hasSentAssembleErrorResponse
+}
+
 func (r *SentMessageRecorder) SendAssembleRequest(ctx context.Context, assemblingNode string, transactionID uuid.UUID, idempotencyID uuid.UUID, transactionPreassembly *components.TransactionPreAssembly, stateLocksJSON []byte, blockHeight int64) error {
 	return nil
 }
@@ -82,7 +86,7 @@ func (r *SentMessageRecorder) SendDelegationRequest(ctx context.Context, coordin
 	return nil
 }
 
-func (r *SentMessageRecorder) SendDelegationRequestAcknowledgment(ctx context.Context, delegatingNodeName string, delegationId string, delegateNodeName string, transactionID string) error {
+func (r *SentMessageRecorder) SendDelegationRequestAcknowledgment(ctx context.Context, delegatingNodeName string, delegationId string, transactionIDs []string, errors []int64) error {
 	return nil
 }
 
@@ -149,11 +153,16 @@ func (r *SentMessageRecorder) SendAssembleResponse(ctx context.Context, txID uui
 	return nil
 }
 
+func (r *SentMessageRecorder) SendAssembleErrorResponse(ctx context.Context, txID uuid.UUID, requestID uuid.UUID, recipient string) error {
+	r.hasSentAssembleErrorResponse = true
+	return nil
+}
 func (r *SentMessageRecorder) Reset(_ context.Context) {
 	r.hasSentConfirmationResponse = false
 	r.hasSentAssembleSuccessResponse = false
 	r.hasSentAssembleRevertResponse = false
 	r.hasSentAssembleParkResponse = false
+	r.hasSentAssembleErrorResponse = false
 	r.hasSentTransactionUnknown = false
 	r.transactionUnknownTxID = uuid.UUID{}
 	r.transactionUnknownCoordinator = ""
@@ -163,7 +172,7 @@ type TransactionBuilderForTesting struct {
 	privateTransactionBuilder *testutil.PrivateTransactionBuilderForTesting
 	state                     State
 	currentDelegate           string
-	txn                       *OriginatorTransaction
+	txn                       *originatorTransaction
 	sentMessageRecorder       *SentMessageRecorder
 	fakeEngineIntegration     *common.FakeEngineIntegrationForTesting
 	queueEventForOriginator   func(ctx context.Context, event common.Event)
@@ -234,7 +243,7 @@ func (b *TransactionBuilderForTesting) QueueEventsTo(emit func(ctx context.Conte
 	return b
 }
 
-func (b *TransactionBuilderForTesting) GetBuiltTransaction() *OriginatorTransaction {
+func (b *TransactionBuilderForTesting) GetBuiltTransaction() *originatorTransaction {
 	return b.txn
 }
 
@@ -245,7 +254,7 @@ type TransactionDependencyFakes struct {
 	emittedEvents       []common.Event
 }
 
-func (b *TransactionBuilderForTesting) BuildWithMocks() (*OriginatorTransaction, *TransactionDependencyFakes) {
+func (b *TransactionBuilderForTesting) BuildWithMocks() (*originatorTransaction, *TransactionDependencyFakes) {
 	mocks := &TransactionDependencyFakes{
 		SentMessageRecorder: b.sentMessageRecorder,
 		EngineIntegration:   b.fakeEngineIntegration,
@@ -257,18 +266,18 @@ func (b *TransactionBuilderForTesting) BuildWithMocks() (*OriginatorTransaction,
 	return b.Build(), mocks
 }
 
-func (b *TransactionBuilderForTesting) Build() *OriginatorTransaction {
+func (b *TransactionBuilderForTesting) Build() *originatorTransaction {
 	ctx := context.Background()
 
 	privateTransaction := b.privateTransactionBuilder.Build()
 	if b.queueEventForOriginator == nil {
 		b.queueEventForOriginator = func(ctx context.Context, event common.Event) {}
 	}
-	txn, err := NewTransaction(ctx,
+	txn := newTransaction(ctx,
 		privateTransaction,
+		b.fakeEngineIntegration,
 		b.sentMessageRecorder,
 		b.queueEventForOriginator,
-		b.fakeEngineIntegration,
 		b.metrics)
 
 	txn.stateMachine.CurrentState = b.state
@@ -320,9 +329,6 @@ func (b *TransactionBuilderForTesting) Build() *OriginatorTransaction {
 
 	}
 
-	if err != nil {
-		panic(fmt.Sprintf("Error from NewTransaction: %v", err))
-	}
 	b.txn = txn
 
 	b.txn.stateMachine.CurrentState = b.state

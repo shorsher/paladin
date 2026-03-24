@@ -18,6 +18,7 @@ package originator
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/LFDT-Paladin/paladin/common/go/pkg/i18n"
 	"github.com/LFDT-Paladin/paladin/common/go/pkg/log"
@@ -57,8 +58,7 @@ func (o *originator) applyHeartbeatReceived(ctx context.Context, event *Heartbea
 
 				err := txn.HandleEvent(ctx, txnSubmittedEvent)
 				if err != nil {
-					msg := fmt.Sprintf("error handling transaction submitted event for transaction %s: %v", txn.GetID(), err)
-					log.L(ctx).Error(msg)
+					msg := fmt.Errorf("error handling transaction submitted event for transaction %s: %v", txn.GetID(), err)
 					return i18n.NewError(ctx, msgs.MsgSequencerInternalError, msg)
 				}
 			} else if dispatchedTransaction.Nonce != nil {
@@ -71,8 +71,7 @@ func (o *originator) applyHeartbeatReceived(ctx context.Context, event *Heartbea
 				})
 
 				if err != nil {
-					msg := fmt.Sprintf("error handling nonce assigned event for transaction %s: %v", txn.GetID(), err)
-					log.L(ctx).Error(msg)
+					msg := fmt.Errorf("error handling nonce assigned event for transaction %s: %v", txn.GetID(), err)
 					return i18n.NewError(ctx, msgs.MsgSequencerInternalError, msg)
 				}
 			}
@@ -86,12 +85,12 @@ func (o *originator) applyHeartbeatReceived(ctx context.Context, event *Heartbea
 	return nil
 }
 
-func guard_HeartbeatThresholdExceeded(ctx context.Context, o *originator) bool {
+func guard_IdleThresholdExceeded(_ context.Context, o *originator) bool {
 	if o.timeOfMostRecentHeartbeat == nil {
 		//we have never seen a heartbeat so that was a really long time ago, certainly longer than any threshold
 		return true
 	}
-	if o.clock.HasExpired(*o.timeOfMostRecentHeartbeat, o.heartbeatThreshold) {
+	if o.clock.HasExpired(*o.timeOfMostRecentHeartbeat, time.Duration(o.idleThreshold)*o.heartbeatInterval) {
 		return true
 	}
 	return false
