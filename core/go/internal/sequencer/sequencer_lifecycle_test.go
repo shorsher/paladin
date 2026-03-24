@@ -22,6 +22,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/LFDT-Paladin/paladin/config/pkg/confutil"
 	"github.com/LFDT-Paladin/paladin/config/pkg/pldconf"
 	"github.com/LFDT-Paladin/paladin/core/internal/components"
@@ -36,6 +37,7 @@ import (
 	"github.com/LFDT-Paladin/paladin/core/mocks/metricsmocks"
 	"github.com/LFDT-Paladin/paladin/core/mocks/persistencemocks"
 	"github.com/LFDT-Paladin/paladin/core/pkg/blockindexer"
+	"github.com/LFDT-Paladin/paladin/core/pkg/persistence/mockpersistence"
 	"github.com/LFDT-Paladin/paladin/core/pkg/persistence"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldapi"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldtypes"
@@ -1537,6 +1539,9 @@ func TestSequencerManager_PrivateTransactionsConfirmed_PreservesOrder(t *testing
 	contractAddr := pldtypes.RandAddress()
 	mocks := newSequencerLifecycleTestMocks(t)
 	sm := newSequencerManagerForTesting(t, mocks)
+	mp, err := mockpersistence.NewSQLMockProvider()
+	require.NoError(t, err)
+	defer func() { require.NoError(t, mp.Mock.ExpectationsWereMet()) }()
 
 	seq := newSequencerForTesting(contractAddr, mocks)
 	sm.sequencersLock.Lock()
@@ -1574,9 +1579,11 @@ func TestSequencerManager_PrivateTransactionsConfirmed_PreservesOrder(t *testing
 		},
 	}
 
-	mocks.components.EXPECT().Persistence().Return(mocks.persistence).Once()
+	mocks.components.EXPECT().Persistence().Return(mp.P).Once()
 	mocks.components.EXPECT().PublicTxManager().Return(mocks.publicTxManager).Once()
-	mocks.persistence.EXPECT().NOTX().Return(nil).Times(3)
+	mp.Mock.ExpectQuery("SELECT count\\(\\*\\).*chained_private_txns").WithArgs(txID1).WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(1))
+	mp.Mock.ExpectQuery("SELECT count\\(\\*\\).*chained_private_txns").WithArgs(txID2).WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(1))
+	mp.Mock.ExpectQuery("SELECT count\\(\\*\\).*chained_private_txns").WithArgs(txID3).WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(1))
 	mocks.publicTxManager.EXPECT().QueryPublicTxForTransactions(ctx, mock.Anything, mock.Anything, mock.Anything).Return(nil, nil).Times(3)
 
 	mocks.metrics.EXPECT().IncConfirmedTransactions().Times(3)
@@ -1603,6 +1610,9 @@ func TestSequencerManager_PrivateTransactionsConfirmed_SkipsDeploys(t *testing.T
 	ctx := context.Background()
 	mocks := newSequencerLifecycleTestMocks(t)
 	sm := newSequencerManagerForTesting(t, mocks)
+	mp, err := mockpersistence.NewSQLMockProvider()
+	require.NoError(t, err)
+	defer func() { require.NoError(t, mp.Mock.ExpectationsWereMet()) }()
 
 	contractAddr := pldtypes.RandAddress()
 	txID := uuid.New()
@@ -1618,9 +1628,8 @@ func TestSequencerManager_PrivateTransactionsConfirmed_SkipsDeploys(t *testing.T
 		},
 	}
 
-	mocks.components.EXPECT().Persistence().Return(mocks.persistence).Once()
+	mocks.components.EXPECT().Persistence().Return(mp.P).Once()
 	mocks.components.EXPECT().PublicTxManager().Return(mocks.publicTxManager).Once()
-	mocks.persistence.EXPECT().NOTX().Return(nil).Once()
 	mocks.publicTxManager.EXPECT().QueryPublicTxForTransactions(ctx, mock.Anything, mock.Anything, mock.Anything).Return(nil, nil).Once()
 	mocks.metrics.EXPECT().IncConfirmedTransactions().Once()
 
@@ -1632,6 +1641,9 @@ func TestSequencerManager_PrivateTransactionsConfirmed_SynchronousProcessing(t *
 	contractAddr := pldtypes.RandAddress()
 	mocks := newSequencerLifecycleTestMocks(t)
 	sm := newSequencerManagerForTesting(t, mocks)
+	mp, err := mockpersistence.NewSQLMockProvider()
+	require.NoError(t, err)
+	defer func() { require.NoError(t, mp.Mock.ExpectationsWereMet()) }()
 
 	seq := newSequencerForTesting(contractAddr, mocks)
 	sm.sequencersLock.Lock()
@@ -1650,9 +1662,9 @@ func TestSequencerManager_PrivateTransactionsConfirmed_SynchronousProcessing(t *
 		},
 	}
 
-	mocks.components.EXPECT().Persistence().Return(mocks.persistence).Once()
+	mocks.components.EXPECT().Persistence().Return(mp.P).Once()
 	mocks.components.EXPECT().PublicTxManager().Return(mocks.publicTxManager).Once()
-	mocks.persistence.EXPECT().NOTX().Return(nil).Once()
+	mp.Mock.ExpectQuery("SELECT count\\(\\*\\).*chained_private_txns").WithArgs(txID).WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(1))
 	mocks.publicTxManager.EXPECT().QueryPublicTxForTransactions(ctx, mock.Anything, mock.Anything, mock.Anything).Return(nil, nil).Once()
 	mocks.metrics.EXPECT().IncConfirmedTransactions().Once()
 	mocks.domainAPI.EXPECT().Address().Return(*contractAddr).Once()
