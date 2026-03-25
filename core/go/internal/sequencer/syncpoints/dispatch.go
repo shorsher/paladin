@@ -38,10 +38,9 @@ type dispatchOperation struct {
 }
 
 type DispatchPersisted struct {
-	ID                       string              `json:"id"`
-	TransactionID            string              `json:"transactionID"`
-	PublicTransactionAddress pldtypes.EthAddress `json:"publicTransactionAddress"`
-	PublicTransactionID      uint64              `json:"publicTransactionID"`
+	ID                  string `json:"id"`
+	TransactionID       string `json:"transactionID"`
+	PublicTransactionID uint64 `json:"publicTransactionID"`
 }
 
 // A dispatch sequence is a collection of private transactions that are submitted together for a given signing address in order
@@ -217,7 +216,6 @@ func (s *syncPoints) writeDispatchOperations(ctx context.Context, dbTX persisten
 			for dispatchIndex, dispatch := range dispatchSequenceOp.PrivateTransactionDispatches {
 
 				//fill in the foreign key before persisting in our dispatch table
-				dispatch.PublicTransactionAddress = publicTxns[dispatchIndex].From
 				dispatch.PublicTransactionID = *publicTxns[dispatchIndex].LocalID
 				if dispatch.ID == "" {
 					dispatch.ID = uuid.New().String()
@@ -232,7 +230,6 @@ func (s *syncPoints) writeDispatchOperations(ctx context.Context, dbTX persisten
 				Clauses(clause.OnConflict{
 					Columns: []clause.Column{
 						{Name: "transaction_id"},
-						{Name: "public_transaction_address"},
 						{Name: "public_transaction_id"},
 					},
 					DoNothing: true, // immutable
