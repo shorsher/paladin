@@ -14,7 +14,7 @@ import (
 	testutils "github.com/LFDT-Paladin/paladin/core/noderuntests/pkg"
 	"github.com/LFDT-Paladin/paladin/core/noderuntests/pkg/domains"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldclient"
-	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/query"
+	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldapi"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldtypes"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -141,13 +141,16 @@ func TestChainedTransactionSuccess(t *testing.T) {
 	require.NotNil(t, tx.Receipt())
 	assert.True(t, tx.Receipt().Success)
 
-	_, err := client.PTX().GetTransactionFull(ctx, tx.ID())
+	txFull, err := client.PTX().GetTransactionFull(ctx, tx.ID())
 	require.NoError(t, err)
-	chainedTxns, err := client.PTX().QueryChainedDispatches(ctx, query.NewQueryBuilder().Limit(10).Equal("transactionId", tx.ID()).Query())
+	require.NotNil(t, txFull)
+	require.Len(t, txFull.SequencerActivity, 1)
+	assert.Equal(t, string(pldapi.SequencerActivityType_ChainedDispatch), txFull.SequencerActivity[0].ActivityType)
+	chainedDispatch, err := client.PTX().GetChainedDispatch(ctx, txFull.SequencerActivity[0].SubjectID)
 	require.NoError(t, err)
-	require.Len(t, chainedTxns, 1)
+	require.NotNil(t, chainedDispatch)
 
-	chainedTxID, err := uuid.Parse(chainedTxns[0].ChainedTransactionID)
+	chainedTxID, err := uuid.Parse(chainedDispatch.ChainedTransactionID)
 	require.NoError(t, err)
 
 	chainedTx, err := client.PTX().GetTransactionFull(ctx, chainedTxID)
@@ -193,13 +196,16 @@ func TestChainedTransactionRetryableRevertThenSucceeds(t *testing.T) {
 	require.NotNil(t, tx.Receipt())
 	assert.True(t, tx.Receipt().Success)
 
-	_, err := client.PTX().GetTransactionFull(ctx, tx.ID())
+	txFull, err := client.PTX().GetTransactionFull(ctx, tx.ID())
 	require.NoError(t, err)
-	chainedTxns, err := client.PTX().QueryChainedDispatches(ctx, query.NewQueryBuilder().Limit(10).Equal("transactionId", tx.ID()).Query())
+	require.NotNil(t, txFull)
+	require.Len(t, txFull.SequencerActivity, 1)
+	assert.Equal(t, string(pldapi.SequencerActivityType_ChainedDispatch), txFull.SequencerActivity[0].ActivityType)
+	chainedDispatch, err := client.PTX().GetChainedDispatch(ctx, txFull.SequencerActivity[0].SubjectID)
 	require.NoError(t, err)
-	require.Len(t, chainedTxns, 1)
+	require.NotNil(t, chainedDispatch)
 
-	chainedTxID, err := uuid.Parse(chainedTxns[0].ChainedTransactionID)
+	chainedTxID, err := uuid.Parse(chainedDispatch.ChainedTransactionID)
 	require.NoError(t, err)
 
 	chainedTx, err := client.PTX().GetTransactionFull(ctx, chainedTxID)
@@ -249,13 +255,16 @@ func TestChainedTransactionAssemblyFailure(t *testing.T) {
 	require.NotNil(t, tx.Receipt())
 	assert.False(t, tx.Receipt().Success)
 
-	_, err := client.PTX().GetTransactionFull(ctx, tx.ID())
+	txFull, err := client.PTX().GetTransactionFull(ctx, tx.ID())
 	require.NoError(t, err)
-	chainedTxns, err := client.PTX().QueryChainedDispatches(ctx, query.NewQueryBuilder().Limit(10).Equal("transactionId", tx.ID()).Query())
+	require.NotNil(t, txFull)
+	require.Len(t, txFull.SequencerActivity, 1)
+	assert.Equal(t, string(pldapi.SequencerActivityType_ChainedDispatch), txFull.SequencerActivity[0].ActivityType)
+	chainedDispatch, err := client.PTX().GetChainedDispatch(ctx, txFull.SequencerActivity[0].SubjectID)
 	require.NoError(t, err)
-	require.Len(t, chainedTxns, 1)
+	require.NotNil(t, chainedDispatch)
 
-	chainedTxID, err := uuid.Parse(chainedTxns[0].ChainedTransactionID)
+	chainedTxID, err := uuid.Parse(chainedDispatch.ChainedTransactionID)
 	require.NoError(t, err)
 
 	chainedTx, err := client.PTX().GetTransactionFull(ctx, chainedTxID)
@@ -304,13 +313,16 @@ func TestChainedTransactionBaseLedgerRevertFailure(t *testing.T) {
 	assert.False(t, tx.Receipt().Success)
 	assert.Contains(t, tx.Receipt().FailureMessage, "SimpleTokenNonRetryableError")
 
-	_, err := client.PTX().GetTransactionFull(ctx, tx.ID())
+	txFull, err := client.PTX().GetTransactionFull(ctx, tx.ID())
 	require.NoError(t, err)
-	chainedTxns, err := client.PTX().QueryChainedDispatches(ctx, query.NewQueryBuilder().Limit(10).Equal("transactionId", tx.ID()).Query())
+	require.NotNil(t, txFull)
+	require.Len(t, txFull.SequencerActivity, 1)
+	assert.Equal(t, string(pldapi.SequencerActivityType_ChainedDispatch), txFull.SequencerActivity[0].ActivityType)
+	chainedDispatch, err := client.PTX().GetChainedDispatch(ctx, txFull.SequencerActivity[0].SubjectID)
 	require.NoError(t, err)
-	require.Len(t, chainedTxns, 1)
+	require.NotNil(t, chainedDispatch)
 
-	chainedTxID, err := uuid.Parse(chainedTxns[0].ChainedTransactionID)
+	chainedTxID, err := uuid.Parse(chainedDispatch.ChainedTransactionID)
 	require.NoError(t, err)
 
 	chainedTx, err := client.PTX().GetTransactionFull(ctx, chainedTxID)
@@ -367,12 +379,19 @@ func TestChainedTransactionRetryableRevert_OnlyChainedFails_ThenSucceeds(t *test
 
 	txFull, err := client.PTX().GetTransactionFull(ctx, tx.ID())
 	require.NoError(t, err)
+	require.NotNil(t, txFull)
 	require.NotNil(t, txFull.Receipt)
 	assert.True(t, txFull.Receipt.Success)
-	chainedTxns, err := client.PTX().QueryChainedDispatches(ctx, query.NewQueryBuilder().Limit(10).Equal("transactionId", tx.ID()).Query())
+	require.Len(t, txFull.SequencerActivity, 2)
+	assert.Equal(t, string(pldapi.SequencerActivityType_ChainedDispatch), txFull.SequencerActivity[0].ActivityType)
+	assert.Equal(t, string(pldapi.SequencerActivityType_ChainedDispatch), txFull.SequencerActivity[1].ActivityType)
+	chainedDispatch1, err := client.PTX().GetChainedDispatch(ctx, txFull.SequencerActivity[0].SubjectID)
 	require.NoError(t, err)
-	// Should have more than 1 chained transaction due to the retry
-	assert.Greater(t, len(chainedTxns), 1)
+	require.NotNil(t, chainedDispatch1)
+	chainedDispatch2, err := client.PTX().GetChainedDispatch(ctx, txFull.SequencerActivity[1].SubjectID)
+	require.NoError(t, err)
+	require.NotNil(t, chainedDispatch2)
+	require.NotEqual(t, chainedDispatch1.ID, chainedDispatch2.ID)
 }
 
 func TestChainedTransactionNonRetryableRevert_OnlyChainedFails(t *testing.T) {
@@ -416,12 +435,16 @@ func TestChainedTransactionNonRetryableRevert_OnlyChainedFails(t *testing.T) {
 
 	txFull, err := client.PTX().GetTransactionFull(ctx, tx.ID())
 	require.NoError(t, err)
+	require.NotNil(t, txFull)
 	require.NotNil(t, txFull.Receipt)
 	assert.False(t, txFull.Receipt.Success)
-	chainedTxns, err := client.PTX().QueryChainedDispatches(ctx, query.NewQueryBuilder().Limit(10).Equal("transactionId", tx.ID()).Query())
+	require.Len(t, txFull.SequencerActivity, 1)
+	assert.Equal(t, string(pldapi.SequencerActivityType_ChainedDispatch), txFull.SequencerActivity[0].ActivityType)
+	chainedDispatch, err := client.PTX().GetChainedDispatch(ctx, txFull.SequencerActivity[0].SubjectID)
 	require.NoError(t, err)
+	require.NotNil(t, chainedDispatch)
 	// Should have only 1 chained transaction since it failed without retry
-	require.Len(t, chainedTxns, 1)
+	require.NotEmpty(t, chainedDispatch.ChainedTransactionID)
 }
 
 func TestChainedTransactionRetryableRevert_OnlyChainedFails_ExceedsThreshold(t *testing.T) {
@@ -469,10 +492,17 @@ func TestChainedTransactionRetryableRevert_OnlyChainedFails_ExceedsThreshold(t *
 
 	txFull, err := client.PTX().GetTransactionFull(ctx, tx.ID())
 	require.NoError(t, err)
+	require.NotNil(t, txFull)
 	require.NotNil(t, txFull.Receipt)
 	assert.False(t, txFull.Receipt.Success)
-	chainedTxns, err := client.PTX().QueryChainedDispatches(ctx, query.NewQueryBuilder().Limit(10).Equal("transactionId", tx.ID()).Query())
+	require.Len(t, txFull.SequencerActivity, 2)
+	assert.Equal(t, string(pldapi.SequencerActivityType_ChainedDispatch), txFull.SequencerActivity[0].ActivityType)
+	assert.Equal(t, string(pldapi.SequencerActivityType_ChainedDispatch), txFull.SequencerActivity[1].ActivityType)
+	chainedDispatch1, err := client.PTX().GetChainedDispatch(ctx, txFull.SequencerActivity[0].SubjectID)
 	require.NoError(t, err)
-	// Should have more than 1 chained transaction due to the retry before exceeding threshold
-	assert.Greater(t, len(chainedTxns), 1)
+	require.NotNil(t, chainedDispatch1)
+	chainedDispatch2, err := client.PTX().GetChainedDispatch(ctx, txFull.SequencerActivity[1].SubjectID)
+	require.NoError(t, err)
+	require.NotNil(t, chainedDispatch2)
+	require.NotEqual(t, chainedDispatch1.ID, chainedDispatch2.ID)
 }

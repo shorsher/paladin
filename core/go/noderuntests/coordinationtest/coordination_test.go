@@ -784,29 +784,29 @@ func TestTransactionSuccessChainedTransactionSelfEndorsementThenPrivacyGroupEndo
 	require.NoError(t, err)
 	require.NotNil(t, aliceTxFull)
 
-	// TODO AM: update these tests to get the chained ID from the full transactions and then do a get
-
-	aliceChainedTxns, err := alice.GetClient().PTX().QueryChainedDispatches(ctx, query.NewQueryBuilder().Limit(10).Equal("transactionId", aliceTx.ID()).Query())
+	require.Len(t, aliceTxFull.SequencerActivity, 1)
+	assert.Equal(t, string(pldapi.SequencerActivityType_ChainedDispatch), aliceTxFull.SequencerActivity[0].ActivityType)
+	aliceChainedDispatch, err := alice.GetClient().PTX().GetChainedDispatch(ctx, aliceTxFull.SequencerActivity[0].SubjectID)
 	require.NoError(t, err)
-	assert.Len(t, aliceChainedTxns, 1)
-	assert.Equal(t, aliceChainedTxns[0].TransactionID, aliceTx.ID().String())
+	require.NotNil(t, aliceChainedDispatch)
+	assert.Equal(t, aliceTx.ID().String(), aliceChainedDispatch.TransactionID)
 
 	// Now query the chained transaction on Alice's node, which should have sequencing activity sent from Bob, the coordinator
-	aliceChainedTxFull, err := alice.GetClient().PTX().GetTransactionFull(ctx, uuid.MustParse(aliceChainedTxns[0].ChainedTransactionID))
+	aliceChainedTxFull, err := alice.GetClient().PTX().GetTransactionFull(ctx, uuid.MustParse(aliceChainedDispatch.ChainedTransactionID))
 	require.NoError(t, err)
 	require.NotNil(t, aliceChainedTxFull)
 
 	assert.True(t, len(aliceChainedTxFull.SequencerActivity) == 1)
 	assert.Equal(t, aliceChainedTxFull.SequencerActivity[0].SequencingNode, bob.GetName())
-	assert.Equal(t, aliceChainedTxFull.SequencerActivity[0].TransactionID.String(), aliceChainedTxns[0].ChainedTransactionID)
+	assert.Equal(t, aliceChainedTxFull.SequencerActivity[0].TransactionID.String(), aliceChainedDispatch.ChainedTransactionID)
 	assert.Equal(t, aliceChainedTxFull.SequencerActivity[0].ActivityType, string(pldapi.SequencerActivityType_Dispatch))
 
 	// Finally check that Bob who coordinated the chained transaction has dispatch records that correlate with Alice's sequencing activity
-	bobChainedDispatches, err := bob.GetClient().PTX().QueryDispatches(ctx, query.NewQueryBuilder().Limit(10).Equal("transactionId", aliceChainedTxns[0].ChainedTransactionID).Query())
+	bobChainedDispatch, err := bob.GetClient().PTX().GetDispatch(ctx, aliceChainedTxFull.SequencerActivity[0].SubjectID)
 	require.NoError(t, err)
-	assert.Len(t, bobChainedDispatches, 1)
-	assert.Equal(t, bobChainedDispatches[0].ID, aliceChainedTxFull.SequencerActivity[0].SubjectID)
-	assert.Equal(t, bobChainedDispatches[0].TransactionID, aliceChainedTxns[0].ChainedTransactionID)
+	require.NotNil(t, bobChainedDispatch)
+	assert.Equal(t, bobChainedDispatch.ID, aliceChainedTxFull.SequencerActivity[0].SubjectID)
+	assert.Equal(t, bobChainedDispatch.TransactionID, aliceChainedDispatch.ChainedTransactionID)
 }
 
 func TestTransactionSuccessChainedTransactionPrivacyGroupEndorsementThenSelfEndorsement(t *testing.T) {
@@ -894,22 +894,26 @@ func TestTransactionSuccessChainedTransactionPrivacyGroupEndorsementThenSelfEndo
 	assert.Equal(t, aliceTxFull.SequencerActivity[0].TransactionID.String(), aliceTx.ID().String())
 	assert.Equal(t, aliceTxFull.SequencerActivity[0].ActivityType, string(pldapi.SequencerActivityType_ChainedDispatch)) // The coordination resulted in a chained transaction, not a public dispatch
 
-	// Query chained transactions on bob's node and check they correlate with Alice's sequencing activity
-	bobChainedTxns, err := bob.GetClient().PTX().QueryChainedDispatches(ctx, query.NewQueryBuilder().Limit(10).Equal("transactionId", aliceTx.ID()).Query())
+	// Query chained dispatch on Bob's node by subject ID from Alice's sequencing activity
+	bobChainedDispatch, err := bob.GetClient().PTX().GetChainedDispatch(ctx, aliceTxFull.SequencerActivity[0].SubjectID)
 	require.NoError(t, err)
-	assert.Len(t, bobChainedTxns, 1)
-	assert.Equal(t, bobChainedTxns[0].TransactionID, aliceTx.ID().String())
-	assert.Equal(t, bobChainedTxns[0].ID, aliceTxFull.SequencerActivity[0].SubjectID)
+	require.NotNil(t, bobChainedDispatch)
+	assert.Equal(t, bobChainedDispatch.TransactionID, aliceTx.ID().String())
+	assert.Equal(t, bobChainedDispatch.ID, aliceTxFull.SequencerActivity[0].SubjectID)
 
 	// Finally query Bob for the full chained transaction. It is coordinated by Bob so should have public dispatch, but not sequencing activity
-	bobChainedTxFull, err := bob.GetClient().PTX().GetTransactionFull(ctx, uuid.MustParse(bobChainedTxns[0].ChainedTransactionID))
+	bobChainedTxFull, err := bob.GetClient().PTX().GetTransactionFull(ctx, uuid.MustParse(bobChainedDispatch.ChainedTransactionID))
 	require.NoError(t, err)
 	require.NotNil(t, bobChainedTxFull)
 
-	bobChainedTxDispatches, err := bob.GetClient().PTX().QueryDispatches(ctx, query.NewQueryBuilder().Limit(10).Equal("transactionId", bobChainedTxns[0].ChainedTransactionID).Query())
+	// Dispatch subject ID is available on Bob's chained transaction sequencing activity
+	require.Len(t, bobChainedTxFull.SequencerActivity, 1)
+	assert.Equal(t, string(pldapi.SequencerActivityType_Dispatch), bobChainedTxFull.SequencerActivity[0].ActivityType)
+
+	bobChainedTxDispatch, err := bob.GetClient().PTX().GetDispatch(ctx, bobChainedTxFull.SequencerActivity[0].SubjectID)
 	require.NoError(t, err)
-	assert.Len(t, bobChainedTxDispatches, 1)
-	assert.Equal(t, bobChainedTxDispatches[0].TransactionID, bobChainedTxns[0].ChainedTransactionID)
+	require.NotNil(t, bobChainedTxDispatch)
+	assert.Equal(t, bobChainedTxDispatch.TransactionID, bobChainedDispatch.ChainedTransactionID)
 }
 
 func TestTransactionSuccessChainedTransactionPrivacyGroupEndorsementThenPrivacyGroupEndorsement(t *testing.T) {
@@ -1333,11 +1337,17 @@ func TestTransactionFailureWhenChainedTransactionAssembleReverts(t *testing.T) {
 		"Transaction did not receive a receipt",
 	)
 
-	aliceChainedTxns, err := alice.GetClient().PTX().QueryChainedDispatches(ctx, query.NewQueryBuilder().Limit(10).Equal("transactionId", aliceTx.ID()).Query())
+	aliceTxFull, err := alice.GetClient().PTX().GetTransactionFull(ctx, aliceTx.ID())
 	require.NoError(t, err)
-	require.Len(t, aliceChainedTxns, 1)
+	require.NotNil(t, aliceTxFull)
+	require.Len(t, aliceTxFull.SequencerActivity, 1)
+	assert.Equal(t, string(pldapi.SequencerActivityType_ChainedDispatch), aliceTxFull.SequencerActivity[0].ActivityType)
 
-	chainedTxID, err := uuid.Parse(aliceChainedTxns[0].ChainedTransactionID)
+	aliceChainedDispatch, err := alice.GetClient().PTX().GetChainedDispatch(ctx, aliceTxFull.SequencerActivity[0].SubjectID)
+	require.NoError(t, err)
+	require.NotNil(t, aliceChainedDispatch)
+
+	chainedTxID, err := uuid.Parse(aliceChainedDispatch.ChainedTransactionID)
 	require.NoError(t, err)
 
 	alicesChainedTransaction, err := alice.GetClient().PTX().GetTransactionFull(ctx, chainedTxID)
