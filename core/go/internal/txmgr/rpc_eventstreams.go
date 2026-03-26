@@ -102,6 +102,7 @@ func (es *rpcEventStreams) HandleStart(ctx context.Context, req *rpcclient.RPCRe
 	}
 
 	es.subs[ctrl.ID()] = sub
+	log.L(ctx).Infof("ptx_subscribe started subID=%s total_subs=%d", ctrl.ID(), len(es.subs))
 	afterSend = func() {
 		sub.rrc.SetActive()
 	}
@@ -221,6 +222,7 @@ func (sub *listenerSubscription) ConnectionClosed() {
 
 func (es *rpcEventStreams) cleanupLocked(sub *listenerSubscription) {
 	delete(sub.es.subs, sub.ctrl.ID())
+	log.L(es.tm.bgCtx).Infof("ptx_subscribe cleaned up subID=%s total_subs=%d", sub.ctrl.ID(), len(sub.es.subs))
 	if sub.rrc != nil {
 		sub.rrc.Close()
 	}
