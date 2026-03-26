@@ -60,11 +60,13 @@ func (ss *stateManager) WritePreVerifiedStates(ctx context.Context, dbTX persist
 
 func (ss *stateManager) WriteReceivedStates(ctx context.Context, dbTX persistence.DBTX, domainName string, states []*components.StateUpsertOutsideContext) ([]*pldapi.State, error) {
 	ctx = log.WithComponent(ctx, "statemanager")
-	stateIDs := make([]string, len(states))
-	for i, s := range states {
-		stateIDs[i] = s.ID.String()
+	if log.IsDebugEnabled() {
+		stateIDs := make([]string, len(states))
+		for i, s := range states {
+			stateIDs[i] = s.ID.String()
+		}
+		log.L(ctx).Debugf("WriteReceivedStates domain=%s count=%d stateIds=%v", domainName, len(states), stateIDs)
 	}
-	log.L(ctx).Debugf("WriteReceivedStates domain=%s count=%d stateIds=%v", domainName, len(states), stateIDs)
 
 	d, err := ss.domainManager.GetDomainByName(ctx, domainName)
 	if err != nil {
