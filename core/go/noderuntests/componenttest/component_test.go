@@ -567,11 +567,11 @@ func TestPrivateTransactionsMintThenTransfer(t *testing.T) {
 
 	wsClient, err := client.WebSocket(ctx, instance.GetWSConfig())
 	require.NoError(t, err)
-	t.Cleanup(wsClient.Close)
+	defer wsClient.Close()
 
 	sub, err := wsClient.PTX().SubscribeReceipts(ctx, listenerName)
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = sub.Unsubscribe(context.Background()) })
+	defer func() { _ = sub.Unsubscribe(ctx) }()
 
 	waitTimeout := transactionLatencyThreshold(t)
 	deployTx := client.ForABI(ctx, *domains.SimpleTokenConstructorABI(domains.SelfEndorsement)).
@@ -1274,7 +1274,6 @@ func TestSingleNodeSelfEndorseSeriesOfTransfers(t *testing.T) {
                 "to": "wallets.org1.aaaaaa",
                 "amount": "99"
             }`)).
-		DependsOn([]uuid.UUID{*tx1.ID()}).
 		Send()
 	require.NoError(t, tx2.Error())
 
@@ -1291,7 +1290,6 @@ func TestSingleNodeSelfEndorseSeriesOfTransfers(t *testing.T) {
                 "to": "wallets.org1.bbbbbb",
                 "amount": "98"
             }`)).
-		DependsOn([]uuid.UUID{*tx2.ID()}).
 		Send()
 	require.NoError(t, tx3.Error())
 
