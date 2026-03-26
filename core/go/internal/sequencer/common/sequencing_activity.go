@@ -38,7 +38,7 @@ func (DBSequencingActivity) TableName() string {
 }
 
 func WriteSequencingActivities(ctx context.Context, dbTX persistence.DBTX, sequencingActivities []*components.SequencingActivity) error {
-	if sequencingActivities == nil {
+	if len(sequencingActivities) == 0 {
 		return nil
 	}
 
