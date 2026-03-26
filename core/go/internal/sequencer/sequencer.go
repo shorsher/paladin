@@ -134,15 +134,16 @@ func (sMgr *sequencerManager) pollForIncompleteTransactions(ctx context.Context,
 			}
 
 			timeoutCtx, cancel := context.WithTimeout(ctx, 1*time.Second)
-			defer cancel()
 
 			// Wait for the block indexer to be ready
 			select {
 			case <-timeoutCtx.Done():
 				log.L(ctx).Debugf("timeout - check again if indexer is ready")
+				cancel()
 				break waitForIndexerReady
 			case <-ctx.Done():
 				log.L(ctx).Errorf("context cancelled - ending DB poll")
+				cancel()
 				return
 			}
 		}
@@ -202,13 +203,14 @@ func (sMgr *sequencerManager) pollForIncompleteTransactions(ctx context.Context,
 
 			// Repeat DB poll every N minutes to check for incomplete transactions to resume
 			timeoutCtx, cancel := context.WithTimeout(sMgr.ctx, rePollInterval)
-			defer cancel()
 
 			select {
 			case <-timeoutCtx.Done():
 				log.L(sMgr.ctx).Debug("timeout - checking for pending DB transactions")
+				cancel()
 			case <-ctx.Done():
 				log.L(sMgr.ctx).Debug("context cancelled - ending DB poll")
+				cancel()
 				return
 			}
 		}
