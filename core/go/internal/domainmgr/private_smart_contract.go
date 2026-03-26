@@ -659,7 +659,7 @@ func (dc *domainContract) loadStatesFromContext(dCtx components.DomainContext, r
 	statesByID := make(map[string]*pldapi.State)
 	for schemaID, stateIDs := range rawIDsBySchema {
 		log.L(dCtx.Ctx()).Debugf("Finding available states for state IDs %+v", stateIDs)
-		_, statesForSchema, err := dCtx.FindAvailableStates(readTX, schemaID, &query.QueryJSON{
+		_, statesForSchema, err := dCtx.FindAvailableStates(dCtx.Ctx(), readTX, schemaID, &query.QueryJSON{
 			Statements: query.Statements{
 				Ops: query.Ops{
 					In: []*query.OpMultiVal{

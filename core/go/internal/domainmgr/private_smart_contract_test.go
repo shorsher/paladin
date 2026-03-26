@@ -1205,7 +1205,7 @@ func TestLoadStatesError(t *testing.T) {
 	td, done := newTestDomain(t, false, goodDomainConf(), mockSchemas(), mockBlockHeight)
 	defer done()
 
-	td.mdc.On("FindAvailableStates", mock.Anything, mock.Anything, mock.Anything).Return(nil, nil, fmt.Errorf("pop"))
+	td.mdc.On("FindAvailableStates", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil, nil, fmt.Errorf("pop"))
 
 	psc, tx := doDomainInitAssembleTransactionOK(t, td)
 	tx.Signer = "signer1"
@@ -1223,7 +1223,7 @@ func TestLoadStatesNotFound(t *testing.T) {
 	td, done := newTestDomain(t, false, goodDomainConf(), mockSchemas(), mockBlockHeight)
 	defer done()
 
-	td.mdc.On("FindAvailableStates", mock.Anything, mock.Anything, mock.Anything).Return(nil, []*pldapi.State{}, nil)
+	td.mdc.On("FindAvailableStates", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil, []*pldapi.State{}, nil)
 
 	psc, tx := doDomainInitAssembleTransactionOK(t, td)
 	tx.Signer = "signer1"
