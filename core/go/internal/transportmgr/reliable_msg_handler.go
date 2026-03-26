@@ -111,12 +111,15 @@ func (tm *transportManager) handleReliableMsgBatch(ctx context.Context, dbTX per
 		switch v.msg.MessageType {
 		case RMHMessageTypeStateDistribution:
 			sd, stateToAdd, err := parseStateDistribution(ctx, v.msg.MessageID, v.msg.Payload)
-			if err == nil && sd.NullifierAlgorithm != nil && sd.NullifierVerifierType != nil && sd.NullifierPayloadType != nil {
-				// We need to build any nullifiers that are required, before we dispatch to persistence
-				var nullifier *components.NullifierUpsert
-				nullifier, err = tm.sequencerManager.BuildNullifier(ctx, tm.keyManager.KeyResolverForDBTX(dbTX), sd)
-				if err == nil {
-					nullifierUpserts[sd.Domain] = append(nullifierUpserts[sd.Domain], nullifier)
+			if err == nil {
+				log.L(ctx).Debugf("Received state distribution domain=%s stateId=%s contract=%s msgId=%s", sd.Domain, sd.StateID, sd.ContractAddress, v.msg.MessageID)
+				if sd.NullifierAlgorithm != nil && sd.NullifierVerifierType != nil && sd.NullifierPayloadType != nil {
+					// We need to build any nullifiers that are required, before we dispatch to persistence
+					var nullifier *components.NullifierUpsert
+					nullifier, err = tm.sequencerManager.BuildNullifier(ctx, tm.keyManager.KeyResolverForDBTX(dbTX), sd)
+					if err == nil {
+						nullifierUpserts[sd.Domain] = append(nullifierUpserts[sd.Domain], nullifier)
+					}
 				}
 			}
 			if err != nil {

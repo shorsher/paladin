@@ -60,6 +60,12 @@ func (ss *stateManager) WritePreVerifiedStates(ctx context.Context, dbTX persist
 
 func (ss *stateManager) WriteReceivedStates(ctx context.Context, dbTX persistence.DBTX, domainName string, states []*components.StateUpsertOutsideContext) ([]*pldapi.State, error) {
 	ctx = log.WithComponent(ctx, "statemanager")
+	stateIDs := make([]string, len(states))
+	for i, s := range states {
+		stateIDs[i] = s.ID.String()
+	}
+	log.L(ctx).Debugf("WriteReceivedStates domain=%s count=%d stateIds=%v", domainName, len(states), stateIDs)
+
 	d, err := ss.domainManager.GetDomainByName(ctx, domainName)
 	if err != nil {
 		return nil, err
@@ -313,7 +319,7 @@ func (ss *stateManager) findStates(
 	if err != nil {
 		return nil, nil, err
 	}
-	return dc.FindAvailableStates(dbTX, schemaID, jq)
+	return dc.FindAvailableStates(ctx, dbTX, schemaID, jq)
 }
 
 func (ss *stateManager) findNullifiers(
@@ -361,7 +367,7 @@ func (ss *stateManager) findNullifiers(
 	if err != nil {
 		return nil, nil, err
 	}
-	return dc.FindAvailableNullifiers(dbTX, schemaID, jq)
+	return dc.FindAvailableNullifiers(ctx, dbTX, schemaID, jq)
 }
 
 func (ss *stateManager) findStatesCommon(

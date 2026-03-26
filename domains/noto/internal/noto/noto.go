@@ -730,6 +730,8 @@ func (n *Noto) AssembleTransaction(ctx context.Context, req *prototk.AssembleTra
 	if err != nil {
 		return nil, err
 	}
+	ctx = log.WithLogField(ctx, "tx", tx.Transaction.TransactionId)
+	ctx = log.WithLogField(ctx, "contract", tx.Transaction.ContractInfo.ContractAddress)
 	return handler.Assemble(ctx, tx, req)
 }
 
@@ -739,6 +741,8 @@ func (n *Noto) EndorseTransaction(ctx context.Context, req *prototk.EndorseTrans
 	if err != nil {
 		return nil, err
 	}
+	ctx = log.WithLogField(ctx, "tx", tx.Transaction.TransactionId)
+	ctx = log.WithLogField(ctx, "contract", tx.Transaction.ContractInfo.ContractAddress)
 	return handler.Endorse(ctx, tx, req)
 }
 
@@ -748,6 +752,8 @@ func (n *Noto) PrepareTransaction(ctx context.Context, req *prototk.PrepareTrans
 	if err != nil {
 		return nil, err
 	}
+	ctx = log.WithLogField(ctx, "tx", tx.Transaction.TransactionId)
+	ctx = log.WithLogField(ctx, "contract", tx.Transaction.ContractInfo.ContractAddress)
 	return handler.Prepare(ctx, tx, req)
 }
 
