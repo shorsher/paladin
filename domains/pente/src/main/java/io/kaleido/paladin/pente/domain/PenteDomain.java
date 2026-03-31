@@ -33,6 +33,7 @@
  import io.kaleido.paladin.toolkit.JsonHex.Bytes32;
 
  import org.apache.logging.log4j.Logger;
+ import org.apache.logging.log4j.ThreadContext;
  import org.apache.logging.log4j.message.FormattedMessage;
  import org.jetbrains.annotations.NotNull;
 
@@ -263,9 +264,17 @@ import com.fasterxml.jackson.core.JsonProcessingException;
          return ex.getErrorType() == Header.ErrorType.INVALID_INPUT;
      }
 
+     private void setTransactionLogContext(TransactionSpecification txSpec) {
+         ThreadContext.put("tx", txSpec.getTransactionId());
+         ThreadContext.put("contract", txSpec.getContractInfo().getContractAddress());
+     }
+
      @Override
      protected CompletableFuture<AssembleTransactionResponse> assembleTransaction(AssembleTransactionRequest request) {
+         setTransactionLogContext(request.getTransaction());
          try {
+             LOGGER.info("Assembling transaction");
+
              var tx = new PenteTransaction(this, request.getTransaction());
 
              // Execution throws an EVMExecutionException if fails
@@ -305,13 +314,13 @@ import com.fasterxml.jackson.core.JsonProcessingException;
              // Note unlike a base ledger, we do not write a nonce update to the sender's account
              // (which would be a UTXO spend + mint) for a revert during assembly of a transaction,
              // as endorsing and submitting that would be lots of work.
-             LOGGER.error(new FormattedMessage("EVM execution failed during assemble for TX {}", request.getTransaction().getTransactionId()), e);
+             LOGGER.error("EVM execution failed during assemble", e);
              return CompletableFuture.completedFuture(AssembleTransactionResponse.newBuilder().
                      setAssemblyResult(AssembleTransactionResponse.Result.REVERT).
                      setRevertReason(e.getMessage()).
                      build());
          } catch (IllegalArgumentException e) {
-             LOGGER.error(new FormattedMessage("Illegal argument during assemble for TX {}", request.getTransaction().getTransactionId()), e);
+             LOGGER.error("Illegal argument during assemble", e);
              return CompletableFuture.completedFuture(AssembleTransactionResponse.newBuilder().
                      setAssemblyResult(AssembleTransactionResponse.Result.REVERT).
                      setRevertReason(e.getMessage()).
@@ -320,7 +329,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
              if (e.getCause() instanceof ErrorResponseException && isPermanentFailure((ErrorResponseException) e.getCause())) {
                 // Any error response from a plugin during assembly is considered a revert.
                 // These can stem from things like an invalid ABI or inputs.
-                LOGGER.error(new FormattedMessage("Error response from plugin during assemble for TX {}", request.getTransaction().getTransactionId()), e);
+                LOGGER.error("Error response from plugin during assemble", e);
                 return CompletableFuture.completedFuture(AssembleTransactionResponse.newBuilder().
                         setAssemblyResult(AssembleTransactionResponse.Result.REVERT).
                         setRevertReason(e.getMessage()).
@@ -330,12 +339,17 @@ import com.fasterxml.jackson.core.JsonProcessingException;
          } catch (IOException | InterruptedException | ClassNotFoundException e) {
             // These exceptions will not revert, but will retry assembly
             return CompletableFuture.failedFuture(e);
+         } finally {
+             ThreadContext.clearAll();
          }
      }
 
      @Override
      protected CompletableFuture<EndorseTransactionResponse> endorseTransaction(EndorseTransactionRequest request) {
+         setTransactionLogContext(request.getTransaction());
          try {
+             LOGGER.info("Endorsing transaction");
+
              // Parse all the inputs/reads supplied into inputs
              var inputAccounts = new ArrayList<PersistedAccount>(request.getInputsCount());
              for (var input : request.getInputsList()) {
@@ -411,18 +425,21 @@ import com.fasterxml.jackson.core.JsonProcessingException;
                      setPayload(ByteString.copyFrom(endorsementPayload)).
                      build());
          } catch (PenteEVMTransaction.EVMExecutionException e) {
-             LOGGER.error(new FormattedMessage("EVM execution failed during endorsement TX {}", request.getTransaction().getTransactionId()), e);
+             LOGGER.error("EVM execution failed during endorsement", e);
              return CompletableFuture.completedFuture(EndorseTransactionResponse.newBuilder().
                      setEndorsementResult(EndorseTransactionResponse.Result.SIGN).
                      setRevertReason(e.getMessage()).
                      build());
          } catch (Exception e) {
              return CompletableFuture.failedFuture(e);
+         } finally {
+             ThreadContext.clearAll();
          }
      }
 
      @Override
      protected CompletableFuture<PrepareTransactionResponse> prepareTransaction(PrepareTransactionRequest request) {
+         setTransactionLogContext(request.getTransaction());
          try {
              var signatures = request.getAttestationResultList().stream().
                      filter(r -> r.getAttestationType() == AttestationType.ENDORSE).
@@ -503,6 +520,8 @@ import com.fasterxml.jackson.core.JsonProcessingException;
              return CompletableFuture.completedFuture(result.build());
          } catch (Exception e) {
              return CompletableFuture.failedFuture(e);
+         } finally {
+             ThreadContext.clearAll();
          }
      }
 
@@ -594,6 +613,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 
      @Override
      protected CompletableFuture<ExecCallResponse> execCall(ExecCallRequest request) {
+         setTransactionLogContext(request.getTransaction());
          try {
              var tx = new PenteTransaction(this, request.getTransaction());
              var accountLoader = new AssemblyAccountLoader(request.getStateQueryContext());
@@ -605,11 +625,14 @@ import com.fasterxml.jackson.core.JsonProcessingException;
              return CompletableFuture.completedFuture(response.build());
          } catch (Exception e) {
              return CompletableFuture.failedFuture(e);
+         } finally {
+             ThreadContext.clearAll();
          }
      }
 
      @Override
      protected CompletableFuture<BuildReceiptResponse> buildReceipt(BuildReceiptRequest request) {
+         ThreadContext.put("tx", request.getTransactionId());
          try {
              if (request.getUnavailableStates()) {
                  throw new IllegalStateException("all states must be available to build an EVM receipt");
@@ -644,6 +667,8 @@ import com.fasterxml.jackson.core.JsonProcessingException;
                      build());
          } catch (Exception e) {
              return CompletableFuture.failedFuture(e);
+         } finally {
+             ThreadContext.clearAll();
          }
      }
 
@@ -956,6 +981,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
  
          public Optional<PersistedAccount> load(org.hyperledger.besu.datatypes.Address address) throws IOException {
              return withIOException(() -> {
+                 LOGGER.debug("Loading account state for address={}", address);
                  var queryJson = JsonQuery.newBuilder().
                          limit(1).
                          isEqual("address", address.toString()).
@@ -966,10 +992,12 @@ import com.fasterxml.jackson.core.JsonProcessingException;
                          setQueryJson(queryJson).
                          build()).get();
                  if (response.getStatesCount() != 1) {
+                     LOGGER.debug("No existing account state found for address={}", address);
                      loadedAccountStates.put(address, null);
                      return Optional.empty();
                  }
                  var state = response.getStates(0);
+                 LOGGER.debug("Loaded account state for address={} stateId={}", address, state.getId());
                  loadedAccountStates.put(address, state);
                  return Optional.of(PersistedAccount.deserialize(state.getDataJsonBytes().toByteArray()));
              });
@@ -995,12 +1023,15 @@ import com.fasterxml.jackson.core.JsonProcessingException;
          public Optional<PersistedAccount> load(org.hyperledger.besu.datatypes.Address address) {
              var account = inputAccounts.remove(address);
              if (account != null) {
+                 LOGGER.debug("Loaded account address={} from inputs", address);
                  return Optional.of(account);
              }
              account = readAccounts.remove(address);
              if (account != null) {
+                 LOGGER.debug("Loaded account address={} from reads", address);
                  return Optional.of(account);
              }
+             LOGGER.debug("No account found for address={} in inputs or reads", address);
              return Optional.empty();
          }
  

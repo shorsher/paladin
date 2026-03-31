@@ -324,6 +324,12 @@ func (d *domain) FindAvailableStates(ctx context.Context, req *prototk.FindAvail
 		return nil, err
 	}
 
+	dcInfo := c.dCtx.Info()
+	ctx = log.WithLogField(ctx, "domain", dcInfo.DomainName)
+	ctx = log.WithLogField(ctx, "contract", dcInfo.ContractAddress.String())
+	ctx = log.WithLogField(ctx, "schema", req.SchemaId)
+	log.L(ctx).Debugf("Domain callback FindAvailableStates")
+
 	var query query.QueryJSON
 	if err = json.Unmarshal([]byte(req.QueryJson), &query); err != nil {
 		return nil, i18n.WrapError(ctx, err, msgs.MsgDomainInvalidQueryJSON)
@@ -336,9 +342,9 @@ func (d *domain) FindAvailableStates(ctx context.Context, req *prototk.FindAvail
 
 	var states []*pldapi.State
 	if req.UseNullifiers != nil && *req.UseNullifiers {
-		_, states, err = c.dCtx.FindAvailableNullifiers(c.dbTX, schemaID, &query)
+		_, states, err = c.dCtx.FindAvailableNullifiers(ctx, c.dbTX, schemaID, &query)
 	} else {
-		_, states, err = c.dCtx.FindAvailableStates(c.dbTX, schemaID, &query)
+		_, states, err = c.dCtx.FindAvailableStates(ctx, c.dbTX, schemaID, &query)
 	}
 	if err != nil {
 		return nil, err
@@ -884,7 +890,7 @@ func (d *domain) GetStatesByID(ctx context.Context, req *prototk.GetStatesByIDRe
 		return nil, i18n.WrapError(ctx, err, msgs.MsgDomainInvalidSchemaID, req.SchemaId)
 	}
 
-	_, states, err := c.dCtx.GetStatesByID(c.dbTX, schemaID, req.StateIds)
+	_, states, err := c.dCtx.GetStatesByID(ctx, c.dbTX, schemaID, req.StateIds)
 	return &prototk.GetStatesByIDResponse{
 		States: toProtoStates(states),
 	}, err
