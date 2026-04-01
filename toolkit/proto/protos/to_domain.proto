@@ -68,6 +68,7 @@ message PrepareDeployResponse {
 message InitContractRequest {
   string contract_address = 1; // The address of the smart contract on-chain
   bytes contract_config = 2; // Binary config emitted by the constructor event of the contract that is persisted by Paladin and provided back each time the smart contract is loaded into memory
+  optional PrivacyGroup privacy_group = 3; // Optional privacy group context for domains that derive runtime config from group membership
 }
 
 message InitContractResponse {    
@@ -75,7 +76,7 @@ message InitContractResponse {
   ContractConfig contract_config = 2; // The parse contract contract configuration
 }
 
-// **INIT** step for a business transaction happens in-line with the tranaction being accepted by Paladin from the application. Should verify the transaction is a valid request and build a list of required verifiers, but not resolve whether sufficient states exist to execute the transaction.
+// **INIT** step for a business transaction happens in-line with the transaction being accepted by Paladin from the application. Should verify the transaction is a valid request and build a list of required verifiers, but not resolve whether sufficient states exist to execute the transaction.
 message InitTransactionRequest {
   TransactionSpecification transaction = 1; // The transaction to plan
 }
@@ -279,6 +280,7 @@ message ContractConfig {
   }
   CoordinatorSelection coordinator_selection = 20;
   optional string static_coordinator = 21; // only applicable with coordinator_mode=STATIC
+  repeated string coordinator_endorser_candidates = 22; // fully qualified identity locators eligible as coordinators in COORDINATOR_ENDORSER mode
   
   enum SubmitterSelection {
       SUBMITTER_COORDINATOR = 0; // The coordinator submits the transaction
@@ -377,7 +379,6 @@ message EndorsableState {
 enum AttestationType {
   SIGN = 0; // Occurs before the transaction is considered fully assembled - gathers a signature against the state inputs+outputs of the transaction, including proof of knowledge of the private data. Use to authenticate an action, such as a transfer, that will be endorsed by other parties
   ENDORSE = 1; // A verification of the validity of the transaction that occurs with a full copy of all the data, by one or more parties.
-  GENERATE_PROOF = 2; // The generation of a cyprographic zero-knowledge proof (ZKP) using a full copy of all the data, that allows verification of the transaction by any party without that private data
 }
 
 message AttestationRequest {
