@@ -90,6 +90,7 @@ func (sMgr *sequencerManager) Start() error {
 	log.L(sMgr.ctx).Infof("Starting distributed sequencer manager")
 	sMgr.syncPoints.Start()
 	sMgr.pollForIncompleteTransactions(sMgr.ctx, confutil.DurationMinIfPositive(sMgr.config.TransactionResumePollInterval, pldconf.SequencerMinimum.TransactionResumePollInterval, *pldconf.SequencerDefaults.TransactionResumePollInterval))
+	sMgr.cleanupIdleSequencers(sMgr.ctx, confutil.DurationMinIfPositive(sMgr.config.IdleSequencerCleanupInterval, pldconf.SequencerMinimum.IdleSequencerCleanupInterval, *pldconf.SequencerDefaults.IdleSequencerCleanupInterval))
 
 	return nil
 }
