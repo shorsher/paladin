@@ -34,13 +34,15 @@ type Props = {
   setDialogOpen: React.Dispatch<React.SetStateAction<boolean>>
   fromBlock: number | undefined
   setFromBlock: React.Dispatch<React.SetStateAction<number | undefined>>
+  setPage: React.Dispatch<React.SetStateAction<number>>
 }
 
 export const FromBlockDialog: React.FC<Props> = ({
   dialogOpen,
   setDialogOpen,
   fromBlock,
-  setFromBlock
+  setFromBlock,
+  setPage
 }) => {
 
   const { t } = useTranslation();
@@ -56,15 +58,27 @@ export const FromBlockDialog: React.FC<Props> = ({
 
   const handleSubmit = () => {
     if(selectedType === 'latest') {
-      setFromBlock(undefined);
-    } else {
-      setFromBlock(Number(selectedBlockNumber));
+      if(fromBlock !== undefined) {
+        setPage(0);
+        setFromBlock(undefined);
+      }
+    } else if(selectedType === 'blockNumber') {
+      if(fromBlock === undefined) {
+        setPage(0);
+        setFromBlock(Number(selectedBlockNumber));
+      }
     }
     setDialogOpen(false);
   };
 
-  const canSubmit = selectedType === 'latest'
-  || (selectedType === 'blockNumber' && /^\d+$/.test(selectedBlockNumber));
+  const selectedTypeChanged = (selectedType === 'latest' && fromBlock !== undefined)
+  || (selectedType === 'blockNumber' && fromBlock === undefined);
+
+  const blockNumberChanged = fromBlock?.toString() !== selectedBlockNumber;
+
+  const canSubmit = (selectedType === 'latest'
+  || (selectedType === 'blockNumber' && /^\d+$/.test(selectedBlockNumber)))
+  && (selectedTypeChanged || (selectedType === 'blockNumber' && blockNumberChanged));
 
   return (
     <Dialog

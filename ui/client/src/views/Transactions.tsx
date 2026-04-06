@@ -187,6 +187,7 @@ export const Transactions: React.FC<Props> = ({
         setDialogOpen={setFromBlockDialogOpen}
         fromBlock={fromBlock}
         setFromBlock={setFromBlock}
+        setPage={setPage}
       />
     </>
   );
