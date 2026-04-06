@@ -24,12 +24,16 @@ import { useTranslation } from "react-i18next";
 import SearchIcon from '@mui/icons-material/Search';
 import { TransactionLookupDialog } from "../dialogs/TransactionLookup";
 import { ApplicationContext } from "../contexts/ApplicationContext";
+import ViewArrayOutlinedIcon from '@mui/icons-material/ViewArrayOutlined';
+import { FromBlockDialog } from "../dialogs/FromBlock";
 
 type Props = {
   refEntries: ITransactionPagingReference[]
   setRefEntries: Dispatch<SetStateAction<ITransactionPagingReference[]>>
   page: number
   setPage: Dispatch<SetStateAction<number>>
+  fromBlock: number | undefined
+  setFromBlock: Dispatch<SetStateAction<number | undefined>>
   rowsPerPage: number
   setRowsPerPage: Dispatch<SetStateAction<number>>
 };
@@ -40,17 +44,20 @@ export const Transactions: React.FC<Props> = ({
   page,
   setPage,
   rowsPerPage,
-  setRowsPerPage
+  setRowsPerPage,
+  fromBlock,
+  setFromBlock
 }) => {
 
   const { lastBlockWithTransactions } = useContext(ApplicationContext);
   const [lookupTransactionDialogOpen, setLookupTransactionDialogOpen] = useState(false);
+  const [fromBlockDialogOpen, setFromBlockDialogOpen] = useState(false);
   const [count, setCount] = useState(-1);
   const { t } = useTranslation();
 
   const { data: enrichedTransactions, error } = useQuery({
-    queryKey: ['transactions', refEntries, rowsPerPage, page, lastBlockWithTransactions],
-    queryFn: () => fetchIndexedTransactions(rowsPerPage, refEntries[refEntries.length - 1])
+    queryKey: ['transactions', refEntries, rowsPerPage, page, lastBlockWithTransactions, fromBlock],
+    queryFn: () => fetchIndexedTransactions(rowsPerPage, fromBlock, refEntries[refEntries.length - 1])
   });
 
   useEffect(() => {
@@ -116,13 +123,25 @@ export const Transactions: React.FC<Props> = ({
               <Grid2 size={{ xs: 12, md: 4 }} container justifyContent="right">
                 <Grid2>
                   <Button
+                    sx={{ borderRadius: '20px', minWidth: '180px' }}
                     size="large"
                     variant="outlined"
                     startIcon={<SearchIcon />}
-                    sx={{ borderRadius: '20px' }}
                     onClick={() => setLookupTransactionDialogOpen(true)}
                   >
                     {t('lookup')}
+                  </Button>
+                </Grid2>
+                <Grid2>
+                  <Button
+                    color={fromBlock === undefined? 'secondary' : 'warning'}
+                    size="large"
+                    variant="outlined"
+                    startIcon={<ViewArrayOutlinedIcon />}
+                    sx={{ borderRadius: '20px', minWidth: '180px' }}
+                    onClick={() => setFromBlockDialogOpen(true)}
+                  >
+                    {t(fromBlock === undefined ? 'Latest block' : 'fromBlockN', { n: fromBlock?.toLocaleString()})}
                   </Button>
                 </Grid2>
               </Grid2>
@@ -162,6 +181,12 @@ export const Transactions: React.FC<Props> = ({
       <TransactionLookupDialog
         dialogOpen={lookupTransactionDialogOpen}
         setDialogOpen={setLookupTransactionDialogOpen}
+      />
+      <FromBlockDialog
+        dialogOpen={fromBlockDialogOpen}
+        setDialogOpen={setFromBlockDialogOpen}
+        fromBlock={fromBlock}
+        setFromBlock={setFromBlock}
       />
     </>
   );

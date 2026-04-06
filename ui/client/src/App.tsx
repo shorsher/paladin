@@ -46,6 +46,7 @@ function App() {
 
   const [txRefEntries, txSetRefEntries] = useState<ITransactionPagingReference[]>([]);
   const [txPage, txSetPage] = useState(0);
+  const [fromBlock, setFromBlock] = useState<number>();
   const [txRowsPerPage, txSetRowsPerPage] = useState(10);
 
   const [systemTheme, setSystemTheme] = useState(
@@ -112,6 +113,8 @@ function App() {
                 setPage={txSetPage}
                 rowsPerPage={txRowsPerPage}
                 setRowsPerPage={txSetRowsPerPage}
+                fromBlock={fromBlock}
+                setFromBlock={setFromBlock}
                 />} />
                 <Route path={AppRoutes.Transaction} element={<TransactionDetails />} />
                 <Route path={AppRoutes.Keys} element={<Keys />} />

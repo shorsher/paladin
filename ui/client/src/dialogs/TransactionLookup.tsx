@@ -51,7 +51,7 @@ export const TransactionLookupDialog: React.FC<Props> = ({
   const navigate = useNavigate();
 
   useEffect(() => {
-    if(dialogOpen) {
+    if (dialogOpen) {
       setSelectedType('bth');
       setBlockchainTransactionHash('');
       setPaladinTransactionId('');
@@ -78,7 +78,7 @@ export const TransactionLookupDialog: React.FC<Props> = ({
     setNotFound(false);
     if (selectedType === 'bth') {
       blockchainTransactionByHash().then(result => {
-        if(result.isSuccess) {
+        if (result.isSuccess) {
           navigate(`/ui/transactions/${blockchainTransactionHash}`);
         } else {
           setNotFound(true);
@@ -86,7 +86,7 @@ export const TransactionLookupDialog: React.FC<Props> = ({
       });
     } else {
       paladinTransactionById().then(result => {
-        if(result.isSuccess && result.data !== null) {
+        if (result.isSuccess && result.data !== null) {
           navigate(`/ui/transactions/${result.data.transactionHash}/${paladinTransactionId}`);
         } else {
           setNotFound(true);
@@ -96,7 +96,7 @@ export const TransactionLookupDialog: React.FC<Props> = ({
   };
 
   const canSubmit = (selectedType === 'bth' && isValidTransactionHash(blockchainTransactionHash))
-  || (selectedType === 'pti' && isValidUUID(paladinTransactionId));
+    || (selectedType === 'pti' && isValidUUID(paladinTransactionId));
 
   return (
     <Dialog
@@ -113,7 +113,7 @@ export const TransactionLookupDialog: React.FC<Props> = ({
         <DialogTitle>
           {t('lookupTransaction')}
           {notFound &&
-            <Alert sx={{ marginTop: '15px'}} variant="filled" severity="warning">{t('transactionNotFound')}</Alert>}
+            <Alert sx={{ marginTop: '15px' }} variant="filled" severity="warning">{t('transactionNotFound')}</Alert>}
 
         </DialogTitle>
         <DialogContent>
@@ -125,20 +125,27 @@ export const TransactionLookupDialog: React.FC<Props> = ({
             <FormControlLabel value="bth" control={<Radio />} label={t('blockchainTransactionHash')} />
             <TextField
               autoComplete="OFF"
-              disabled={selectedType !== 'bth'}
-
               sx={{ marginBottom: '20px' }}
               fullWidth
               value={blockchainTransactionHash}
-              onChange={event => setBlockchainTransactionHash(event.target.value)}
+              onChange={event => {
+                if (selectedType !== 'bth') {
+                  setSelectedType('bth');
+                }
+                setBlockchainTransactionHash(event.target.value);
+              }}
             />
             <FormControlLabel value="pti" control={<Radio />} label={t('paladinTransactionId')} />
             <TextField
               autoComplete="OFF"
-              disabled={selectedType !== 'pti'}
               fullWidth
               value={paladinTransactionId}
-              onChange={event => setPaladinTransactionId(event.target.value)}
+              onChange={event => {
+                if (selectedType !== 'pti') {
+                  setSelectedType('pti');
+                }
+                setPaladinTransactionId(event.target.value);
+              }}
             />
           </RadioGroup>
 

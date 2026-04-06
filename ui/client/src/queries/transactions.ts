@@ -31,8 +31,45 @@ import { translateFilters } from '../utils';
 import { generatePostReq, returnResponse } from './common';
 import { RpcEndpoint, RpcMethods } from './rpcMethods';
 
+const getBlockNumberQuery = (blockNumber: number) => {
+  return [
+    {
+      field: 'blockNumber',
+      value: blockNumber,
+    }
+  ]
+};
+
+const getTransactionPagingQuery = (pageParam: ITransactionPagingReference) => {
+  return [
+    {
+      lessThan: [
+        {
+          field: 'blockNumber',
+          value: pageParam.blockNumber,
+        }
+      ]
+    },
+    {
+      equal: [
+        {
+          field: 'blockNumber',
+          value: pageParam.blockNumber,
+        }
+      ],
+      lessThan: [
+        {
+          field: 'transactionIndex',
+          value: pageParam.transactionIndex,
+        }
+      ]
+    }
+  ];
+};
+
 export const fetchIndexedTransactions = async (
   limit: number,
+  fromBlockNumber?: number,
   pageParam?: ITransactionPagingReference
 ): Promise<IEnrichedTransaction[]> => {
   let requestPayload: any = {
@@ -47,31 +84,11 @@ export const fetchIndexedTransactions = async (
     ],
   };
 
+  if (fromBlockNumber !== undefined) {
+    requestPayload.params[0].lessThanOrEqual = getBlockNumberQuery(fromBlockNumber);
+  }
   if (pageParam !== undefined) {
-    requestPayload.params[0].or = [
-      {
-        lessThan: [
-          {
-            field: 'blockNumber',
-            value: pageParam.blockNumber,
-          },
-        ],
-      },
-      {
-        equal: [
-          {
-            field: 'blockNumber',
-            value: pageParam.blockNumber,
-          },
-        ],
-        lessThan: [
-          {
-            field: 'transactionIndex',
-            value: pageParam.transactionIndex,
-          },
-        ],
-      },
-    ];
+    requestPayload.params[0].or = getTransactionPagingQuery(pageParam);
   }
 
   const transactions: ITransaction[] = await returnResponse(
@@ -294,7 +311,7 @@ export const fetchTransaction = async (
     i18next.t('errorFetchingTransaction')
   );
 
-  if(transaction === null) {
+  if (transaction === null) {
     return undefined;
   }
 
