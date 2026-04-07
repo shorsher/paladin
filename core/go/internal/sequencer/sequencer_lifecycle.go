@@ -368,9 +368,11 @@ func (sMgr *sequencerManager) stopLowestPrioritySequencer(ctx context.Context) {
 
 func (sMgr *sequencerManager) cleanupIdleSequencers(ctx context.Context, interval time.Duration) {
 	go func() {
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
 		for {
 			select {
-			case <-time.After(interval):
+			case <-ticker.C:
 				sMgr.removeIdleSequencers(ctx)
 			case <-ctx.Done():
 				return
