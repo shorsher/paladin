@@ -22,6 +22,8 @@ import (
 
 	"github.com/LFDT-Paladin/paladin/common/go/pkg/i18n"
 	"github.com/LFDT-Paladin/paladin/common/go/pkg/log"
+	"github.com/LFDT-Paladin/paladin/config/pkg/confutil"
+	"github.com/LFDT-Paladin/paladin/config/pkg/pldconf"
 	"github.com/LFDT-Paladin/paladin/core/internal/components"
 	"github.com/LFDT-Paladin/paladin/core/internal/msgs"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/common"
@@ -82,8 +84,32 @@ type sequencer struct {
 	delegateDomainContext components.DomainContext
 
 	// Sequencer attributes
-	contractAddress string
-	lastTXTime      time.Time
+	contractAddress   string
+	lastTXTime        time.Time
+	heartbeatInterval time.Duration
+}
+
+// heartbeatLoop runs for the lifetime of the sequencer, periodically queuing
+// HeartbeatIntervalEvent to both the coordinator and originator state machines.
+func (seq *sequencer) heartbeatLoop(ctx context.Context) {
+	ticker := time.NewTicker(seq.heartbeatInterval)
+	defer ticker.Stop()
+
+	hbEvent := &common.HeartbeatIntervalEvent{}
+	seq.coordinator.QueueEvent(ctx, hbEvent)
+	seq.originator.QueueEvent(ctx, hbEvent)
+
+	for {
+		select {
+		case <-ticker.C:
+			hbEvent := &common.HeartbeatIntervalEvent{}
+			seq.coordinator.QueueEvent(ctx, hbEvent)
+			seq.originator.QueueEvent(ctx, hbEvent)
+		case <-ctx.Done():
+			log.L(ctx).Debugf("heartbeat loop stopped for %s", seq.contractAddress)
+			return
+		}
+	}
 }
 
 // Return the sequencer for the requested contract address, instantiating it first if this is its first use.
@@ -179,7 +205,7 @@ func (sMgr *sequencerManager) loadSequencer(ctx context.Context, dbTX persistenc
 				delegateDomainContext: delegateDomainContext,
 			}
 
-			seqOriginator, err := originator.NewOriginator(seqCtx, sMgr.nodeName, transportWriter, common.RealClock(), sMgr.engineIntegration, &contractAddr, sMgr.config, sMgr.metrics)
+			seqOriginator, err := originator.NewOriginator(seqCtx, sMgr.nodeName, transportWriter, sMgr.engineIntegration, &contractAddr, sMgr.config, sMgr.metrics)
 			if err != nil {
 				cancelCtx()
 				log.L(ctx).Errorf("failed to create sequencer originator for contract %s: %s", contractAddr.String(), err)
@@ -235,7 +261,10 @@ func (sMgr *sequencerManager) loadSequencer(ctx context.Context, dbTX persistenc
 
 			sequencer.originator = seqOriginator
 			sequencer.coordinator = coordinator
+			sequencer.heartbeatInterval = confutil.DurationMin(sMgr.config.HeartbeatInterval, pldconf.SequencerMinimum.HeartbeatInterval, *pldconf.SequencerDefaults.HeartbeatInterval)
 			sMgr.sequencers[contractAddr.String()] = sequencer
+
+			go sequencer.heartbeatLoop(seqCtx)
 
 			if tx != nil {
 				sMgr.sequencers[contractAddr.String()].lastTXTime = time.Now()

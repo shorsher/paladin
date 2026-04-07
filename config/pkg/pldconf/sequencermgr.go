@@ -36,7 +36,7 @@ type SequencerConfig struct {
 	HeartbeatInterval                 *string           `json:"heartbeatInterval"`
 	MaxInflightTransactions           *int              `json:"maxInflightTransactions"`
 	MaxDispatchAhead                  *int              `json:"maxDispatchAhead"`
-	OriginatorIdleGracePeriod         *int              `json:"originatorIdleGracePeriod"`
+	ObservingIdleGracePeriod          *int              `json:"observingIdleGracePeriod"`
 	RedelegateGracePeriod             *int              `json:"redelegateGracePeriod"`
 	TargetActiveCoordinators          *int              `json:"targetActiveCoordinators"`
 	TargetActiveSequencers            *int              `json:"targetActiveSequencers"`
@@ -63,7 +63,7 @@ type SequencerMinimumConfig struct {
 	HeartbeatInterval                 time.Duration
 	MaxInflightTransactions           int
 	MaxDispatchAhead                  int
-	OriginatorIdleGracePeriod         int
+	ObservingIdleGracePeriod          int
 	RedelegateGracePeriod             int
 	TargetActiveCoordinators          int
 	TargetActiveSequencers            int
@@ -94,7 +94,7 @@ var SequencerDefaults = SequencerConfig{
 	HeartbeatInterval:                 confutil.P("10s"),
 	MaxInflightTransactions:           confutil.P(500),
 	MaxDispatchAhead:                  confutil.P(50),
-	OriginatorIdleGracePeriod:         confutil.P(10),
+	ObservingIdleGracePeriod:          confutil.P(10),
 	RedelegateGracePeriod:             confutil.P(2),
 	TargetActiveCoordinators:          confutil.P(50),
 	TargetActiveSequencers:            confutil.P(50),
@@ -120,7 +120,7 @@ var SequencerMinimum = SequencerMinimumConfig{
 	HeartbeatInterval:                 1 * time.Second,
 	MaxInflightTransactions:           1,
 	MaxDispatchAhead:                  1,
-	OriginatorIdleGracePeriod:         1,
+	ObservingIdleGracePeriod:          1,
 	RedelegateGracePeriod:             1,
 	TargetActiveCoordinators:          10,
 	TargetActiveSequencers:            10,

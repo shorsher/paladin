@@ -740,7 +740,7 @@ var (
 	SequencerConfigHeartbeatInterval                 = pdm("SequencerConfig.heartbeatInterval", "Heartbeat interval for coordinators")
 	SequencerConfigMaxInflightTransactions           = pdm("SequencerConfig.maxInflightTransactions", "Maximum number of inflight transactions")
 	SequencerConfigMaxDispatchAhead                  = pdm("SequencerConfig.maxDispatchAhead", "Maximum number of transactions to dispatch ahead")
-	SequencerConfigOriginatorIdleGracePeriod         = pdm("SequencerConfig.originatorIdleGracePeriod", "Number of heartbeats to receive before moving to idle state")
+	SequencerConfigObservingIdleGracePeriod           = pdm("SequencerConfig.observingIdleGracePeriod", "Number of heartbeat intervals without activity before a coordinator or originator transitions from observing to idle")
 	SequencerConfigRedelegateGracePeriod             = pdm("SequencerConfig.redelegateGracePeriod", "Number of heartbeat intervals without receiving a heartbeast, before re-delegating pending transactions")
 	SequencerConfigTargetActiveCoordinators          = pdm("SequencerConfig.targetActiveCoordinators", "Target number of active coordinators")
 	SequencerConfigTargetActiveSequencers            = pdm("SequencerConfig.targetActiveSequencers", "Target number of active sequencers")

@@ -26,6 +26,7 @@ import (
 	"github.com/LFDT-Paladin/paladin/config/pkg/confutil"
 	"github.com/LFDT-Paladin/paladin/config/pkg/pldconf"
 	"github.com/LFDT-Paladin/paladin/core/internal/components"
+	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/common"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/coordinator"
 	coordinatorTx "github.com/LFDT-Paladin/paladin/core/internal/sequencer/coordinator/transaction"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/metrics"
@@ -1811,4 +1812,61 @@ func TestSequencerManager_removeIdleSequencers_Empty(t *testing.T) {
 	sm.sequencersLock.RLock()
 	defer sm.sequencersLock.RUnlock()
 	assert.Empty(t, sm.sequencers)
+}
+
+func TestHeartbeatLoop_SendsPeriodicHeartbeats(t *testing.T) {
+	contractAddr := pldtypes.RandAddress()
+	mocks := newSequencerLifecycleTestMocks(t)
+
+	coordReceived := make(chan struct{}, 10)
+	origReceived := make(chan struct{}, 10)
+	mocks.coordinator.EXPECT().QueueEvent(mock.Anything, mock.AnythingOfType("*common.HeartbeatIntervalEvent")).Run(
+		func(_ context.Context, _ common.Event) { coordReceived <- struct{}{} },
+	).Return()
+	mocks.originator.EXPECT().QueueEvent(mock.Anything, mock.AnythingOfType("*common.HeartbeatIntervalEvent")).Run(
+		func(_ context.Context, _ common.Event) { origReceived <- struct{}{} },
+	).Return()
+
+	seq := &sequencer{
+		contractAddress:   contractAddr.String(),
+		coordinator:       mocks.coordinator,
+		originator:        mocks.originator,
+		heartbeatInterval: 50 * time.Millisecond,
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go seq.heartbeatLoop(ctx)
+
+	// The initial immediate event should arrive quickly
+	<-coordReceived
+	<-origReceived
+
+	// then wait for the period events
+	<-coordReceived
+	<-origReceived
+}
+
+func TestHeartbeatLoop_StopsWhenContextCancelled(t *testing.T) {
+	contractAddr := pldtypes.RandAddress()
+	mocks := newSequencerLifecycleTestMocks(t)
+
+	mocks.coordinator.EXPECT().QueueEvent(mock.Anything, mock.AnythingOfType("*common.HeartbeatIntervalEvent")).Return()
+	mocks.originator.EXPECT().QueueEvent(mock.Anything, mock.AnythingOfType("*common.HeartbeatIntervalEvent")).Return()
+
+	seq := &sequencer{
+		contractAddress:   contractAddr.String(),
+		coordinator:       mocks.coordinator,
+		originator:        mocks.originator,
+		heartbeatInterval: 10 * time.Second,
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		seq.heartbeatLoop(ctx)
+		close(done)
+	}()
+
+	cancel()
+	<-done
 }
