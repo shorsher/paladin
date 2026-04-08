@@ -86,6 +86,29 @@ type sequencer struct {
 	lastTXTime      time.Time
 }
 
+// heartbeatLoop runs for the lifetime of the sequencer, periodically queuing
+// HeartbeatIntervalEvent to both the coordinator and originator state machines.
+func (seq *sequencer) heartbeatLoop(ctx context.Context, heartbeatInterval time.Duration) {
+	ticker := time.NewTicker(heartbeatInterval)
+	defer ticker.Stop()
+
+	hbEvent := &common.HeartbeatIntervalEvent{}
+	seq.coordinator.QueueEvent(ctx, hbEvent)
+	seq.originator.QueueEvent(ctx, hbEvent)
+
+	for {
+		select {
+		case <-ticker.C:
+			hbEvent := &common.HeartbeatIntervalEvent{}
+			seq.coordinator.QueueEvent(ctx, hbEvent)
+			seq.originator.QueueEvent(ctx, hbEvent)
+		case <-ctx.Done():
+			log.L(ctx).Debugf("heartbeat loop stopped for %s", seq.contractAddress)
+			return
+		}
+	}
+}
+
 // Return the sequencer for the requested contract address, instantiating it first if this is its first use.
 func (sMgr *sequencerManager) LoadSequencer(ctx context.Context, dbTX persistence.DBTX, contractAddr pldtypes.EthAddress, domainAPI components.DomainSmartContract, tx *components.PrivateTransaction) (Sequencer, error) {
 	return sMgr.loadSequencer(ctx, dbTX, contractAddr, domainAPI, tx, true)
@@ -179,7 +202,7 @@ func (sMgr *sequencerManager) loadSequencer(ctx context.Context, dbTX persistenc
 				delegateDomainContext: delegateDomainContext,
 			}
 
-			seqOriginator, err := originator.NewOriginator(seqCtx, sMgr.nodeName, transportWriter, common.RealClock(), sMgr.engineIntegration, &contractAddr, sMgr.config, sMgr.metrics)
+			seqOriginator, err := originator.NewOriginator(seqCtx, sMgr.nodeName, transportWriter, sMgr.engineIntegration, &contractAddr, sMgr.config, sMgr.metrics)
 			if err != nil {
 				cancelCtx()
 				log.L(ctx).Errorf("failed to create sequencer originator for contract %s: %s", contractAddr.String(), err)
@@ -236,6 +259,8 @@ func (sMgr *sequencerManager) loadSequencer(ctx context.Context, dbTX persistenc
 			sequencer.originator = seqOriginator
 			sequencer.coordinator = coordinator
 			sMgr.sequencers[contractAddr.String()] = sequencer
+
+			go sequencer.heartbeatLoop(seqCtx, sMgr.heartbeatInterval)
 
 			if tx != nil {
 				sMgr.sequencers[contractAddr.String()].lastTXTime = time.Now()
