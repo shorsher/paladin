@@ -139,6 +139,7 @@ func newSequencerManagerForTesting(t *testing.T, mocks *sequencerLifecycleTestMo
 		sequencersLock:                sync.RWMutex{},
 		sequencers:                    make(map[string]*sequencer),
 		metrics:                       mocks.metrics,
+		heartbeatInterval:             10 * time.Second,
 		targetActiveCoordinatorsLimit: 2,
 		targetActiveSequencersLimit:   2,
 	}
