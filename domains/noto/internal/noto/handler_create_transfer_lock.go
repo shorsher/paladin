@@ -149,11 +149,8 @@ func (h *createTransferLockHandler) Assemble(ctx context.Context, tx *types.Pars
 	}
 
 	// Build separate spend and cancel manifests
-	spendManifest := h.noto.newManifestBuilder().
-		addOutputs(spendOutputs).
-		addOutputs(&remainderOutputs)
-	cancelManifest := h.noto.newManifestBuilder().
-		addOutputs(cancelOutputs)
+	spendManifest := h.noto.newManifestBuilder().addOutputs(spendOutputs)
+	cancelManifest := h.noto.newManifestBuilder().addOutputs(cancelOutputs)
 
 	// Build and encode the unlock data separately for spend and cancel operations
 	unlockResult, err := h.buildUnlockData(ctx, notaryID, senderID, fromID, tx, params.Recipients, req.ResolvedVerifiers, req.StateQueryContext, params.UnlockData, spendManifest, cancelManifest)
