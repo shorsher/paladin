@@ -240,6 +240,16 @@ func (c *coordinator) popNextPooledTransaction() transaction.CoordinatorTransact
 	return nextPooledTx
 }
 
+func (c *coordinator) removeTransactionFromPool(id uuid.UUID) {
+	for i, txn := range c.pooledTransactions {
+		if txn.GetID() == id {
+			c.pooledTransactions[i] = nil
+			c.pooledTransactions = append(c.pooledTransactions[:i], c.pooledTransactions[i+1:]...)
+			return
+		}
+	}
+}
+
 func validator_TransactionStateTransitionToPooled(ctx context.Context, _ *coordinator, event common.Event) (bool, error) {
 	e := event.(*common.TransactionStateTransitionEvent[transaction.State])
 	return e.To == transaction.State_Pooled, nil
@@ -293,6 +303,8 @@ func validator_TransactionStateTransitionToEvicted(ctx context.Context, _ *coord
 func action_CleanUpTransaction(ctx context.Context, c *coordinator, event common.Event) error {
 	e := event.(*common.TransactionStateTransitionEvent[transaction.State])
 	delete(c.transactionsByID, e.TransactionID)
+	// this is a no-op if the transaction is not in the pool
+	c.removeTransactionFromPool(e.TransactionID)
 	c.metrics.DecCoordinatingTransactions()
 	err := c.grapher.Forget(ctx, e.TransactionID)
 	if err != nil {

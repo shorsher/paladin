@@ -45,8 +45,6 @@ const (
 
 type EventType = common.EventType
 
-// TODO AM: need to decide which events apply to which type of dependency
-
 const (
 	Event_Delegated                      EventType = iota + common.Event_HeartbeatInterval + 1 // Transaction initially received by the coordinator.  Might seem redundant explicitly modeling this as an event rather than putting this logic into the constructor, but it is useful to make the initial state transition rules explicit in the state machine definitions
 	Event_DependencySelectedForAssemble                                                        // the transaction delegated immediately before the transaction from the same originator has been selected for assembly
@@ -113,6 +111,13 @@ var stateDefinitionsMap = StateDefinitions{
 				Actions:     []ActionRule{{Action: action_FinalizeOnChainedDependencyFailure}},
 				Transitions: []Transition{{To: State_Reverted}},
 			},
+			// Event_ChainedDependencyEvicted is only handled in pre-assembly states (Initial,
+			// PreAssembly_Blocked, Pooled) because if a dependency hasn't been assembled, its
+			// dependents cannot have been either. Once past assembly, only ChainedDependencyFailed
+			// (terminal revert) is relevant.
+			Event_ChainedDependencyEvicted: {
+				Transitions: []Transition{{To: State_Evicted}},
+			},
 		},
 	},
 	State_PreAssembly_Blocked: {
@@ -120,12 +125,16 @@ var stateDefinitionsMap = StateDefinitions{
 			Event_NewPreAssembleDependency: {
 				Actions: []ActionRule{{Action: action_AddPreAssemblePrereqOf}},
 			},
-			// Waiting for this event before we moved to pooled ensures FIFO ordering for first assembly within an originator.
+			// Waiting for this event before we move to pooled ensures FIFO ordering for first assembly within an originator
+			// and preservers chained dependency ordering
 			Event_DependencySelectedForAssemble: {
 				Actions: []ActionRule{{Action: action_RemovePreAssembleDependency}},
-				Transitions: []Transition{{
-					To: State_Pooled,
-				}},
+				Transitions: []Transition{
+					{
+						To: State_Pooled,
+						If: statemachine.GuardNot(guard_HasUnassembledDependencies),
+					},
+				},
 			},
 			Event_ChainedDependencyFailed: {
 				Actions:     []ActionRule{{Action: action_FinalizeOnChainedDependencyFailure}},
@@ -138,7 +147,6 @@ var stateDefinitionsMap = StateDefinitions{
 	},
 	State_Pooled: {
 		OnTransitionTo: []ActionRule{
-			{Action: action_NotifyDependentsOfReset},
 			{Action: action_InitializeForNewAssembly},
 		},
 		Events: map[EventType]EventHandler{
@@ -147,15 +155,31 @@ var stateDefinitionsMap = StateDefinitions{
 			},
 			Event_Selected: {
 				Actions: []ActionRule{
-					// We notify the preassemble dependent at the point of selection, since the outcome of assembly is irrelevant
-					// to ensuring FIFO for first assembly within an originator.
-					{Action: action_NotifyPreAssembleDependentOfSelection},
+					// We notify dependents at the point of selection, since the outcome of assembly is irrelevant
+					// to ensuring ordering for first assembly. It is relevant for chained dependencies but the
+					{Action: action_NotifyDependentsOfSelection},
 					{Action: action_RemovePreAssemblePrereqOf},
 				},
 				Transitions: []Transition{
 					{
 						To: State_Assembling,
 					}},
+			},
+			Event_DependencyReset: {
+				Transitions: []Transition{
+					{
+						To: State_PreAssembly_Blocked,
+						If: guard_HasUnassembledDependencies,
+					},
+				},
+			},
+			Event_DependencyConfirmedReverted: {
+				Transitions: []Transition{
+					{
+						To: State_PreAssembly_Blocked,
+						If: guard_HasUnassembledDependencies,
+					},
+				},
 			},
 			Event_ChainedDependencyFailed: {
 				Actions:     []ActionRule{{Action: action_FinalizeOnChainedDependencyFailure}},
@@ -199,14 +223,20 @@ var stateDefinitionsMap = StateDefinitions{
 				}},
 			},
 			Event_StateTimeoutInterval: {
-				Transitions: []Transition{{
-					To: State_Pooled,
-				}},
+				Transitions: []Transition{
+					{
+						To:      State_Pooled,
+						Actions: []ActionRule{{Action: action_NotifyDependentsOfReset}},
+					},
+				},
 			},
 			Event_Assemble_Cancelled: {
-				Transitions: []Transition{{
-					To: State_Pooled,
-				}},
+				Transitions: []Transition{
+					{
+						To:      State_Pooled,
+						Actions: []ActionRule{{Action: action_NotifyDependentsOfReset}},
+					},
+				},
 			},
 			Event_Assemble_Revert_Response: {
 				Validator: validator_MatchesPendingAssembleRequest,
@@ -220,8 +250,9 @@ var stateDefinitionsMap = StateDefinitions{
 				Actions:   []ActionRule{{Action: action_AssembleError}},
 				Transitions: []Transition{
 					{
-						If: guard_CanRetryErroredAssemble,
-						To: State_Pooled,
+						If:      guard_CanRetryErroredAssemble,
+						To:      State_Pooled,
+						Actions: []ActionRule{{Action: action_NotifyDependentsOfReset}},
 					},
 					{
 						If: statemachine.GuardNot(guard_CanRetryErroredAssemble),
@@ -278,7 +309,8 @@ var stateDefinitionsMap = StateDefinitions{
 			Event_EndorsedRejected: {
 				Transitions: []Transition{
 					{
-						To: State_Pooled,
+						To:      State_Pooled,
+						Actions: []ActionRule{{Action: action_NotifyDependentsOfReset}},
 					},
 				},
 			},
@@ -290,21 +322,38 @@ var stateDefinitionsMap = StateDefinitions{
 			Event_StateTimeoutInterval: {
 				Transitions: []Transition{
 					{
-						To: State_Pooled,
+						To:      State_Pooled,
+						Actions: []ActionRule{{Action: action_NotifyDependentsOfReset}},
 					},
 				},
 			},
-			// TODO AM: the transitions here need to be more nuanced - if it's a chained dependency then we have to go to preassembly blocked
-			// we also need to handle this and the event below in more states because the dependencies exist at an earlier point
 			Event_DependencyReset: {
-				Transitions: []Transition{{
-					To: State_Pooled,
-				}},
+				Transitions: []Transition{
+					{
+						To:      State_PreAssembly_Blocked,
+						If:      guard_HasUnassembledDependencies,
+						Actions: []ActionRule{{Action: action_NotifyDependentsOfReset}},
+					},
+					{
+						To:      State_Pooled,
+						If:      statemachine.GuardNot(guard_HasUnassembledDependencies),
+						Actions: []ActionRule{{Action: action_NotifyDependentsOfReset}},
+					},
+				},
 			},
 			Event_DependencyConfirmedReverted: {
-				Transitions: []Transition{{
-					To: State_Pooled,
-				}},
+				Transitions: []Transition{
+					{
+						To:      State_PreAssembly_Blocked,
+						If:      guard_HasUnassembledDependencies,
+						Actions: []ActionRule{{Action: action_NotifyDependentsOfReset}},
+					},
+					{
+						To:      State_Pooled,
+						If:      statemachine.GuardNot(guard_HasUnassembledDependencies),
+						Actions: []ActionRule{{Action: action_NotifyDependentsOfReset}},
+					},
+				},
 			},
 			Event_ChainedDependencyFailed: {
 				Actions:     []ActionRule{{Action: action_FinalizeOnChainedDependencyFailure}},
@@ -326,14 +375,32 @@ var stateDefinitionsMap = StateDefinitions{
 				}},
 			},
 			Event_DependencyReset: {
-				Transitions: []Transition{{
-					To: State_Pooled,
-				}},
+				Transitions: []Transition{
+					{
+						To:      State_PreAssembly_Blocked,
+						If:      guard_HasUnassembledDependencies,
+						Actions: []ActionRule{{Action: action_NotifyDependentsOfReset}},
+					},
+					{
+						To:      State_Pooled,
+						If:      statemachine.GuardNot(guard_HasUnassembledDependencies),
+						Actions: []ActionRule{{Action: action_NotifyDependentsOfReset}},
+					},
+				},
 			},
 			Event_DependencyConfirmedReverted: {
-				Transitions: []Transition{{
-					To: State_Pooled,
-				}},
+				Transitions: []Transition{
+					{
+						To:      State_PreAssembly_Blocked,
+						If:      guard_HasUnassembledDependencies,
+						Actions: []ActionRule{{Action: action_NotifyDependentsOfReset}},
+					},
+					{
+						To:      State_Pooled,
+						If:      statemachine.GuardNot(guard_HasUnassembledDependencies),
+						Actions: []ActionRule{{Action: action_NotifyDependentsOfReset}},
+					},
+				},
 			},
 			Event_ChainedDependencyFailed: {
 				Actions:     []ActionRule{{Action: action_FinalizeOnChainedDependencyFailure}},
@@ -360,7 +427,8 @@ var stateDefinitionsMap = StateDefinitions{
 				Actions:   []ActionRule{{Action: action_DispatchRequestRejected}},
 				Transitions: []Transition{
 					{
-						To: State_Pooled,
+						To:      State_Pooled,
+						Actions: []ActionRule{{Action: action_NotifyDependentsOfReset}},
 					},
 				},
 			},
@@ -372,20 +440,41 @@ var stateDefinitionsMap = StateDefinitions{
 			Event_StateTimeoutInterval: {
 				Transitions: []Transition{
 					{
-						To:      State_Pooled,
-						Actions: []ActionRule{{Action: action_DispatchRequestRejected}},
+						To: State_Pooled,
+						Actions: []ActionRule{
+							{Action: action_DispatchRequestRejected},
+							{Action: action_NotifyDependentsOfReset},
+						},
 					},
 				},
 			},
 			Event_DependencyReset: {
-				Transitions: []Transition{{
-					To: State_Pooled,
-				}},
+				Transitions: []Transition{
+					{
+						To:      State_PreAssembly_Blocked,
+						If:      guard_HasUnassembledDependencies,
+						Actions: []ActionRule{{Action: action_NotifyDependentsOfReset}},
+					},
+					{
+						To:      State_Pooled,
+						If:      statemachine.GuardNot(guard_HasUnassembledDependencies),
+						Actions: []ActionRule{{Action: action_NotifyDependentsOfReset}},
+					},
+				},
 			},
 			Event_DependencyConfirmedReverted: {
-				Transitions: []Transition{{
-					To: State_Pooled,
-				}},
+				Transitions: []Transition{
+					{
+						To:      State_PreAssembly_Blocked,
+						If:      guard_HasUnassembledDependencies,
+						Actions: []ActionRule{{Action: action_NotifyDependentsOfReset}},
+					},
+					{
+						To:      State_Pooled,
+						If:      statemachine.GuardNot(guard_HasUnassembledDependencies),
+						Actions: []ActionRule{{Action: action_NotifyDependentsOfReset}},
+					},
+				},
 			},
 			Event_ChainedDependencyFailed: {
 				Actions:     []ActionRule{{Action: action_FinalizeOnChainedDependencyFailure}},
@@ -412,14 +501,32 @@ var stateDefinitionsMap = StateDefinitions{
 				},
 			},
 			Event_DependencyReset: {
-				Transitions: []Transition{{
-					To: State_Pooled,
-				}},
+				Transitions: []Transition{
+					{
+						To:      State_PreAssembly_Blocked,
+						If:      guard_HasUnassembledDependencies,
+						Actions: []ActionRule{{Action: action_NotifyDependentsOfReset}},
+					},
+					{
+						To:      State_Pooled,
+						If:      statemachine.GuardNot(guard_HasUnassembledDependencies),
+						Actions: []ActionRule{{Action: action_NotifyDependentsOfReset}},
+					},
+				},
 			},
 			Event_DependencyConfirmedReverted: {
-				Transitions: []Transition{{
-					To: State_Pooled,
-				}},
+				Transitions: []Transition{
+					{
+						To:      State_PreAssembly_Blocked,
+						If:      guard_HasUnassembledDependencies,
+						Actions: []ActionRule{{Action: action_NotifyDependentsOfReset}},
+					},
+					{
+						To:      State_Pooled,
+						If:      statemachine.GuardNot(guard_HasUnassembledDependencies),
+						Actions: []ActionRule{{Action: action_NotifyDependentsOfReset}},
+					},
+				},
 			},
 			Event_ChainedDependencyFailed: {
 				Actions:     []ActionRule{{Action: action_FinalizeOnChainedDependencyFailure}},
@@ -445,7 +552,7 @@ var stateDefinitionsMap = StateDefinitions{
 				Actions: []ActionRule{
 					{Action: action_RecordConfirmation},
 					{Action: action_NotifyOriginatorOfConfirmation},
-					{Action: action_NotifyDependantsOfSuccessfulConfirmation},
+					{Action: action_ResetLocksOnConfirmationIfNoRetentionGracePeriod},
 				},
 				Transitions: []Transition{{To: State_Confirmed}},
 			},
@@ -457,10 +564,19 @@ var stateDefinitionsMap = StateDefinitions{
 				},
 				Transitions: []Transition{
 					{
-						If: guard_CanRetryRevert,
+						If: statemachine.GuardAnd(guard_CanRetryRevert, guard_HasUnassembledDependencies),
+						To: State_PreAssembly_Blocked,
+						Actions: []ActionRule{
+							{Action: action_NotifyOriginatorOfRetryableRevert},
+							{Action: action_NotifyDependentsOfReset},
+						},
+					},
+					{
+						If: statemachine.GuardAnd(guard_CanRetryRevert, statemachine.GuardNot(guard_HasUnassembledDependencies)),
 						To: State_Pooled,
 						Actions: []ActionRule{
 							{Action: action_NotifyOriginatorOfRetryableRevert},
+							{Action: action_NotifyDependentsOfReset},
 						},
 					},
 					{
@@ -486,7 +602,6 @@ var stateDefinitionsMap = StateDefinitions{
 					{Action: action_NotifyDependentsOfReset},
 				},
 			},
-			// TODO AM: we're handling this in every state...
 			Event_ChainedDependencyFailed: {
 				Actions:     []ActionRule{{Action: action_FinalizeOnChainedDependencyFailure}},
 				Transitions: []Transition{{To: State_Reverted}},

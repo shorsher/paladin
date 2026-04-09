@@ -123,23 +123,32 @@ func (t *coordinatorTransaction) nudgeAssembleRequest(ctx context.Context) error
 	return t.pendingAssembleRequest.Nudge(ctx)
 }
 
-func action_NotifyPreAssembleDependentOfSelection(ctx context.Context, txn *coordinatorTransaction, _ common.Event) error {
-	return txn.notifyPreAssembleDependentOfSelection(ctx)
+func action_NotifyDependentsOfSelection(ctx context.Context, txn *coordinatorTransaction, _ common.Event) error {
+	return txn.notifyDependentsOfSelection(ctx)
 }
 
-func (t *coordinatorTransaction) notifyPreAssembleDependentOfSelection(ctx context.Context) error {
-	if t.dependencies.PreAssemble.PrereqOf == nil {
-		return nil
+func (t *coordinatorTransaction) notifyDependentsOfSelection(ctx context.Context) error {
+	var dependentIDs []uuid.UUID
+	if t.dependencies.PreAssemble.PrereqOf != nil {
+		dependentIDs = append(dependentIDs, *t.dependencies.PreAssemble.PrereqOf)
 	}
-	dependent := t.grapher.TransactionByID(ctx, *t.dependencies.PreAssemble.PrereqOf)
-	if dependent == nil {
-		return i18n.NewError(ctx, msgs.MsgSequencerGrapherDependencyNotFound, *t.dependencies.PreAssemble.PrereqOf)
+	dependentIDs = append(dependentIDs, t.dependencies.Chained.PrereqOf...)
+
+	for _, dependentID := range dependentIDs {
+		dependent := t.grapher.TransactionByID(ctx, dependentID)
+		if dependent == nil {
+			return i18n.NewError(ctx, msgs.MsgSequencerGrapherDependencyNotFound, dependentID)
+		}
+		err := dependent.HandleEvent(ctx, &DependencySelectedForAssemblyEvent{
+			BaseCoordinatorEvent: BaseCoordinatorEvent{
+				TransactionID: dependentID,
+			},
+		})
+		if err != nil {
+			return err
+		}
 	}
-	return dependent.HandleEvent(ctx, &DependencySelectedForAssemblyEvent{
-		BaseCoordinatorEvent: BaseCoordinatorEvent{
-			TransactionID: t.pt.ID,
-		},
-	})
+	return nil
 }
 
 func (t *coordinatorTransaction) calculatePostAssembleDependencies(ctx context.Context) error {

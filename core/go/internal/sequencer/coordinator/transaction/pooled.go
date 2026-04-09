@@ -17,16 +17,35 @@ package transaction
 import (
 	"context"
 
+	"github.com/LFDT-Paladin/paladin/common/go/pkg/i18n"
 	"github.com/LFDT-Paladin/paladin/common/go/pkg/log"
+	"github.com/LFDT-Paladin/paladin/core/internal/msgs"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/common"
 )
 
-// Function hasDependenciesNotAssembled checks if the transaction has a preassembly dependency that has not been assembled yet
-func (t *coordinatorTransaction) hasDependenciesNotAssembled() bool {
-	// preAssembleDependsOn can only be set when transactions have arrived in the same delegation request.
+func (t *coordinatorTransaction) hasDependenciesNotAssembled(ctx context.Context) bool {
+	// PreAssemble.DependsOn can only be set when transactions have arrived in the same delegation request.
 	// It is cleared when the dependent transaction is selected for assembly which means there is no way
 	// that this can be cleared if a dependency has not yet been assembled.
-	return t.dependencies.PreAssemble.DependsOn != nil
+	if t.dependencies.PreAssemble.DependsOn != nil {
+		return true
+	}
+	return t.hasUnassembledChainedDependencies(ctx)
+}
+
+func (t *coordinatorTransaction) hasUnassembledChainedDependencies(ctx context.Context) bool {
+	for _, depID := range t.dependencies.Chained.DependsOn {
+		dep := t.grapher.TransactionByID(ctx, depID)
+		if dep == nil {
+			log.L(ctx).Error(i18n.NewError(ctx, msgs.MsgSequencerGrapherDependencyNotFound, depID))
+			return true
+		}
+		state := dep.GetCurrentState()
+		if state == State_Initial || state == State_PreAssembly_Blocked || state == State_Pooled {
+			return true
+		}
+	}
+	return false
 }
 
 func action_InitializeForNewAssembly(ctx context.Context, txn *coordinatorTransaction, event common.Event) error {
@@ -63,14 +82,15 @@ func action_ResetTransactionLocks(ctx context.Context, txn *coordinatorTransacti
 	return nil
 }
 
-func guard_HasUnassembledDependencies(_ context.Context, txn *coordinatorTransaction) bool {
-	return txn.hasDependenciesNotAssembled()
+func guard_HasUnassembledDependencies(ctx context.Context, txn *coordinatorTransaction) bool {
+	return txn.hasDependenciesNotAssembled(ctx)
 }
 
 func action_NotifyDependentsOfReset(ctx context.Context, txn *coordinatorTransaction, _ common.Event) error {
-	// We emit a DependencyResetEvent whenever we transition to pooled. For the initial transition
-	// from State_Initial to State_Pooled and the transition from State_Assembling to State_Pooled
-	// we do not expect any dependents yet, so this is a no-op.
+	// We emit a DependencyResetEvent for chained and post assembly dependencies whenever we transition to
+	// State_Pooled or State_PreAssembly_Blocked.
+	// For the initial transition from State_Initial and the transition from State_Assembling to State_Pooled
+	// the only dependents we expect are chained dependencies
 	if err := txn.notifyDependentsOfReset(ctx); err != nil {
 		return err
 	}
