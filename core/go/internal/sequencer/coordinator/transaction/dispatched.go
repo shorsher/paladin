@@ -31,13 +31,13 @@ func action_NotifyDispatched(ctx context.Context, t *coordinatorTransaction, _ c
 	return t.transportWriter.SendDispatched(ctx, t.originator, uuid.New(), txSpec)
 }
 
-// action_ReleaseAssemblyPayload releases the heavy post-assembly and prepared-dispatch
+// action_CleanUpAssemblyPayload releases the heavy post-assembly and prepared-dispatch
 // payload data after dispatch. PreAssembly is preserved because it holds the
 // TransactionSpecification and RequiredVerifiers needed if the transaction reverts
 // and must be re-assembled.
-func action_ReleaseAssemblyPayload(ctx context.Context, t *coordinatorTransaction, _ common.Event) error {
-	log.L(ctx).Debugf("releasing assembly payload for dispatched transaction %s", t.pt.ID.String())
-	t.pt.ReleasePostAssemblyData()
+func action_CleanUpAssemblyPayload(ctx context.Context, t *coordinatorTransaction, _ common.Event) error {
+	log.L(ctx).Debugf("cleaning up assembly payload for dispatched transaction %s", t.pt.ID.String())
+	t.pt.CleanUpPostAssemblyData()
 	return nil
 }
 

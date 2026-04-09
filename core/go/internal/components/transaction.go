@@ -75,6 +75,7 @@ type TransactionPostAssembly struct {
 	DomainData            *string                                    `json:"domain_data"`
 	RevertReason          *string                                    `json:"revert_reason"`
 }
+
 // PrivateTransaction is the critical exchange object between the engine and the domain manager,
 // as it hops between the states in the state machine (on multiple paladin nodes) to reach
 // a state that it can successfully (and anonymously) submitted it to the blockchain.
@@ -102,10 +103,10 @@ type PrivateTransaction struct {
 	PreparedMetadata           pldtypes.RawJSON         `json:"-"`
 }
 
-// ReleasePostAssemblyData releases the heavy post-assembly and prepared-dispatch
+// CleanUpPostAssemblyData releases the heavy post-assembly and prepared-dispatch
 // payload data. Shared by re-assembly cleanup (which retains PreAssembly for reuse)
 // and post-dispatch cleanup (which additionally releases PreAssembly).
-func (pt *PrivateTransaction) ReleasePostAssemblyData() {
+func (pt *PrivateTransaction) CleanUpPostAssemblyData() {
 	pt.PostAssembly = nil
 	pt.PreparedPublicTransaction = nil
 	pt.PreparedPrivateTransaction = nil

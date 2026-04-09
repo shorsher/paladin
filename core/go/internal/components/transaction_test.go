@@ -48,7 +48,7 @@ func TestReleasePostAssemblyData(t *testing.T) {
 	savedAddress := pt.Address
 	savedSigner := pt.Signer
 
-	pt.ReleasePostAssemblyData()
+	pt.CleanUpPostAssemblyData()
 
 	assert.Nil(t, pt.PostAssembly)
 	assert.Nil(t, pt.PreparedPublicTransaction)
@@ -64,7 +64,7 @@ func TestReleasePostAssemblyData(t *testing.T) {
 
 func TestReleasePostAssemblyData_NilFields(t *testing.T) {
 	pt := &PrivateTransaction{ID: uuid.New()}
-	pt.ReleasePostAssemblyData()
+	pt.CleanUpPostAssemblyData()
 
 	assert.Nil(t, pt.PostAssembly)
 	assert.Nil(t, pt.PreparedPublicTransaction)

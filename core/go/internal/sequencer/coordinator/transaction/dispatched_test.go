@@ -169,7 +169,7 @@ func Test_action_ReleaseAssemblyPayload_NilsHeavyFields(t *testing.T) {
 	savedDomain := txn.pt.Domain
 	savedAddress := txn.pt.Address
 
-	err := action_ReleaseAssemblyPayload(ctx, txn, nil)
+	err := action_CleanUpAssemblyPayload(ctx, txn, nil)
 	require.NoError(t, err)
 
 	assert.Nil(t, txn.pt.PostAssembly)
@@ -193,7 +193,7 @@ func Test_action_ReleaseAssemblyPayload_SafeWithNilFields(t *testing.T) {
 	txn.pt.PreparedPrivateTransaction = nil
 	txn.pt.PreparedMetadata = nil
 
-	err := action_ReleaseAssemblyPayload(ctx, txn, nil)
+	err := action_CleanUpAssemblyPayload(ctx, txn, nil)
 	require.NoError(t, err)
 }
 
