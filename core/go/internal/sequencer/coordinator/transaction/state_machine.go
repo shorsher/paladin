@@ -305,9 +305,35 @@ var stateDefinitionsMap = StateDefinitions{
 					Actions: []ActionRule{{Action: action_FinalizeAsUnknownByOriginator}},
 				}},
 			},
+			// A dependency resetting while we are assembling must be a chained dependency
+			// (post-assembly dependencies don't exist yet). The reset dependency is
+			// unassembled, so we always go to PreAssembly_Blocked.
+			Event_DependencyReset: {
+				Actions: []ActionRule{{
+					Action:    action_MarkChainedDependencyUnassembled,
+					Validator: validator_IsChainedDependency,
+				}},
+				Transitions: []Transition{{
+					To:      State_PreAssembly_Blocked,
+					Actions: []ActionRule{{Action: action_NotifyDependentsOfReset}},
+				}},
+			},
+			Event_DependencyConfirmedReverted: {
+				Actions: []ActionRule{{
+					Action:    action_MarkChainedDependencyUnassembled,
+					Validator: validator_IsChainedDependency,
+				}},
+				Transitions: []Transition{{
+					To:      State_PreAssembly_Blocked,
+					Actions: []ActionRule{{Action: action_NotifyDependentsOfReset}},
+				}},
+			},
 			Event_ChainedDependencyFailed: {
 				Actions:     []ActionRule{{Action: action_FinalizeOnChainedDependencyFailure}},
 				Transitions: []Transition{{To: State_Reverted}},
+			},
+			Event_ChainedDependencyEvicted: {
+				Transitions: []Transition{{To: State_Evicted}},
 			},
 		},
 	},

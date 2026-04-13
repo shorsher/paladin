@@ -176,6 +176,8 @@ func Test_notifyDependentsOfRepool_WithDependenciesFromPreAssembly(t *testing.T)
 		Grapher(grapher).
 		Build()
 
+	// The dependent is in State_Assembling. When it receives the DependencyResetEvent,
+	// it transitions to State_PreAssembly_Blocked (the reset dependency is unassembled).
 	txn, _ := NewTransactionBuilderForTesting(t, State_Pooled).
 		Grapher(grapher).
 		Dependencies(&TransactionDependencies{
