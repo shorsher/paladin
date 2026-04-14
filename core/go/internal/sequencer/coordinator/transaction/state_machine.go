@@ -120,6 +120,13 @@ var stateDefinitionsMap = StateDefinitions{
 		},
 	},
 	State_PreAssembly_Blocked: {
+		OnTransitionTo: []ActionRule{
+			// this transition action is duplicated when the transaction moves to State_Pooled,
+			// but the dupliction is safe, and including it on both avoids extra complexity in
+			// all the places where a transaction may go to either State_PreAssembly_Blocked or
+			// State_Pooled depending on its dependencies.
+			{Action: action_InitializeForNewAssembly},
+		},
 		Events: map[EventType]EventHandler{
 			Event_NewPreAssembleDependency: {
 				Actions: []ActionRule{{Action: action_AddPreAssemblePrereqOf}},
@@ -432,8 +439,6 @@ var stateDefinitionsMap = StateDefinitions{
 	},
 	State_Blocked: {
 		Events: map[EventType]EventHandler{
-			// guard_AttestationPlanFulfilled is not needed here — State_Blocked is only
-			// reachable after the attestation plan has been fulfilled.
 			Event_DependencyReady: {
 				Actions: []ActionRule{
 					{

@@ -22,6 +22,7 @@ import (
 	"github.com/LFDT-Paladin/paladin/core/internal/components"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/syncpoints"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldapi"
+	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldtypes"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -171,10 +172,11 @@ func Test_notifyDependentsOfRepool_WithDependenciesFromPreAssembly(t *testing.T)
 	ctx := context.Background()
 	grapher := NewGrapher(ctx)
 	dependentID := uuid.New()
-	_, _ = NewTransactionBuilderForTesting(t, State_Assembling).
+	dependentTxn, dependentMocks := NewTransactionBuilderForTesting(t, State_Assembling).
 		TransactionID(dependentID).
 		Grapher(grapher).
 		Build()
+	dependentMocks.EngineIntegration.EXPECT().ResetTransactions(mock.Anything, dependentTxn.pt.ID).Return()
 
 	// The dependent is in State_Assembling. When it receives the DependencyResetEvent,
 	// it transitions to State_PreAssembly_Blocked (the reset dependency is unassembled).
@@ -461,11 +463,12 @@ func Test_ChainedDep_DelegatedGoesToPreAssemblyBlocked(t *testing.T) {
 		Grapher(grapher).
 		Build()
 
-	txn, _ := NewTransactionBuilderForTesting(t, State_Initial).
+	txn, mocks := NewTransactionBuilderForTesting(t, State_Initial).
 		Grapher(grapher).
 		Build()
 	txn.dependencies.Chained.DependsOn = []uuid.UUID{depTx.pt.ID}
 	txn.dependencies.Chained.Unassembled = map[uuid.UUID]struct{}{depTx.pt.ID: {}}
+	mocks.EngineIntegration.EXPECT().ResetTransactions(mock.Anything, txn.pt.ID).Return()
 
 	err := txn.HandleEvent(ctx, &DelegatedEvent{
 		BaseCoordinatorEvent: BaseCoordinatorEvent{TransactionID: txn.pt.ID},
@@ -491,8 +494,8 @@ func Test_ChainedDep_SelectionEventUnblocksPreAssemblyBlocked(t *testing.T) {
 	mocks.EngineIntegration.EXPECT().ResetTransactions(mock.Anything, txn.pt.ID).Return()
 
 	err := txn.HandleEvent(ctx, &DependencySelectedForAssemblyEvent{
-		BaseCoordinatorEvent:    BaseCoordinatorEvent{TransactionID: txn.pt.ID},
-		SourceTransactionID: depTx.pt.ID,
+		BaseCoordinatorEvent: BaseCoordinatorEvent{TransactionID: txn.pt.ID},
+		SourceTransactionID:  depTx.pt.ID,
 	})
 	require.NoError(t, err)
 	assert.Equal(t, State_Pooled, txn.GetCurrentState())
@@ -519,8 +522,8 @@ func Test_ChainedDep_SelectionEventStaysBlockedIfOtherDepsNotSelected(t *testing
 	}
 
 	err := txn.HandleEvent(ctx, &DependencySelectedForAssemblyEvent{
-		BaseCoordinatorEvent:    BaseCoordinatorEvent{TransactionID: txn.pt.ID},
-		SourceTransactionID: depTxSelected.pt.ID,
+		BaseCoordinatorEvent: BaseCoordinatorEvent{TransactionID: txn.pt.ID},
+		SourceTransactionID:  depTxSelected.pt.ID,
 	})
 	require.NoError(t, err)
 	assert.Equal(t, State_PreAssembly_Blocked, txn.GetCurrentState())
@@ -534,18 +537,55 @@ func Test_Pooled_DependencyResetBlocksIfChainedDepUnassembled(t *testing.T) {
 		Grapher(grapher).
 		Build()
 
-	txn, _ := NewTransactionBuilderForTesting(t, State_Pooled).
+	txn, mocks := NewTransactionBuilderForTesting(t, State_Pooled).
+		Grapher(grapher).
+		Build()
+	txn.dependencies.Chained.DependsOn = []uuid.UUID{depTx.pt.ID}
+	txn.dependencies.Chained.Unassembled = map[uuid.UUID]struct{}{}
+	mocks.EngineIntegration.EXPECT().ResetTransactions(mock.Anything, txn.pt.ID).Return()
+
+	err := txn.HandleEvent(ctx, &DependencyResetEvent{
+		BaseCoordinatorEvent: BaseCoordinatorEvent{TransactionID: txn.pt.ID},
+		SourceTransactionID:  depTx.pt.ID,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, State_PreAssembly_Blocked, txn.GetCurrentState())
+}
+
+func Test_DependencyResetToPreAssemblyBlocked_ForgetsMints(t *testing.T) {
+	ctx := context.Background()
+	grapher := NewGrapher(ctx)
+
+	depTx, _ := NewTransactionBuilderForTesting(t, State_Pooled).
+		Grapher(grapher).
+		Build()
+
+	txn, mocks := NewTransactionBuilderForTesting(t, State_Blocked).
 		Grapher(grapher).
 		Build()
 	txn.dependencies.Chained.DependsOn = []uuid.UUID{depTx.pt.ID}
 	txn.dependencies.Chained.Unassembled = map[uuid.UUID]struct{}{}
 
-	err := txn.HandleEvent(ctx, &DependencyResetEvent{
-		BaseCoordinatorEvent:    BaseCoordinatorEvent{TransactionID: txn.pt.ID},
-		SourceTransactionID: depTx.pt.ID,
+	stateID := pldtypes.HexBytes(uuid.New().String())
+	err := grapher.AddMinter(ctx, stateID, txn)
+	require.NoError(t, err)
+	lookup, err := grapher.LookupMinter(ctx, stateID)
+	require.NoError(t, err)
+	require.NotNil(t, lookup)
+	assert.Equal(t, txn.pt.ID, lookup.pt.ID)
+
+	mocks.EngineIntegration.EXPECT().ResetTransactions(mock.Anything, txn.pt.ID).Return()
+
+	err = txn.HandleEvent(ctx, &DependencyResetEvent{
+		BaseCoordinatorEvent: BaseCoordinatorEvent{TransactionID: txn.pt.ID},
+		SourceTransactionID:  depTx.pt.ID,
 	})
 	require.NoError(t, err)
 	assert.Equal(t, State_PreAssembly_Blocked, txn.GetCurrentState())
+
+	lookup, err = grapher.LookupMinter(ctx, stateID)
+	require.NoError(t, err)
+	assert.Nil(t, lookup)
 }
 
 func Test_Pooled_DependencyResetFromChainedDepAlwaysBlocks(t *testing.T) {
@@ -556,11 +596,12 @@ func Test_Pooled_DependencyResetFromChainedDepAlwaysBlocks(t *testing.T) {
 		Grapher(grapher).
 		Build()
 
-	txn, _ := NewTransactionBuilderForTesting(t, State_Pooled).
+	txn, mocks := NewTransactionBuilderForTesting(t, State_Pooled).
 		Grapher(grapher).
 		Build()
 	txn.dependencies.Chained.DependsOn = []uuid.UUID{depTx.pt.ID}
 	txn.dependencies.Chained.Unassembled = map[uuid.UUID]struct{}{}
+	mocks.EngineIntegration.EXPECT().ResetTransactions(mock.Anything, txn.pt.ID).Return()
 
 	err := txn.HandleEvent(ctx, &DependencyResetEvent{
 		BaseCoordinatorEvent: BaseCoordinatorEvent{TransactionID: txn.pt.ID},
@@ -599,15 +640,16 @@ func Test_Pooled_DependencyConfirmedRevertedBlocksIfChainedDepUnassembled(t *tes
 		Grapher(grapher).
 		Build()
 
-	txn, _ := NewTransactionBuilderForTesting(t, State_Pooled).
+	txn, mocks := NewTransactionBuilderForTesting(t, State_Pooled).
 		Grapher(grapher).
 		Build()
 	txn.dependencies.Chained.DependsOn = []uuid.UUID{depTx.pt.ID}
 	txn.dependencies.Chained.Unassembled = map[uuid.UUID]struct{}{}
+	mocks.EngineIntegration.EXPECT().ResetTransactions(mock.Anything, txn.pt.ID).Return()
 
 	err := txn.HandleEvent(ctx, &DependencyConfirmedRevertedEvent{
-		BaseCoordinatorEvent:    BaseCoordinatorEvent{TransactionID: txn.pt.ID},
-		SourceTransactionID: depTx.pt.ID,
+		BaseCoordinatorEvent: BaseCoordinatorEvent{TransactionID: txn.pt.ID},
+		SourceTransactionID:  depTx.pt.ID,
 	})
 	require.NoError(t, err)
 	assert.Equal(t, State_PreAssembly_Blocked, txn.GetCurrentState())
@@ -621,11 +663,12 @@ func Test_Pooled_DependencyConfirmedRevertedFromChainedDepBlocks(t *testing.T) {
 		Grapher(grapher).
 		Build()
 
-	txn, _ := NewTransactionBuilderForTesting(t, State_Pooled).
+	txn, mocks := NewTransactionBuilderForTesting(t, State_Pooled).
 		Grapher(grapher).
 		Build()
 	txn.dependencies.Chained.DependsOn = []uuid.UUID{depTx.pt.ID}
 	txn.dependencies.Chained.Unassembled = map[uuid.UUID]struct{}{}
+	mocks.EngineIntegration.EXPECT().ResetTransactions(mock.Anything, txn.pt.ID).Return()
 
 	err := txn.HandleEvent(ctx, &DependencyConfirmedRevertedEvent{
 		BaseCoordinatorEvent: BaseCoordinatorEvent{TransactionID: txn.pt.ID},
@@ -664,11 +707,12 @@ func Test_ChainedDep_RepoolGoesToPreAssemblyBlockedIfChainedDepUnassembled(t *te
 		Grapher(grapher).
 		Build()
 
-	txn, _ := NewTransactionBuilderForTesting(t, State_Endorsement_Gathering).
+	txn, mocks := NewTransactionBuilderForTesting(t, State_Endorsement_Gathering).
 		Grapher(grapher).
 		Build()
 	txn.dependencies.Chained.DependsOn = []uuid.UUID{depTx.pt.ID}
 	txn.dependencies.Chained.Unassembled = map[uuid.UUID]struct{}{}
+	mocks.EngineIntegration.EXPECT().ResetTransactions(mock.Anything, txn.pt.ID).Return()
 
 	err := txn.HandleEvent(ctx, &DependencyResetEvent{
 		BaseCoordinatorEvent: BaseCoordinatorEvent{TransactionID: txn.pt.ID},
@@ -686,11 +730,12 @@ func Test_ChainedDep_RepoolGoesToPreAssemblyBlockedIfChainedDepResets(t *testing
 		Grapher(grapher).
 		Build()
 
-	txn, _ := NewTransactionBuilderForTesting(t, State_Endorsement_Gathering).
+	txn, mocks := NewTransactionBuilderForTesting(t, State_Endorsement_Gathering).
 		Grapher(grapher).
 		Build()
 	txn.dependencies.Chained.DependsOn = []uuid.UUID{depTx.pt.ID}
 	txn.dependencies.Chained.Unassembled = map[uuid.UUID]struct{}{}
+	mocks.EngineIntegration.EXPECT().ResetTransactions(mock.Anything, txn.pt.ID).Return()
 
 	err := txn.HandleEvent(ctx, &DependencyResetEvent{
 		BaseCoordinatorEvent: BaseCoordinatorEvent{TransactionID: txn.pt.ID},
