@@ -10,7 +10,6 @@ import (
 
 	"github.com/LFDT-Paladin/paladin/core/internal/components"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/common"
-	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldapi"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldtypes"
 	"github.com/google/uuid"
 	mock "github.com/stretchr/testify/mock"
@@ -865,52 +864,6 @@ func (_c *MockCoordinatorTransaction_GetCurrentState_Call) Return(state State) *
 }
 
 func (_c *MockCoordinatorTransaction_GetCurrentState_Call) RunAndReturn(run func() State) *MockCoordinatorTransaction_GetCurrentState_Call {
-	_c.Call.Return(run)
-	return _c
-}
-
-// GetDependencies provides a mock function for the type MockCoordinatorTransaction
-func (_mock *MockCoordinatorTransaction) GetDependencies() *pldapi.TransactionDependencies {
-	ret := _mock.Called()
-
-	if len(ret) == 0 {
-		panic("no return value specified for GetDependencies")
-	}
-
-	var r0 *pldapi.TransactionDependencies
-	if returnFunc, ok := ret.Get(0).(func() *pldapi.TransactionDependencies); ok {
-		r0 = returnFunc()
-	} else {
-		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*pldapi.TransactionDependencies)
-		}
-	}
-	return r0
-}
-
-// MockCoordinatorTransaction_GetDependencies_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetDependencies'
-type MockCoordinatorTransaction_GetDependencies_Call struct {
-	*mock.Call
-}
-
-// GetDependencies is a helper method to define mock.On call
-func (_e *MockCoordinatorTransaction_Expecter) GetDependencies() *MockCoordinatorTransaction_GetDependencies_Call {
-	return &MockCoordinatorTransaction_GetDependencies_Call{Call: _e.mock.On("GetDependencies")}
-}
-
-func (_c *MockCoordinatorTransaction_GetDependencies_Call) Run(run func()) *MockCoordinatorTransaction_GetDependencies_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		run()
-	})
-	return _c
-}
-
-func (_c *MockCoordinatorTransaction_GetDependencies_Call) Return(transactionDependencies *pldapi.TransactionDependencies) *MockCoordinatorTransaction_GetDependencies_Call {
-	_c.Call.Return(transactionDependencies)
-	return _c
-}
-
-func (_c *MockCoordinatorTransaction_GetDependencies_Call) RunAndReturn(run func() *pldapi.TransactionDependencies) *MockCoordinatorTransaction_GetDependencies_Call {
 	_c.Call.Return(run)
 	return _c
 }

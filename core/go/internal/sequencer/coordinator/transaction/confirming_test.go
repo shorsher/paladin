@@ -832,7 +832,7 @@ func TestDependsOn_ParentRecognition_ChainedDependencyRevert(t *testing.T) {
 	err := action_RecordConfirmation(context.Background(), txn, event)
 	require.NoError(t, err)
 
-	assert.Equal(t, 0, txn.revertCount)
+	assert.Equal(t, 1, txn.revertCount)
 	assert.True(t, txn.lastCanRetryRevert)
 	assert.Equal(t, "PD012256: Transaction dependency abc12345 failed", txn.decodedRevertReason)
 }
